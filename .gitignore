@@ -1,0 +1,32 @@
+# Binaries
+golocate
+golocated
+bin/
+
+# Test scripts
+test_*.sh
+build_bin.sh.bak
+
+# Development progress documents
+PROGRESS.md
+TODO.md
+
+# Documentation (暂时不提交)
+docs/
+*.md
+!.gitignore
+
+# Go workspace
+go.work
+go.work.sum
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
