@@ -71,7 +71,7 @@ type ByteBufferPool struct {
 func NewByteBufferPool() *ByteBufferPool {
 	return &ByteBufferPool{
 		pool: sync.Pool{
-			New: func() interface{} {
+			New: func() any {
 				return make([]byte, 0, 1024)
 			},
 		},
@@ -99,7 +99,7 @@ type StringBuilderPool struct {
 func NewStringBuilderPool() *StringBuilderPool {
 	return &StringBuilderPool{
 		pool: sync.Pool{
-			New: func() interface{} {
+			New: func() any {
 				return new(stringBuilder)
 			},
 		},

@@ -10,7 +10,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/RelicOfTesla/golocate/pkg/constants"
+	"github.com/RelicOfTesla/golocate/pkg/config"
 )
 
 // createListener creates a Unix socket listener on Linux.
@@ -33,7 +33,7 @@ func createListener(socketPath string) (net.Listener, error) {
 	}
 
 	// Set socket permissions (secure: only owner can read/write)
-	if err := os.Chmod(socketPath, constants.SocketPermission); err != nil {
+	if err := os.Chmod(socketPath, config.SocketPermission); err != nil {
 		listener.Close()
 		return nil, fmt.Errorf("failed to set socket permissions: %w", err)
 	}
@@ -43,7 +43,7 @@ func createListener(socketPath string) (net.Listener, error) {
 
 // getDefaultAddress returns the default Unix socket path on Linux.
 func getDefaultAddress() string {
-	return constants.DefaultSocketPath
+	return config.DefaultSocketPath
 }
 
 // connect connects to the Unix socket on Linux.

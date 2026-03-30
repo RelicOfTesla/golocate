@@ -5,14 +5,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/RelicOfTesla/golocate/internal/client"
 	"github.com/RelicOfTesla/golocate/pkg/index"
 )
 
-// getTestClient creates a test client connected to golocated
-func getTestClient(t *testing.T) *client.Client {
-	return client.New()
-}
 
 // ========== 第一部分：基础搜索参数测试 ==========
 

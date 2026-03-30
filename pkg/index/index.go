@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/RelicOfTesla/golocate/pkg/patricia"
+	"github.com/RelicOfTesla/golocate/pkg/ignore"
 	"github.com/RelicOfTesla/golocate/pkg/watcher"
 )
 
@@ -34,7 +34,7 @@ type Index struct {
 	mu      sync.RWMutex
 	entries map[string]*Entry // path -> Entry
 	byName  map[string][]*Entry // name -> []Entry (for basename search)
-	pathTrie *patricia.Trie    // Patricia Trie for fast path prefix search
+	pathTrie *Trie    // Patricia Trie for fast path prefix search
 	nameFilter map[string]bool // Bloom filter for fast name filtering (simplified)
 }
 
@@ -43,7 +43,7 @@ func NewIndex() *Index {
 	return &Index{
 		entries:    make(map[string]*Entry),
 		byName:     make(map[string][]*Entry),
-		pathTrie:   patricia.NewTrie(),
+		pathTrie:   NewTrie(),
 		nameFilter: make(map[string]bool),
 	}
 }
@@ -66,7 +66,7 @@ func (idx *Index) Add(entry *Entry) {
 	idx.byName[entry.Name] = append(idx.byName[entry.Name], entry)
 	
 	// Add to Patricia Trie
-	idx.pathTrie.Insert(entry.Path, &patricia.Entry{
+	idx.pathTrie.Insert(entry.Path, &Entry{
 		Path: entry.Path,
 		Name: entry.Name,
 		Size: entry.Size,
@@ -112,16 +112,17 @@ func (idx *Index) Get(path string) (*Entry, bool) {
 }
 
 // Search searches for entries matching the query.
-func (idx *Index) Search(query string, opts SearchOptions) []*Entry {
+func (idx *Index) Search(opts SearchOptions) []*Entry {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
 	
 	// Handle regex search
 	if opts.Regex || opts.ExtendedRegex {
-		return idx.searchRegex(query, opts)
+		return idx.searchRegex(opts.Pattern, opts)
 	}
 	
 	// Normal substring search
+	query := opts.Pattern
 	var results []*Entry
 	
 	switch {
@@ -158,7 +159,10 @@ func (idx *Index) Search(query string, opts SearchOptions) []*Entry {
 	if opts.Path != "" {
 		filtered := make([]*Entry, 0, len(results))
 		for _, entry := range results {
-			if strings.HasPrefix(entry.Path, opts.Path) {
+			// Support wildcard "*" to match all paths
+			if opts.Path == "*" {
+				filtered = append(filtered, entry)
+			} else if strings.HasPrefix(entry.Path, opts.Path) {
 				filtered = append(filtered, entry)
 			}
 		}
@@ -294,6 +298,8 @@ func (idx *Index) Len() int {
 
 // SearchOptions contains options for searching.
 type SearchOptions struct {
+	// Pattern is the search pattern (filename or content)
+	Pattern string
 	// IgnoreCase makes the search case-insensitive
 	IgnoreCase bool
 	// Basename searches only in file names
@@ -317,7 +323,7 @@ type SearchOptions struct {
 // Builder builds the file index.
 type Builder struct {
 	idx           *Index
-	ignoreMatcher *ignoreMatcher
+	ignoreMatcher *ignore.Matcher
 	workerCount   int
 }
 
@@ -329,7 +335,7 @@ func NewBuilder(opts BuilderOptions) *Builder {
 	}
 	
 	if len(opts.IgnorePatterns) > 0 {
-		b.ignoreMatcher = newIgnoreMatcher(opts.IgnorePatterns)
+		b.ignoreMatcher = ignore.NewMatcher(opts.IgnorePatterns)
 	}
 	
 	if b.workerCount <= 0 {
@@ -466,23 +472,4 @@ func (u *Updater) handleCreate(path string) {
 func (u *Updater) handleRemove(path string) {
 	u.idx.Remove(path)
 	log.Printf("removed: %s", path)
-}
-
-// ignoreMatcher handles ignore patterns.
-type ignoreMatcher struct {
-	patterns []string
-}
-
-func newIgnoreMatcher(patterns []string) *ignoreMatcher {
-	return &ignoreMatcher{patterns: patterns}
-}
-
-func (m *ignoreMatcher) Match(path string) bool {
-	for _, pattern := range m.patterns {
-		matched, err := filepath.Match(pattern, path)
-		if err == nil && matched {
-			return true
-		}
-	}
-	return false
 }

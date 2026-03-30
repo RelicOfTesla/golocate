@@ -45,7 +45,7 @@ func TestIndexSearch(t *testing.T) {
 	}
 
 	// Test search
-	results := idx.Search("test", SearchOptions{IgnoreCase: true})
+	results := idx.Search(SearchOptions{Pattern: "test", IgnoreCase: true})
 	if len(results) < 2 {
 		t.Errorf("Expected at least 2 results, got %d", len(results))
 	}
@@ -135,13 +135,13 @@ func TestIndexSearchIgnoreCase(t *testing.T) {
 	}
 
 	// Case-insensitive search
-	results := idx.Search("test", SearchOptions{IgnoreCase: true})
+	results := idx.Search(SearchOptions{Pattern: "test", IgnoreCase: true})
 	if len(results) != 2 {
 		t.Errorf("Expected 2 results (case-insensitive), got %d", len(results))
 	}
 
 	// Case-sensitive search
-	results = idx.Search("test", SearchOptions{IgnoreCase: false})
+	results = idx.Search(SearchOptions{Pattern: "test", IgnoreCase: false})
 	if len(results) != 0 {
 		t.Errorf("Expected 0 results (case-sensitive), got %d", len(results))
 	}
@@ -160,7 +160,7 @@ func TestIndexSearchBasename(t *testing.T) {
 	}
 
 	// Basename search - should only match file names, not paths
-	results := idx.Search("test", SearchOptions{Basename: true, IgnoreCase: true})
+	results := idx.Search(SearchOptions{Pattern: "test", Basename: true, IgnoreCase: true})
 	if len(results) != 1 {
 		t.Errorf("Expected 1 result (basename search), got %d", len(results))
 	}
@@ -180,7 +180,7 @@ func TestIndexSearchWithLimit(t *testing.T) {
 	}
 
 	// Search with limit
-	results := idx.Search("", SearchOptions{Limit: 10})
+	results := idx.Search(SearchOptions{Pattern: "", Limit: 10})
 	if len(results) > 10 {
 		t.Errorf("Expected at most 10 results, got %d", len(results))
 	}
@@ -200,7 +200,7 @@ func TestIndexSearchRegex(t *testing.T) {
 	}
 
 	// Regex search for test[0-9]+.txt
-	results := idx.Search("test[0-9]+", SearchOptions{Regex: true})
+	results := idx.Search(SearchOptions{Pattern: "test[0-9]+", Regex: true})
 	if len(results) != 2 {
 		t.Errorf("Expected 2 results (regex), got %d", len(results))
 	}
@@ -220,7 +220,7 @@ func TestIndexSearchExtendedRegex(t *testing.T) {
 	}
 
 	// Extended regex search
-	results := idx.Search("test[0-9]+", SearchOptions{ExtendedRegex: true})
+	results := idx.Search(SearchOptions{Pattern: "test[0-9]+", ExtendedRegex: true})
 	if len(results) != 2 {
 		t.Errorf("Expected 2 results (extended regex), got %d", len(results))
 	}

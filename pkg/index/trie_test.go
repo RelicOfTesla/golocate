@@ -1,4 +1,4 @@
-package patricia
+package index
 
 import (
 	"testing"

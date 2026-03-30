@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/RelicOfTesla/golocate/pkg/ignore"
 )
 
 // UpdateStrategy defines how the index is updated.
@@ -69,7 +71,7 @@ type MergeResult struct {
 // 1. Scans directories for new files
 // 2. Removes deleted files from index
 // 3. Updates modified files
-func (idx *Index) Merge(ctx context.Context, directories []string, ignoreMatcher *ignoreMatcher) (*MergeResult, error) {
+func (idx *Index) Merge(ctx context.Context, directories []string, ignoreMatcher *ignore.Matcher) (*MergeResult, error) {
 	result := &MergeResult{}
 	
 	// Track which files we've seen during this scan
@@ -164,7 +166,7 @@ func (idx *Index) Merge(ctx context.Context, directories []string, ignoreMatcher
 }
 
 // AutoUpdateStrategy chooses between Replace and Merge based on change estimation.
-func (idx *Index) AutoUpdateStrategy(directories []string, ignoreMatcher *ignoreMatcher) UpdateStrategy {
+func (idx *Index) AutoUpdateStrategy(directories []string, ignoreMatcher *ignore.Matcher) UpdateStrategy {
 	// Estimate: if we have many files already, use merge
 	// If we have few files or empty index, use replace
 	total := idx.Len()

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+	"github.com/RelicOfTesla/golocate/pkg/ignore"
 )
 
 // fsnotifyWatcher implements Watcher using fsnotify on non-Linux platforms.
@@ -22,15 +23,12 @@ type fsnotifyWatcher struct {
 	errors        chan error
 	done          chan struct{}
 	config        *Config
-	ignoreMatcher *ignoreMatcher
+	ignoreMatcher *ignore.Matcher
 }
 
 // newFsnotifyWatcher creates a new fsnotify-based watcher.
 func newFsnotifyWatcher(ctx context.Context, cfg *Config) (Watcher, error) {
 	childCtx, cancel := context.WithCancel(ctx)
-	
-	// 打印简单的 fallback 提醒（在 watching 之前）
-	log.Printf("WARNING: Using fsnotify (inotify) as fallback (fanotify not available)")
 	
 	w, err := fsnotify.NewWatcher()
 	if err != nil {
@@ -49,7 +47,7 @@ func newFsnotifyWatcher(ctx context.Context, cfg *Config) (Watcher, error) {
 	}
 	
 	if len(cfg.IgnorePatterns) > 0 {
-		fw.ignoreMatcher = newIgnoreMatcher(cfg.IgnorePatterns)
+		fw.ignoreMatcher = ignore.NewMatcher(cfg.IgnorePatterns)
 	}
 	
 	// Start watching specified directories
@@ -210,23 +208,4 @@ func (w *fsnotifyWatcher) eventLoop() {
 			}
 		}
 	}
-}
-
-// ignoreMatcher handles ignore patterns.
-type ignoreMatcher struct {
-	patterns []string
-}
-
-func newIgnoreMatcher(patterns []string) *ignoreMatcher {
-	return &ignoreMatcher{patterns: patterns}
-}
-
-func (m *ignoreMatcher) Match(path string) bool {
-	for _, pattern := range m.patterns {
-		matched, err := filepath.Match(pattern, path)
-		if err == nil && matched {
-			return true
-		}
-	}
-	return false
 }

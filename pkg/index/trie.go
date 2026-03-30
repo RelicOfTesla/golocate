@@ -1,5 +1,5 @@
 // Package patricia implements a Patricia trie for efficient file path indexing.
-package patricia
+package index
 
 import (
 	"strings"
@@ -12,13 +12,6 @@ type Node struct {
 	children map[string]*Node
 	entries  []*Entry
 	isLeaf   bool
-}
-
-// Entry represents a file entry in the trie.
-type Entry struct {
-	Path string
-	Name string
-	Size int64
 }
 
 // Trie represents a Patricia trie.

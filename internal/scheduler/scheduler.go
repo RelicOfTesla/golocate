@@ -204,11 +204,11 @@ func (s *Scheduler) TriggerBuild(throttle bool) {
 }
 
 // Stats returns scheduler statistics.
-func (s *Scheduler) Stats() map[string]interface{} {
+func (s *Scheduler) Stats() map[string]any {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	return map[string]interface{}{
+	return map[string]any{
 		"interval":     s.interval.String(),
 		"throttle":     s.throttle,
 		"worker_count": s.workerCnt,

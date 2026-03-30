@@ -155,7 +155,7 @@ func (idx *NGramIndex) Clear() {
 }
 
 // Stats returns statistics about the n-gram index.
-func (idx *NGramIndex) Stats() map[string]interface{} {
+func (idx *NGramIndex) Stats() map[string]any {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
 
@@ -164,7 +164,7 @@ func (idx *NGramIndex) Stats() map[string]interface{} {
 		totalEntries += len(entries)
 	}
 
-	return map[string]interface{}{
+	return map[string]any{
 		"ngram_size":      idx.n,
 		"unique_ngrams":   len(idx.index),
 		"total_entries":   totalEntries,

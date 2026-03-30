@@ -81,7 +81,7 @@ func TestClientSearchWithoutServer(t *testing.T) {
 	client := New()
 	client.SetSocketPath("/tmp/nonexistent_socket_for_test.sock")
 
-	_, err := client.Search("test", index.SearchOptions{})
+	_, err := client.Search("test", index.SearchOptions{Path: "*"})
 	if err == nil {
 		t.Error("Expected error when searching without server")
 	}
@@ -114,8 +114,8 @@ func TestClientSearchWithServer(t *testing.T) {
 	client := New()
 	client.SetSocketPath("/tmp/golocate_client_search_test.sock")
 
-	// Perform search
-	results, err := client.Search("test", index.SearchOptions{IgnoreCase: true})
+	// Perform search (PATH is required, CONTENT is optional)
+	results, err := client.Search("test", index.SearchOptions{Path: "*", IgnoreCase: true})
 	if err != nil {
 		t.Fatalf("Search failed: %v", err)
 	}
@@ -191,7 +191,7 @@ func TestClientSearchStreamWithoutServer(t *testing.T) {
 	client := New()
 	client.SetSocketPath("/tmp/nonexistent_socket_for_test.sock")
 
-	err := client.SearchStream("test", index.SearchOptions{}, func(e *index.Entry) bool {
+	err := client.SearchStream("test", index.SearchOptions{Path: "*"}, func(e *index.Entry) bool {
 		return true
 	})
 	if err == nil {
@@ -231,7 +231,7 @@ func TestClientSearchStreamWithServer(t *testing.T) {
 
 	// Stream search
 	count := 0
-	err := client.SearchStream("", index.SearchOptions{Limit: 10}, func(e *index.Entry) bool {
+	err := client.SearchStream("", index.SearchOptions{Path: "*", Limit: 10}, func(e *index.Entry) bool {
 		count++
 		return true
 	})
@@ -276,7 +276,7 @@ func TestClientSearchStreamStop(t *testing.T) {
 
 	// Stream search and stop after first result
 	count := 0
-	err := client.SearchStream("", index.SearchOptions{}, func(e *index.Entry) bool {
+	err := client.SearchStream("", index.SearchOptions{Path: "*"}, func(e *index.Entry) bool {
 		count++
 		return false // Stop streaming
 	})

@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/RelicOfTesla/golocate/internal/database"
 	"github.com/RelicOfTesla/golocate/internal/server"
@@ -16,22 +17,24 @@ import (
 
 // DaemonService implements service.Interface for cross-platform service management.
 type DaemonService struct {
-	cfg     *config.Config
-	db      *database.DB
-	watcher watcher.Watcher
-	updater *index.Updater
-	server  *server.Server
-	ctx     context.Context
-	cancel  context.CancelFunc
+	cfg        *config.Config
+	configPath string // 配置文件路径
+	db         *database.DB
+	watcher    watcher.Watcher
+	updater    *index.Updater
+	server     *server.Server
+	ctx        context.Context
+	cancel     context.CancelFunc
 }
 
 // NewDaemonService creates a new daemon service.
-func NewDaemonService(cfg *config.Config) *DaemonService {
+func NewDaemonService(cfg *config.Config, configPath string) *DaemonService {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &DaemonService{
-		cfg:    cfg,
-		ctx:    ctx,
-		cancel: cancel,
+		cfg:        cfg,
+		configPath: configPath,
+		ctx:        ctx,
+		cancel:     cancel,
 	}
 }
 
@@ -69,20 +72,19 @@ func (d *DaemonService) Start(s service.Service) error {
 		WorkerCount:    d.cfg.WorkerCount,
 	})
 
-	if err := builder.Build(d.ctx, d.cfg.Directories); err != nil {
-		d.watcher.Close()
-		d.db.Close()
-		return fmt.Errorf("failed to build index: %w", err)
-	}
-
-	d.updater = index.NewUpdater(builder.Index())
-
-	log.Printf("indexed %d entries", builder.Index().Len())
-	log.Printf("watcher type: %s", watcher.GetWatcherType())
-
-	// Start Unix socket server
-	log.Printf("[DEBUG] Creating Unix socket server...")
+	// Create server with initial empty index
 	d.server = server.New(builder.Index())
+	
+	// Set status tracking fields
+	d.server.SetDatabasePath(d.cfg.DatabasePath)
+	d.server.SetConfigPath(d.configPath)
+	d.server.SetConfig(d.cfg)
+	
+	// Mark as building index
+	buildStartTime := time.Now()
+	d.server.SetBuildingStatus(true, buildStartTime)
+	
+	// Start Unix socket server
 	log.Printf("[DEBUG] Starting Unix socket server...")
 	if err := d.server.Start(); err != nil {
 		log.Printf("[ERROR] Failed to start server: %v", err)
@@ -91,7 +93,25 @@ func (d *DaemonService) Start(s service.Service) error {
 		return fmt.Errorf("failed to start server: %w", err)
 	}
 
-	log.Printf("Unix socket server started on /tmp/golocate.sock")
+	log.Printf("Server started on %s", d.cfg.SocketPath)
+
+	// Build the index
+	if err := builder.Build(d.ctx, d.cfg.Directories); err != nil {
+		d.watcher.Close()
+		d.db.Close()
+		return fmt.Errorf("failed to build index: %w", err)
+	}
+
+	d.updater = index.NewUpdater(builder.Index())
+
+	// Update server with final index and status
+	d.server.SetIndex(builder.Index())
+	d.server.SetBuildingStatus(false, time.Time{})
+	d.server.SetLastBuildTime(time.Now())
+	d.server.SetIndexedFileCount(builder.Index().Len())
+
+	log.Printf("indexed %d entries", builder.Index().Len())
+	log.Printf("watcher type: %s", watcher.GetWatcherType())
 
 	// Start file watching in background
 	go d.watchLoop()
@@ -216,8 +236,8 @@ func Stop() error {
 }
 
 // Run runs the service (called by service manager).
-func Run(cfg *config.Config) error {
-	d := NewDaemonService(cfg)
+func Run(cfg *config.Config, configPath string) error {
+	d := NewDaemonService(cfg, configPath)
 	svcConfig := ServiceConfig()
 	svc, err := service.New(d, svcConfig)
 	if err != nil {

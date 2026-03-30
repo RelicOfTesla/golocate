@@ -216,11 +216,11 @@ func (d *DB) Count(query string, opts index.SearchOptions) (int, error) {
 }
 
 // GetStats returns database statistics.
-func (d *DB) GetStats() (map[string]interface{}, error) {
+func (d *DB) GetStats() (map[string]any, error) {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 
-	stats := make(map[string]interface{})
+	stats := make(map[string]any)
 	err := d.db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket(filesBucket)
 		stats["file_count"] = b.Stats().KeyN

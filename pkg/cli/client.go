@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/RelicOfTesla/golocate/internal/client"
+	errpkg "github.com/RelicOfTesla/golocate/pkg/errors"
 	"github.com/RelicOfTesla/golocate/pkg/index"
 	"github.com/RelicOfTesla/golocate/pkg/search"
 )
@@ -39,11 +40,6 @@ func Search(opts SearchOptions) (*SearchResult, error) {
 		c.SetSocketPath(opts.SocketPath)
 	}
 	
-	// Check if server is running
-	if !c.IsServerRunning() {
-		return nil, fmt.Errorf("golocated server is not running. Please start it with: golocated --service")
-	}
-	
 	// Build search options
 	searchOpts := index.SearchOptions{
 		IgnoreCase: opts.IgnoreCase,
@@ -71,6 +67,10 @@ func Search(opts SearchOptions) (*SearchResult, error) {
 	// Perform search
 	entries, err := c.Search(opts.Pattern, searchOpts)
 	if err != nil {
+		// If it's a server not running error, wrap it with friendly message
+		if errpkg.IsServerNotRunningError(err) {
+			return nil, err
+		}
 		return nil, err
 	}
 	
@@ -94,11 +94,6 @@ func SearchStream(opts SearchOptions, callback func(*index.Entry) bool) error {
 		c.SetSocketPath(opts.SocketPath)
 	}
 	
-	// Check if server is running
-	if !c.IsServerRunning() {
-		return fmt.Errorf("golocated server is not running. Please start it with: golocated --service")
-	}
-	
 	// Build search options
 	searchOpts := index.SearchOptions{
 		IgnoreCase: opts.IgnoreCase,
@@ -119,8 +114,11 @@ func SearchStream(opts SearchOptions, callback func(*index.Entry) bool) error {
 }
 
 // ReloadConfig sends a reload-config request to the server.
-func ReloadConfig() error {
+func ReloadConfig(socketPath string) error {
 	c := client.New()
+	if socketPath != "" {
+		c.SetSocketPath(socketPath)
+	}
 	return c.ReloadConfig()
 }
 
@@ -132,30 +130,44 @@ func Build(socketPath string) error {
 		c.SetSocketPath(socketPath)
 	}
 	
-	// Check if server is running
-	if !c.IsServerRunning() {
-		return fmt.Errorf("golocated server is not running. Please start it with: golocated --service")
-	}
-	
 	// Send build request
 	return c.Build()
 }
 
 // Status gets the server status.
-func Status(socketPath string) (map[string]interface{}, error) {
+func Status(socketPath string) (map[string]any, error) {
 	// Create client
 	c := client.New()
 	if socketPath != "" {
 		c.SetSocketPath(socketPath)
 	}
 	
-	// Check if server is running
-	if !c.IsServerRunning() {
-		return nil, fmt.Errorf("golocated server is not running")
-	}
-	
 	// Get status
 	return c.Status()
+}
+
+// GetConfig gets the server configuration (including default values).
+func GetConfig(socketPath string) (map[string]any, error) {
+	// Create client
+	c := client.New()
+	if socketPath != "" {
+		c.SetSocketPath(socketPath)
+	}
+	
+	// Get config
+	return c.GetConfig()
+}
+
+// SetConfig sets the server configuration from YAML content.
+func SetConfig(socketPath, yamlContent string) error {
+	// Create client
+	c := client.New()
+	if socketPath != "" {
+		c.SetSocketPath(socketPath)
+	}
+	
+	// Set config
+	return c.SetConfig(yamlContent)
 }
 
 // PrintResults prints search results to stdout.
@@ -196,7 +208,7 @@ func IsServerRunning(socketPath string) bool {
 }
 
 // Fatal logs a fatal error and exits.
-func Fatal(format string, args ...interface{}) {
+func Fatal(format string, args ...any) {
 	log.Printf(format, args...)
 	os.Exit(1)
 }

@@ -3,19 +3,22 @@ package server
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net"
 	"os"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/RelicOfTesla/golocate/internal/socket"
-	"github.com/RelicOfTesla/golocate/pkg/constants"
+	"github.com/RelicOfTesla/golocate/pkg/config"
 	"github.com/RelicOfTesla/golocate/pkg/index"
-	"github.com/RelicOfTesla/golocate/pkg/protocol"
+	"github.com/RelicOfTesla/golocate/pkg/message"
+	"github.com/RelicOfTesla/golocate/pkg/message/protocol"
 	"github.com/RelicOfTesla/golocate/pkg/security"
 )
 
@@ -30,45 +33,30 @@ type Server struct {
 	currentConns  int          // 当前连接数
 	connTimeout   time.Duration // 连接超时
 	pathValidator *security.PathValidator // 路径验证器
-}
-
-// Request represents a client request.
-type Request struct {
-	Method               string `json:"method"`
-	Content              string `json:"content,omitempty"`                // Search file content (optional)
-	Path                 string `json:"path"`                             // Search/filter by path (required)
-	AcceptResponseFormat string `json:"accept_response_format,omitempty"` // json, json-rpc, or empty (fast protocol)
 	
-	// Search options (flattened, aligned with fast protocol)
-	IgnoreCase     bool   `json:"ignore_case,omitempty"`
-	Mode           string `json:"mode,omitempty"`
-	Limit          int    `json:"limit,omitempty"`
-	Offset         int64  `json:"offset,omitempty"` // For pagination
-	Basename       bool   `json:"basename,omitempty"`
-	Regex          bool   `json:"regex,omitempty"`
-	ExtendedRegex  bool   `json:"extended_regex,omitempty"`
-	SortField      string `json:"sort_field,omitempty"`
-	SortOrder      string `json:"sort_order,omitempty"`
-}
-
-// Response represents a server response.
-type Response struct {
-	Type   string      `json:"type"`
-	Path   string      `json:"path,omitempty"`
-	Name   string      `json:"name,omitempty"`
-	Size   int64       `json:"size,omitempty"`
-	Count  int         `json:"count,omitempty"`
-	Error  string      `json:"error,omitempty"`
-	Result interface{} `json:"result,omitempty"`
+	// Index status tracking
+	isBuilding      bool      // 是否正在构建索引
+	buildStartTime  time.Time // 索引构建开始时间
+	lastBuildTime   time.Time // 最后索引时间
+	indexedFileCount int      // 已索引文件数
+	databasePath    string    // 数据库路径
+	configPath      string    // 配置文件路径
+	
+	// Config (for get-config command)
+	config *config.Config
+	
+	// ========== 新增：Message 接口组件 ==========
+	parser message.MessageParser
+	worker message.MessageWorker
 }
 
 // New creates a new server instance.
 func New(idx *index.Index) *Server {
 	return &Server{
-		socketPath:    constants.DefaultSocketPath,
+		socketPath:    config.DefaultSocketPath,
 		index:         idx,
-		maxConns:      constants.DefaultMaxConns,
-		connTimeout:   constants.DefaultTimeout,
+		maxConns:      config.DefaultMaxConns,
+		connTimeout:   config.DefaultTimeout,
 		pathValidator: security.NewPathValidator(nil), // TODO: configure allowed directories
 	}
 }
@@ -82,9 +70,28 @@ func (s *Server) Start() error {
 		return fmt.Errorf("server already running")
 	}
 	
+	// ========== 初始化 MessageParser 和 MessageWorker ==========
+	
+	// 1. 创建 MessageParser
+	s.parser = message.NewMessageParser()
+	
+	// 2. 创建 MessageWorker
+	s.worker = message.NewMessageWorker()
+	
+	// 3. 注册方法处理器
+	s.registerMethodHandlers()
+	
+	// 4. 启动 Worker
+	if err := s.worker.Start(); err != nil {
+		return fmt.Errorf("failed to start message worker: %w", err)
+	}
+	
+	// ========== 启动监听 ==========
+	
 	// Create listener using cross-platform socket package
 	listener, err := socket.CreateListener(s.socketPath)
 	if err != nil {
+		s.worker.Stop()
 		return err
 	}
 	
@@ -99,6 +106,27 @@ func (s *Server) Start() error {
 	return nil
 }
 
+// registerMethodHandlers 注册所有方法处理器
+func (s *Server) registerMethodHandlers() {
+	// 注册 search 方法处理器
+	s.worker.RegisterMethod("search", message.MethodHandlerFunc(s.handleSearchHandler))
+	
+	// 注册 status 方法处理器
+	s.worker.RegisterMethod("status", message.MethodHandlerFunc(s.handleStatusHandler))
+	
+	// 注册 get-config 方法处理器
+	s.worker.RegisterMethod("get-config", message.MethodHandlerFunc(s.handleGetConfigHandler))
+	
+	// 注册 set-config 方法处理器
+	s.worker.RegisterMethod("set-config", message.MethodHandlerFunc(s.handleSetConfigHandler))
+	
+	// 注册 build 方法处理器
+	s.worker.RegisterMethod("build", message.MethodHandlerFunc(s.handleBuildHandler))
+	
+	// 注册 stop 方法处理器
+	s.worker.RegisterMethod("stop", message.MethodHandlerFunc(s.handleStopHandler))
+}
+
 // Stop stops the Unix socket server.
 func (s *Server) Stop() error {
 	s.mu.Lock()
@@ -109,6 +137,13 @@ func (s *Server) Stop() error {
 	}
 	
 	s.running = false
+	
+	// 停止 MessageWorker
+	if s.worker != nil {
+		if err := s.worker.Stop(); err != nil {
+			log.Printf("warning: failed to stop message worker: %v", err)
+		}
+	}
 	
 	if s.listener != nil {
 		if err := s.listener.Close(); err != nil {
@@ -153,94 +188,163 @@ func (s *Server) acceptLoop() {
 
 // handleConnection handles a single client connection.
 func (s *Server) handleConnection(conn net.Conn) {
+	// 创建连接级别的 WaitGroup，跟踪该连接的所有消息
+	var connWg sync.WaitGroup
+	
 	defer func() {
+		// 等待所有消息处理完成后再关闭连接
+		connWg.Wait()
+		
 		conn.Close()
 		s.mu.Lock()
 		s.currentConns--
 		s.mu.Unlock()
 	}()
 	
-	// 设置连接超时
+	log.Printf("[Server] Handling new connection from %s", conn.RemoteAddr())
+	
+	// Update deadline before reading
 	if s.connTimeout > 0 {
 		conn.SetDeadline(time.Now().Add(s.connTimeout))
 	}
 	
-	// Read request with protocol detection
+	// Read request using MessageParser
 	reader := bufio.NewReader(conn)
 	
-	// Detect protocol type
-	protoType, err := protocol.DetectProtocol(reader)
+	log.Printf("[Server] Parsing request using MessageParser...")
+	
+	// 使用 MessageParser 解析消息
+	msg, remainder, err := s.parser.ParseMessage(conn, reader)
 	if err != nil {
-		s.sendError(conn, fmt.Sprintf("failed to detect protocol: %v", err))
+		log.Printf("[Server] Failed to parse message: %v", err)
+		// 尝试使用旧方式发送错误响应（向后兼容）
+		s.sendLegacyError(conn, fmt.Sprintf("failed to parse message: %v", err))
 		return
 	}
 	
-	// Get protocol implementation
-	proto := protocol.GetProtocol(protoType)
+	log.Printf("[Server] Message parsed: id=%s, method=%s", msg.ID(), msg.Method())
 	
-	// Parse request using protocol
-	protoReq, err := proto.ParseRequest(reader)
-	if err != nil {
-		s.sendError(conn, fmt.Sprintf("invalid protocol request: %v", err))
+	// 为消息设置完成回调
+	connWg.Add(1)
+	msg.SetOnComplete(func() {
+		connWg.Done()
+	})
+	
+	// 使用 MessageWorker 异步处理消息
+	if err := s.worker.Handle(msg); err != nil {
+		log.Printf("[Server] Failed to handle message: %v", err)
+		connWg.Done() // 处理失败，也要 Done，避免死锁
 		return
 	}
 	
-	// Convert protocol.Request to server.Request
-	var req Request
-	req.Method = protoReq.Method
-	req.Content = protoReq.Content
-	req.AcceptResponseFormat = protoReq.AcceptResponseFormat
-	req.IgnoreCase = protoReq.IgnoreCase
-	req.Limit = protoReq.Limit
-	req.Mode = protoReq.Mode
-	req.Path = protoReq.Path
-	
-	// Handle request
-	switch req.Method {
-	case "search":
-		s.handleSearch(conn, &req, protoType)
-	case "status":
-		s.handleStatus(conn, &req)
-	case "build":
-		s.handleBuild(conn, &req)
-	case "stop":
-		s.handleStop(conn, &req)
-	default:
-		s.sendError(conn, fmt.Sprintf("unknown action: %s", req.Method))
+	// 处理粘包 - 处理剩余数据
+	if len(remainder) > 0 {
+		log.Printf("[Server] Detected sticky packet, processing remainder: %d bytes", len(remainder))
+		s.processRemainder(conn, remainder, &connWg)
 	}
 }
 
-// handleSearch handles a search request.
-func (s *Server) handleSearch(conn net.Conn, req *Request, protoType protocol.ProtocolType) {
-	// ========== 输入验证 ==========
-	
-	// 验证 Path 不能为空（必选项）
-	if req.Path == "" || strings.TrimSpace(req.Path) == "" {
-		s.sendError(conn, "invalid parameter: path is required and cannot be empty")
+// processRemainder processes remaining data from a sticky packet.
+func (s *Server) processRemainder(conn net.Conn, remainder []byte, connWg *sync.WaitGroup) {
+	// 使用 MessageParser 批量解析剩余消息
+	messages, nextRemainder, err := s.parser.ParseMessages(conn, remainder)
+	if err != nil {
+		log.Printf("[Server] Failed to parse remainder: %v", err)
 		return
+	}
+	
+	// 使用 MessageWorker 异步处理每个消息
+	for _, msg := range messages {
+		log.Printf("[Server] Processing remainder message: method=%s", msg.Method())
+		
+		// 为消息设置完成回调
+		connWg.Add(1)
+		msg.SetOnComplete(func() {
+			connWg.Done()
+		})
+		
+		if err := s.worker.Handle(msg); err != nil {
+			log.Printf("[Server] Failed to handle remainder message: %v", err)
+			connWg.Done() // 处理失败，也要 Done，避免死锁
+		}
+	}
+	
+	// 如果还有剩余数据，递归处理
+	if len(nextRemainder) > 0 {
+		log.Printf("[Server] Processing additional remainder: %d bytes", len(nextRemainder))
+		s.processRemainder(conn, nextRemainder, connWg)
+	}
+}
+
+// sendLegacyError sends an error response in legacy format for backward compatibility.
+// This function is kept for clients that expect the old error format during protocol parsing failures.
+// Consider removing in future versions after migrating all clients to use the new error handling mechanism.
+func (s *Server) sendLegacyError(conn net.Conn, errMsg string) {
+	// 尝试使用 fast 协议发送错误响应
+	proto := protocol.NewFastProtocol()
+	writer := bufio.NewWriter(conn)
+	
+	resp := &protocol.Response{
+		Error: errMsg,
+	}
+	
+	if err := proto.WriteResponse(writer, resp); err != nil {
+		log.Printf("[Server] Failed to send error response: %v", err)
+		return
+	}
+	
+	writer.Flush()
+}
+
+// ========== 方法处理器（实现 MethodHandler 接口） ==========
+
+// handleSearchHandler 处理搜索请求（Message 接口）
+func (s *Server) handleSearchHandler(ctx context.Context, msg message.Message) (any, error) {
+	// 1. 从 Message 中解析请求参数
+	var req struct {
+		Method      string `json:"method"`
+		Content     string `json:"content,omitempty"`
+		Path        string `json:"path,omitempty"`
+		IgnoreCase  bool   `json:"ignore_case,omitempty"`
+		Mode        string `json:"mode,omitempty"`
+		Limit       int    `json:"limit,omitempty"`
+		Offset      int64  `json:"offset,omitempty"`
+		Basename    bool   `json:"basename,omitempty"`
+		Regex       bool   `json:"regex,omitempty"`
+		ExtendedRegex bool  `json:"extended_regex,omitempty"`
+		SortField   string `json:"sort_field,omitempty"`
+		SortOrder   string `json:"sort_order,omitempty"`
+	}
+	
+	if err := json.Unmarshal(msg.Payload(), &req); err != nil {
+		return nil, fmt.Errorf("invalid request format: %w", err)
+	}
+	
+	// 2. 输入验证
+	
+	// Path 是必选项，但如果为空，使用默认值 "*"（搜索所有目录）
+	path := req.Path
+	if path == "" || strings.TrimSpace(path) == "" {
+		path = "*"
 	}
 	
 	// 验证 Limit 不能为负数
 	if req.Limit < 0 {
-		s.sendError(conn, "invalid parameter: limit cannot be negative")
-		return
+		return nil, fmt.Errorf("invalid parameter: limit cannot be negative")
 	}
 	
 	// 验证 Offset 不能为负数
 	if req.Offset < 0 {
-		s.sendError(conn, "invalid parameter: offset cannot be negative")
-		return
+		return nil, fmt.Errorf("invalid parameter: offset cannot be negative")
 	}
 	
 	// 验证 Content：如果非空但只包含空白字符，返回错误
-	if req.Content != "" && strings.TrimSpace(req.Content) == "" {
-		s.sendError(conn, "invalid parameter: content cannot be only whitespace")
-		return
+	content := req.Content
+	if content != "" && strings.TrimSpace(content) == "" {
+		return nil, fmt.Errorf("invalid parameter: content cannot be only whitespace")
 	}
 	
-	// ========== 解析搜索选项 ==========
-	
-	// Parse options from flattened fields
+	// 3. 解析搜索选项
 	opts := index.SearchOptions{
 		IgnoreCase:     req.IgnoreCase,
 		Basename:       req.Basename,
@@ -250,24 +354,60 @@ func (s *Server) handleSearch(conn net.Conn, req *Request, protoType protocol.Pr
 		ExtendedRegex:  req.ExtendedRegex,
 		SortField:      req.SortField,
 		SortOrder:      req.SortOrder,
-		Path:           req.Path,
+		Path:           path,
 	}
 	
-	// 根据定义：PATH 是必选项（路径过滤），CONTENT 是可选项（文件内容搜索）
-	// - 如果只有 PATH，则只进行路径过滤
-	// - 如果 PATH 和 CONTENT 都有，则进行路径过滤 + 文件内容搜索
-	
-	query := req.Content
-	// 如果 Content 为空，则只进行路径过滤（搜索路径包含 Path 的所有文件）
+	// 3.5 验证正则表达式（如果启用了正则模式）
+	query := content
 	if query == "" {
-		query = req.Path
-		opts.Path = "" // 避免重复过滤
+		// 如果 content 为空，搜索所有文件（query = "" 表示匹配所有）
+		query = ""
+		// opts.Path 保持为 path（用于路径过滤）
 	}
 	
-	// Search (server handles all filtering, regex, sorting logic)
-	results := s.index.Search(query, opts)
+	if opts.Regex || opts.ExtendedRegex {
+		// 尝试编译正则表达式，验证其有效性
+		var re *regexp.Regexp
+		var err error
+		
+		if opts.ExtendedRegex {
+			// 扩展正则（ERE）
+			if opts.IgnoreCase {
+				re, err = regexp.Compile("(?i)" + query)
+			} else {
+				re, err = regexp.Compile(query)
+			}
+		} else {
+			// 基本正则（BRE）- 使用 POSIX
+			if opts.IgnoreCase {
+				re, err = regexp.CompilePOSIX("(?i)" + query)
+			} else {
+				re, err = regexp.CompilePOSIX(query)
+			}
+		}
+		
+		if err != nil {
+			return nil, fmt.Errorf("invalid regex: %w", err)
+		}
+		_ = re // 验证通过，不需要使用
+	}
 	
-	// Filter results by path validator (security check)
+	// 4. 执行搜索
+	opts.Pattern = query
+	log.Printf("[handleSearchHandler] Searching for pattern=%q, opts.Path=%q, opts.IgnoreCase=%v, opts.Basename=%v", opts.Pattern, opts.Path, opts.IgnoreCase, opts.Basename)
+	results := s.index.Search(opts)
+	log.Printf("[handleSearchHandler] Found %d results", len(results))
+	
+	// 6. 获取总数（用于分页）
+	totalCount := s.index.Count(query, index.SearchOptions{
+		IgnoreCase:     opts.IgnoreCase,
+		Basename:       opts.Basename,
+		Regex:          opts.Regex,
+		ExtendedRegex:  opts.ExtendedRegex,
+		Path:           opts.Path,
+	})
+	
+	// 7. 安全过滤
 	if s.pathValidator != nil {
 		filteredResults := make([]*index.Entry, 0, len(results))
 		for _, entry := range results {
@@ -278,118 +418,151 @@ func (s *Server) handleSearch(conn net.Conn, req *Request, protoType protocol.Pr
 		results = filteredResults
 	}
 	
-	// Send results based on AcceptResponseFormat or protocol type
-	writer := bufio.NewWriter(conn)
-	
-	// Determine response format
-	var responseProtoType protocol.ProtocolType
-	if req.AcceptResponseFormat == "json" {
-		responseProtoType = protocol.ProtocolJSON
-	} else if req.AcceptResponseFormat == "json-rpc" {
-		responseProtoType = protocol.ProtocolJSONRPC
-	} else if protoType == protocol.ProtocolJSON {
-		responseProtoType = protocol.ProtocolJSON
-	} else if protoType == protocol.ProtocolJSONRPC {
-		responseProtoType = protocol.ProtocolJSONRPC
-	} else {
-		responseProtoType = protocol.ProtocolFast
+	// 8. 转换为 protocol.Results
+	protoResults := make([]*protocol.Result, len(results))
+	for i, entry := range results {
+		protoResults[i] = &protocol.Result{
+			Path: entry.Path,
+			Name: entry.Name,
+			Size: entry.Size,
+		}
 	}
 	
-	// Send results based on response format
-	if responseProtoType == protocol.ProtocolJSON || responseProtoType == protocol.ProtocolJSONRPC {
-		// Use JSON or JSON-RPC encoding
-		encoder := json.NewEncoder(writer)
-		for _, entry := range results {
-			resp := Response{
-				Type: "result",
-				Path: entry.Path,
-				Name: entry.Name,
-				Size: entry.Size,
-			}
-			if err := encoder.Encode(resp); err != nil {
-				log.Printf("error sending result: %v", err)
-				return
-			}
-			writer.Flush()
-		}
-		done := Response{
-			Type:  "done",
-			Count: len(results),
-		}
-		if err := encoder.Encode(done); err != nil {
-			log.Printf("error sending done: %v", err)
-		}
-		writer.Flush()
-	} else {
-		// Use fast protocol
-		paths := make([]string, len(results))
-		for i, entry := range results {
-			paths[i] = entry.Path
-		}
-		resp := &protocol.Response{
-			Count: len(results),
-			Paths: paths,
-		}
-		
-		// Get protocol and write response
-		proto := protocol.GetProtocol(responseProtoType)
-		if err := proto.WriteResponse(writer, resp); err != nil {
-			log.Printf("error sending response: %v", err)
-		}
-		writer.Flush()
-	}
+	// 9. 返回结果（Message.Reply 会自动发送）
+	return &protocol.SearchResults{
+		Results: protoResults,
+		Count:   len(protoResults),
+		Total:   totalCount,
+	}, nil
 }
 
-// handleStatus handles a status request.
-func (s *Server) handleStatus(conn net.Conn, req *Request) {
-	resp := Response{
-		Type: "status",
-		Result: map[string]interface{}{
-			"index_size": s.index.Len(),
-			"running":    s.running,
-		},
+// handleStatusHandler 处理状态请求（Message 接口）
+func (s *Server) handleStatusHandler(ctx context.Context, msg message.Message) (any, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	
+	result := map[string]any{
+		"running":    s.running,
+		"index_size": s.index.Len(),
 	}
 	
-	encoder := json.NewEncoder(conn)
-	encoder.Encode(resp)
+	// Add config file path (special value for status command)
+	if s.configPath != "" {
+		result["config_path"] = s.configPath
+	}
+	
+	// Add index building status
+	result["is_building"] = s.isBuilding
+	if s.isBuilding && !s.buildStartTime.IsZero() {
+		result["build_duration"] = time.Since(s.buildStartTime).String()
+	}
+	
+	// Add last build time if available
+	if !s.lastBuildTime.IsZero() {
+		result["last_build_time"] = s.lastBuildTime.Format(time.RFC3339)
+		result["last_build_ago"] = time.Since(s.lastBuildTime).String()
+	}
+	
+	// Add indexed file count
+	result["indexed_file_count"] = s.indexedFileCount
+	
+	return result, nil
 }
 
-// handleBuild handles a build request.
-func (s *Server) handleBuild(conn net.Conn, req *Request) {
+// handleGetConfigHandler 处理获取配置请求（Message 接口）
+func (s *Server) handleGetConfigHandler(ctx context.Context, msg message.Message) (any, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	
+	// If config is not set, return error
+	if s.config == nil {
+		return nil, fmt.Errorf("config not available")
+	}
+	
+	// Return complete config (including default values)
+	result := map[string]any{
+		"socket_path":         s.config.SocketPath,
+		"directories":         s.config.Directories,
+		"database_path":       s.config.DatabasePath,
+		"ignore_patterns":     s.config.IgnorePatterns,
+		"pid_file":            s.config.PIDFile,
+		"log_file":            s.config.LogFile,
+		"follow_symlinks":     s.config.FollowSymlinks,
+		"worker_count":        s.config.WorkerCount,
+		"content_search":      s.config.ContentSearch,
+		"max_content_file_size": s.config.MaxContentFileSize,
+		"index_interval":      s.config.IndexInterval,
+		"throttle_index":      s.config.ThrottleIndex,
+		"index_strategy":      s.config.IndexStrategy,
+	}
+	
+	return result, nil
+}
+
+// handleSetConfigHandler 处理设置配置请求（Message 接口）
+func (s *Server) handleSetConfigHandler(ctx context.Context, msg message.Message) (any, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	
+	// 解析请求
+	var req struct {
+		Content string `json:"content,omitempty"`
+	}
+	
+	if err := json.Unmarshal(msg.Payload(), &req); err != nil {
+		return nil, fmt.Errorf("invalid request format: %w", err)
+	}
+	
+	// Check if config path is set
+	if s.configPath == "" {
+		return nil, fmt.Errorf("config file path not set")
+	}
+	
+	// Check if config content is provided
+	if req.Content == "" {
+		return nil, fmt.Errorf("config content is empty")
+	}
+	
+	// Parse YAML config
+	newCfg, err := config.LoadFromYAML([]byte(req.Content))
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse YAML: %w", err)
+	}
+	
+	// Validate config
+	if err := newCfg.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid config: %w", err)
+	}
+	
+	// Save config to file
+	if err := newCfg.Save(s.configPath); err != nil {
+		return nil, fmt.Errorf("failed to save config: %w", err)
+	}
+	
+	// Update server config
+	s.config = newCfg
+	
+	// Return success
+	return map[string]any{"status": "saved"}, nil
+}
+
+// handleBuildHandler 处理构建索引请求（Message 接口）
+func (s *Server) handleBuildHandler(ctx context.Context, msg message.Message) (any, error) {
 	// TODO: Implement index building
-	resp := Response{
-		Type:  "result",
-		Error: "build not implemented yet",
-	}
-	
-	encoder := json.NewEncoder(conn)
-	encoder.Encode(resp)
+	return nil, fmt.Errorf("build not implemented yet")
 }
 
-// handleStop handles a stop request.
-func (s *Server) handleStop(conn net.Conn, req *Request) {
-	resp := Response{
-		Type:   "result",
-		Result: "stopping server",
-	}
+// handleStopHandler 处理停止服务请求（Message 接口）
+func (s *Server) handleStopHandler(ctx context.Context, msg message.Message) (any, error) {
+	result := "stopping server"
 	
-	encoder := json.NewEncoder(conn)
-	encoder.Encode(resp)
-	
-	// Stop server asynchronously
+	// 异步停止服务
 	go s.Stop()
+	
+	return map[string]any{"status": result}, nil
 }
 
-// sendError sends an error response.
-func (s *Server) sendError(conn net.Conn, msg string) {
-	resp := Response{
-		Type:  "error",
-		Error: msg,
-	}
-	
-	encoder := json.NewEncoder(conn)
-	encoder.Encode(resp)
-}
+// ========== 设置方法（保持向后兼容） ==========
 
 // SetIndex sets the index for the server.
 func (s *Server) SetIndex(idx *index.Index) {
@@ -410,4 +583,47 @@ func (s *Server) IsRunning() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.running
+}
+
+// SetDatabasePath sets the database path for status reporting.
+func (s *Server) SetDatabasePath(path string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.databasePath = path
+}
+
+// SetConfigPath sets the config file path for status reporting.
+func (s *Server) SetConfigPath(path string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.configPath = path
+}
+
+// SetBuildingStatus sets the index building status.
+func (s *Server) SetBuildingStatus(isBuilding bool, startTime time.Time) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.isBuilding = isBuilding
+	s.buildStartTime = startTime
+}
+
+// SetLastBuildTime sets the last build time.
+func (s *Server) SetLastBuildTime(t time.Time) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.lastBuildTime = t
+}
+
+// SetIndexedFileCount sets the indexed file count.
+func (s *Server) SetIndexedFileCount(count int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.indexedFileCount = count
+}
+
+// SetConfig sets the config for the server (for get-config command).
+func (s *Server) SetConfig(cfg *config.Config) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.config = cfg
 }

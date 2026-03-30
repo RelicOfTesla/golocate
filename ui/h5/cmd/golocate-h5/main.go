@@ -13,20 +13,25 @@ import (
 var (
 	flagAddr    string
 	flagVerbose bool
+	flagSocket  string
 )
 
 func main() {
 	flag.StringVar(&flagAddr, "addr", ":8080", "server address")
 	flag.BoolVar(&flagVerbose, "verbose", false, "verbose output")
+	flag.StringVar(&flagSocket, "socket", "", "socket path or named pipe name (default: /tmp/golocate.sock)")
 	flag.Parse()
+
+	// Create API client
+	client := api.NewClient()
+	if flagSocket != "" {
+		client.SetSocketPath(flagSocket)
+	}
 
 	// Check if golocated is running
 	if !isGolocatedRunning() {
 		log.Println("Warning: golocated is not running. Start it with: golocated --service")
 	}
-
-	// Create API client
-	client := api.NewClient()
 
 	// Create handlers
 	h := handler.New(client)
@@ -37,6 +42,17 @@ func main() {
 	mux.HandleFunc("/api/search", h.Search)
 	mux.HandleFunc("/api/status", h.Status)
 	mux.HandleFunc("/api/build", h.Build)
+	mux.HandleFunc("/api/config", func(w http.ResponseWriter, r *http.Request) {
+		// Route based on HTTP method
+		switch r.Method {
+		case http.MethodGet:
+			h.GetConfig(w, r)
+		case http.MethodPost:
+			h.SetConfig(w, r)
+		default:
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
 	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
 
 	// Start server
@@ -49,8 +65,13 @@ func main() {
 }
 
 func isGolocatedRunning() bool {
-	// Check if Unix socket exists
-	socketPath := "/tmp/golocate.sock"
+	// Determine socket path
+	socketPath := flagSocket
+	if socketPath == "" {
+		socketPath = "/tmp/golocate.sock"
+	}
+	
+	// Check if socket exists
 	if _, err := os.Stat(socketPath); err == nil {
 		return true
 	}

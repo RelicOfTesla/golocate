@@ -116,6 +116,9 @@ func NewWatcher(ctx context.Context, cfg *Config) (Watcher, error) {
 			}
 			// fanotify failed, fall through to fsnotify
 			log.Printf("fanotify not available: %v, falling back to fsnotify", err)
+		} else {
+			// fanotify not supported (kernel < 5.1 or no permissions)
+			log.Printf("WARNING: Using fsnotify as fallback (fanotify not available)")
 		}
 		// Fall back to fsnotify
 		return newFsnotifyWatcher(ctx, cfg)

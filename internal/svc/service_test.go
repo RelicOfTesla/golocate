@@ -11,7 +11,7 @@ func TestNewDaemonService(t *testing.T) {
 		Directories: []string{"/tmp"},
 	}
 	
-	d := NewDaemonService(cfg)
+	d := NewDaemonService(cfg, "/tmp/test_config.yaml")
 	
 	if d == nil {
 		t.Error("Expected non-nil daemon service")
@@ -37,7 +37,7 @@ func TestDaemonServiceStartAndStop(t *testing.T) {
 		WorkerCount:   1,
 	}
 	
-	_ = NewDaemonService(cfg)
+	_ = NewDaemonService(cfg, "/tmp/test_golocate_svc.yaml")
 	
 	t.Log("DaemonService created successfully")
 }
@@ -89,7 +89,7 @@ func TestIntegration(t *testing.T) {
 		WorkerCount:   1,
 	}
 	
-	d := NewDaemonService(cfg)
+	d := NewDaemonService(cfg, "/tmp/test_golocate_integration.yaml")
 	
 	if d.server != nil {
 		t.Error("Expected server to be nil initially")

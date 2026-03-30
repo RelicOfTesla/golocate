@@ -2,6 +2,7 @@ package handler
 
 import (
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -89,21 +90,5 @@ func ParseSearchQuery(input string) *SearchParams {
 
 // parseInt parses a string to int, returns error if invalid
 func parseInt(s string) (int, error) {
-	var n int
-	_, err := regexp.Compile(`^\d+$`)
-	if err != nil {
-		return 0, err
-	}
-	
-	for i, ch := range s {
-		if ch < '0' || ch > '9' {
-			return 0, err
-		}
-		n = n*10 + int(ch-'0')
-		if i > 10 { // prevent overflow
-			break
-		}
-	}
-	
-	return n, nil
+	return strconv.Atoi(s)
 }

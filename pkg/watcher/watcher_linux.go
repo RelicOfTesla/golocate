@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"unsafe"
 
+	"github.com/RelicOfTesla/golocate/pkg/ignore"
 	"golang.org/x/sys/unix"
 )
 
@@ -47,7 +48,7 @@ type fanotifyWatcher struct {
 	done          chan struct{}
 	config        *Config
 	watched       map[string]bool
-	ignoreMatcher *ignoreMatcher
+	ignoreMatcher *ignore.Matcher
 }
 
 // newFanotifyWatcher creates a new fanotify-based watcher.
@@ -76,7 +77,7 @@ func newFanotifyWatcher(ctx context.Context, cfg *Config) (Watcher, error) {
 	}
 	
 	if len(cfg.IgnorePatterns) > 0 {
-		w.ignoreMatcher = newIgnoreMatcher(cfg.IgnorePatterns)
+		w.ignoreMatcher = ignore.NewMatcher(cfg.IgnorePatterns)
 	}
 	
 	// Start watching specified directories

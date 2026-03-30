@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/RelicOfTesla/golocate/pkg/index"
+	"github.com/RelicOfTesla/golocate/pkg/message/protocol"
 )
 
 func TestNew(t *testing.T) {
@@ -111,7 +112,7 @@ func TestServerSetIndex(t *testing.T) {
 }
 
 func TestRequestParsing(t *testing.T) {
-	req := Request{
+	req := protocol.Request{
 		Method:     "search",
 		Content:    "test",
 		IgnoreCase: true,
@@ -128,40 +129,6 @@ func TestRequestParsing(t *testing.T) {
 
 	if !req.IgnoreCase {
 		t.Error("Expected ignore_case to be true")
-	}
-}
-
-func TestResponseTypes(t *testing.T) {
-	// Test result response
-	resp := Response{
-		Type: "result",
-		Path: "/home/user/test.txt",
-		Name: "test.txt",
-		Size: 1024,
-	}
-
-	if resp.Type != "result" {
-		t.Errorf("Expected type 'result', got %q", resp.Type)
-	}
-
-	// Test error response
-	errResp := Response{
-		Type:  "error",
-		Error: "test error",
-	}
-
-	if errResp.Type != "error" {
-		t.Errorf("Expected type 'error', got %q", errResp.Type)
-	}
-
-	// Test done response
-	doneResp := Response{
-		Type:  "done",
-		Count: 10,
-	}
-
-	if doneResp.Type != "done" {
-		t.Errorf("Expected type 'done', got %q", doneResp.Type)
 	}
 }
 

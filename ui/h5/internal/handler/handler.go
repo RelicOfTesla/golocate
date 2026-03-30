@@ -7,6 +7,7 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"strconv"
 
 	"github.com/RelicOfTesla/golocate/ui/h5/internal/api"
 )
@@ -38,7 +39,7 @@ func (h *Handler) Index(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data := map[string]interface{}{
+	data := map[string]any{
 		"Title": "golocate - Fast File Search",
 	}
 
@@ -60,9 +61,25 @@ func (h *Handler) Search(w http.ResponseWriter, r *http.Request) {
 
 	// Parse command-line style parameters from query
 	params := ParseSearchQuery(query)
+	
+	// Parse pagination parameters
+	var offset int64 = 0
+	if offsetStr := r.URL.Query().Get("offset"); offsetStr != "" {
+		if o, err := strconv.ParseInt(offsetStr, 10, 64); err == nil {
+			offset = o
+		}
+	}
+	
+	// Parse limit from query parameter (override default)
+	limit := params.Limit
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
+			limit = l
+		}
+	}
 
 	// Call API client with parsed parameters
-	resp, err := h.client.Search(params.Content, params.Path, params.IgnoreCase, params.Limit)
+	resp, err := h.client.Search(params.Content, params.Path, params.IgnoreCase, limit, offset)
 	if err != nil {
 		log.Printf("Search error: %v", err)
 		json.NewEncoder(w).Encode(&api.SearchResponse{
@@ -100,7 +117,7 @@ func (h *Handler) Build(w http.ResponseWriter, r *http.Request) {
 
 	// TODO: Implement build trigger
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	json.NewEncoder(w).Encode(map[string]any{
 		"status": "build triggered",
 	})
 }

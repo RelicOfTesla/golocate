@@ -116,8 +116,7 @@ func PrintFanotifyWarning() {
 		log.Printf("WARNING: Using fsnotify (inotify) instead of fanotify. Reason: %s", cap.Reason)
 		log.Printf("WARNING: To use fanotify for better performance:")
 		log.Printf("WARNING:   sudo setcap cap_sys_admin+ep ./bin/golocated")
-		log.Printf("WARNING:   or: sudo setcap cap_sys_admin+ep ./golocated")
-		log.Printf("WARNING:   or run as root: sudo ./golocated --service")
+		log.Printf("WARNING:   or run as root: sudo ./bin/golocated --service")
 	}
 }
 

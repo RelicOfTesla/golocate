@@ -1,6 +1,8 @@
 # Binaries
 golocate
 golocated
+golocate-gtk
+golocate-h5
 bin/
 
 # Test scripts
@@ -30,3 +32,6 @@ go.work.sum
 # OS
 .DS_Store
 Thumbs.db
+
+*.backup
+*.bak

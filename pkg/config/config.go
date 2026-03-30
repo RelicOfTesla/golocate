@@ -57,9 +57,25 @@ func DefaultConfig() *Config {
 		defaultDirs = []string{"/"}
 	}
 	
-	return &Config{
-		Directories: defaultDirs,
-		IgnorePatterns: []string{
+	// 根据操作系统设置忽略模式
+	var ignorePatterns []string
+	if runtime.GOOS == "windows" {
+		// Windows 特定的忽略模式
+		ignorePatterns = []string{
+			"C:\\Windows",
+			"C:\\Program Files",
+			"C:\\Program Files (x86)",
+			"C:\\$Recycle.Bin",
+			"*.git",
+			"*.svn",
+			"*.hg",
+			"*node_modules",
+			"*.cache",
+			"*.Cache",
+		}
+	} else {
+		// Unix/Linux 特定的忽略模式
+		ignorePatterns = []string{
 			"/proc",
 			"/sys",
 			"/dev",
@@ -71,9 +87,14 @@ func DefaultConfig() *Config {
 			"*node_modules",
 			"*.cache",
 			"*.Cache",
-		},
+		}
+	}
+	
+	return &Config{
+		Directories:        defaultDirs,
+		IgnorePatterns:     ignorePatterns,
 		DatabasePath:       filepath.Join(homeDir, ".local/share/golocate/index.db"),
-		SocketPath:         filepath.Join(homeDir, ".local/run/golocate.sock"),
+		SocketPath:         DefaultSocketPath, // 使用常量
 		PIDFile:            filepath.Join(homeDir, ".local/run/golocate.pid"),
 		LogFile:            filepath.Join(homeDir, ".local/log/golocate.log"),
 		FollowSymlinks:     false,
@@ -187,4 +208,251 @@ func (c *Config) EnsureDirs() error {
 	}
 	
 	return nil
+}
+
+// Validate validates the configuration.
+func (c *Config) Validate() error {
+	// Validate worker count
+	if c.WorkerCount < 1 {
+		return fmt.Errorf("worker_count must be at least 1")
+	}
+	if c.WorkerCount > 100 {
+		return fmt.Errorf("worker_count must not exceed 100")
+	}
+	
+	// Validate max content file size
+	if c.MaxContentFileSize < 0 {
+		return fmt.Errorf("max_content_file_size must be non-negative")
+	}
+	
+	// Validate index interval (if not empty)
+	if c.IndexInterval != "" {
+		if _, err := parseDuration(c.IndexInterval); err != nil {
+			return fmt.Errorf("invalid index_interval: %w", err)
+		}
+	}
+	
+	// Validate index strategy
+	validStrategies := map[string]bool{
+		"replace": true,
+		"merge":   true,
+		"auto":    true,
+		"":        true,
+	}
+	if !validStrategies[c.IndexStrategy] {
+		return fmt.Errorf("invalid index_strategy: must be 'replace', 'merge', or 'auto'")
+	}
+	
+	return nil
+}
+
+// parseDuration parses a duration string (e.g., "2h", "30m", "1h30m").
+func parseDuration(s string) (int64, error) {
+	// Simple parser for duration strings like "2h", "30m", "1h30m"
+	total := int64(0)
+	current := int64(0)
+	
+	for _, ch := range s {
+		switch {
+		case ch >= '0' && ch <= '9':
+			current = current*10 + int64(ch-'0')
+		case ch == 'h':
+			total += current * 3600
+			current = 0
+		case ch == 'm':
+			total += current * 60
+			current = 0
+		case ch == 's':
+			total += current
+			current = 0
+		default:
+			return 0, fmt.Errorf("invalid duration format: %s", s)
+		}
+	}
+	
+	if current != 0 {
+		return 0, fmt.Errorf("invalid duration format: %s (no unit specified)", s)
+	}
+	
+	if total == 0 {
+		return 0, fmt.Errorf("duration cannot be zero")
+	}
+	
+	return total, nil
+}
+
+// SetField sets a configuration field by key name.
+// Supports both simple keys (e.g., "worker_count") and array access (e.g., "directories[0]").
+// Value should be a string that will be parsed to the appropriate type.
+func (c *Config) SetField(key, value string) error {
+	switch key {
+	case "directories":
+		// Parse as comma-separated list
+		dirs := parseStringList(value)
+		c.Directories = dirs
+	
+	case "ignore_patterns":
+		// Parse as comma-separated list
+		patterns := parseStringList(value)
+		c.IgnorePatterns = patterns
+	
+	case "database_path":
+		c.DatabasePath = value
+	
+	case "socket_path":
+		c.SocketPath = value
+	
+	case "pid_file":
+		c.PIDFile = value
+	
+	case "log_file":
+		c.LogFile = value
+	
+	case "follow_symlinks":
+		val, err := parseBool(value)
+		if err != nil {
+			return fmt.Errorf("invalid value for %s: %w", key, err)
+		}
+		c.FollowSymlinks = val
+	
+	case "worker_count":
+		val, err := parseInt(value, 1, 100)
+		if err != nil {
+			return fmt.Errorf("invalid value for %s: %w", key, err)
+		}
+		c.WorkerCount = val
+	
+	case "content_search":
+		val, err := parseBool(value)
+		if err != nil {
+			return fmt.Errorf("invalid value for %s: %w", key, err)
+		}
+		c.ContentSearch = val
+	
+	case "max_content_file_size":
+		val, err := parseInt64(value, 0)
+		if err != nil {
+			return fmt.Errorf("invalid value for %s: %w", key, err)
+		}
+		c.MaxContentFileSize = val
+	
+	case "index_interval":
+		// Validate the interval format
+		if value != "" {
+			if _, err := parseDuration(value); err != nil {
+				return fmt.Errorf("invalid value for %s: %w", key, err)
+			}
+		}
+		c.IndexInterval = value
+	
+	case "throttle_index":
+		val, err := parseBool(value)
+		if err != nil {
+			return fmt.Errorf("invalid value for %s: %w", key, err)
+		}
+		c.ThrottleIndex = val
+	
+	case "index_strategy":
+		validStrategies := map[string]bool{
+			"replace": true,
+			"merge":   true,
+			"auto":    true,
+		}
+		if !validStrategies[value] {
+			return fmt.Errorf("invalid value for %s: must be 'replace', 'merge', or 'auto'", key)
+		}
+		c.IndexStrategy = value
+	
+	default:
+		return fmt.Errorf("unknown configuration key: %s", key)
+	}
+	
+	return nil
+}
+
+// parseStringList parses a comma-separated string into a slice.
+// Handles quoted values and escapes.
+func parseStringList(s string) []string {
+	if s == "" {
+		return nil
+	}
+	
+	var result []string
+	current := ""
+	inQuotes := false
+	escape := false
+	
+	for _, ch := range s {
+		switch {
+		case escape:
+			current += string(ch)
+			escape = false
+		
+		case ch == '\\':
+			escape = true
+		
+		case ch == '"':
+			inQuotes = !inQuotes
+		
+		case ch == ',' && !inQuotes:
+			if current != "" {
+				result = append(result, current)
+				current = ""
+			}
+		
+		default:
+			current += string(ch)
+		}
+	}
+	
+	if current != "" {
+		result = append(result, current)
+	}
+	
+	return result
+}
+
+// parseBool parses a string into a boolean.
+func parseBool(s string) (bool, error) {
+	switch s {
+	case "true", "yes", "1", "on":
+		return true, nil
+	case "false", "no", "0", "off":
+		return false, nil
+	default:
+		return false, fmt.Errorf("invalid boolean value: %s", s)
+	}
+}
+
+// parseInt parses a string into an integer within a range.
+func parseInt(s string, min, max int) (int, error) {
+	var val int
+	if _, err := fmt.Sscanf(s, "%d", &val); err != nil {
+		return 0, fmt.Errorf("invalid integer value: %s", s)
+	}
+	if val < min || val > max {
+		return 0, fmt.Errorf("value must be between %d and %d", min, max)
+	}
+	return val, nil
+}
+
+// parseInt64 parses a string into an int64 with a minimum value.
+func parseInt64(s string, min int64) (int64, error) {
+	var val int64
+	if _, err := fmt.Sscanf(s, "%d", &val); err != nil {
+		return 0, fmt.Errorf("invalid integer value: %s", s)
+	}
+	if val < min {
+		return 0, fmt.Errorf("value must be at least %d", min)
+	}
+	return val, nil
+}
+
+// LoadFromYAML loads configuration from YAML content.
+func LoadFromYAML(content []byte) (*Config, error) {
+	cfg := DefaultConfig()
+	if err := yaml.Unmarshal(content, cfg); err != nil {
+		return nil, fmt.Errorf("failed to parse YAML: %w", err)
+	}
+	return cfg, nil
 }
