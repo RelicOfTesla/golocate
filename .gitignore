@@ -1,8 +1,8 @@
 # Binaries
-golocate
-golocated
-golocate-gtk
-golocate-h5
+/golocate
+/golocated
+/golocate-gtk
+/golocate-h5
 bin/
 
 # Test scripts
