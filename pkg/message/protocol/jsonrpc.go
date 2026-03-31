@@ -236,7 +236,7 @@ func (p *jsonrpcProtocol) WriteResponse(writer *bufio.Writer, resp *Response) er
 	// Create JSON-RPC response
 	jsonrpcResp := jsonrpcResponse{
 		Jsonrpc: "2.0",
-		ID:      1,
+		ID:      resp.ID,  // Use the request ID from response
 	}
 	
 	// Handle error
