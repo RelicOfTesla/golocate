@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/RelicOfTesla/golocate/internal/server"
+	"github.com/RelicOfTesla/golocate/internal/testutil"
 	"github.com/RelicOfTesla/golocate/pkg/index"
 )
 
@@ -39,7 +40,7 @@ func TestSearchResultFields(t *testing.T) {
 
 func TestIsServerRunning(t *testing.T) {
 	// Test without server
-	running := IsServerRunning("/tmp/nonexistent_socket.sock")
+	running := IsServerRunning(testutil.GetNonExistentSocketPath())
 	if running {
 		t.Error("Expected IsServerRunning to return false for non-existent socket")
 	}
@@ -49,7 +50,7 @@ func TestIsServerRunningWithServer(t *testing.T) {
 	// Create and start server
 	idx := index.NewIndex()
 	srv := server.New(idx)
-	srv.SetSocketPath("/tmp/golocate_cli_test.sock")
+	srv.SetSocketPath(testutil.GetTestSocketPath("cli"))
 
 	if err := srv.Start(); err != nil {
 		t.Fatalf("Failed to start server: %v", err)
@@ -60,7 +61,7 @@ func TestIsServerRunningWithServer(t *testing.T) {
 	time.Sleep(10 * time.Millisecond)
 
 	// Check if server is running
-	running := IsServerRunning("/tmp/golocate_cli_test.sock")
+	running := IsServerRunning(testutil.GetTestSocketPath("cli"))
 	if !running {
 		t.Error("Expected IsServerRunning to return true for running server")
 	}
@@ -70,7 +71,7 @@ func TestSearchWithoutServer(t *testing.T) {
 	opts := SearchOptions{
 		Pattern:    "test",
 		IgnoreCase: true,
-		SocketPath: "/tmp/nonexistent_socket.sock",
+		SocketPath: testutil.GetNonExistentSocketPath(),
 	}
 
 	_, err := Search(opts)
@@ -92,7 +93,7 @@ func TestSearchWithServer(t *testing.T) {
 
 	// Create and start server
 	srv := server.New(idx)
-	srv.SetSocketPath("/tmp/golocate_cli_search_test.sock")
+	srv.SetSocketPath(testutil.GetTestSocketPath("cli_search"))
 
 	if err := srv.Start(); err != nil {
 		t.Fatalf("Failed to start server: %v", err)
@@ -106,7 +107,7 @@ func TestSearchWithServer(t *testing.T) {
 	opts := SearchOptions{
 		Pattern:    "test",
 		IgnoreCase: true,
-		SocketPath: "/tmp/golocate_cli_search_test.sock",
+		SocketPath: testutil.GetTestSocketPath("cli_search"),
 	}
 
 	result, err := Search(opts)
@@ -120,7 +121,7 @@ func TestSearchWithServer(t *testing.T) {
 }
 
 func TestStatusWithoutServer(t *testing.T) {
-	_, err := Status("/tmp/nonexistent_socket.sock")
+	_, err := Status(testutil.GetNonExistentSocketPath())
 	if err == nil {
 		t.Error("Expected error when getting status without server")
 	}
@@ -130,7 +131,7 @@ func TestStatusWithServer(t *testing.T) {
 	// Create and start server
 	idx := index.NewIndex()
 	srv := server.New(idx)
-	srv.SetSocketPath("/tmp/golocate_cli_status_test.sock")
+	srv.SetSocketPath(testutil.GetTestSocketPath("cli_status"))
 
 	if err := srv.Start(); err != nil {
 		t.Fatalf("Failed to start server: %v", err)
@@ -141,7 +142,7 @@ func TestStatusWithServer(t *testing.T) {
 	time.Sleep(10 * time.Millisecond)
 
 	// Get status
-	status, err := Status("/tmp/golocate_cli_status_test.sock")
+	status, err := Status(testutil.GetTestSocketPath("cli_status"))
 	if err != nil {
 		t.Fatalf("Status failed: %v", err)
 	}
@@ -152,7 +153,7 @@ func TestStatusWithServer(t *testing.T) {
 }
 
 func TestBuildWithoutServer(t *testing.T) {
-	err := Build("/tmp/nonexistent_socket.sock")
+	err := Build(testutil.GetNonExistentSocketPath())
 	if err == nil {
 		t.Error("Expected error when building without server")
 	}
@@ -176,7 +177,7 @@ func TestPrintResults(t *testing.T) {
 func TestSearchStreamWithoutServer(t *testing.T) {
 	opts := SearchOptions{
 		Pattern:    "test",
-		SocketPath: "/tmp/nonexistent_socket.sock",
+		SocketPath: testutil.GetNonExistentSocketPath(),
 	}
 
 	err := SearchStream(opts, func(e *index.Entry) bool {
@@ -203,7 +204,7 @@ func TestSearchStreamWithServer(t *testing.T) {
 
 	// Create and start server
 	srv := server.New(idx)
-	srv.SetSocketPath("/tmp/golocate_cli_stream_test.sock")
+	srv.SetSocketPath(testutil.GetTestSocketPath("cli_stream"))
 
 	if err := srv.Start(); err != nil {
 		t.Fatalf("Failed to start server: %v", err)
@@ -216,7 +217,7 @@ func TestSearchStreamWithServer(t *testing.T) {
 	// Stream search
 	opts := SearchOptions{
 		Pattern:    "",
-		SocketPath: "/tmp/golocate_cli_stream_test.sock",
+		SocketPath: testutil.GetTestSocketPath("cli_stream"),
 		Limit:      10,
 	}
 

@@ -135,6 +135,11 @@ func (idx *Index) Search(opts SearchOptions) []*Entry {
 		return idx.searchRegex(opts.Pattern, opts)
 	}
 	
+	// Handle wildcard search
+	if opts.PatternMode == PatternModeWildcard {
+		return idx.searchWildcard(opts.Pattern, opts)
+	}
+	
 	// Normal substring search
 	query := opts.Pattern
 	var results []*Entry
@@ -228,6 +233,58 @@ func (idx *Index) searchRegex(query string, opts SearchOptions) []*Entry {
 		// Search in full paths
 		for path, entry := range idx.entries {
 			if re.MatchString(path) {
+				results = append(results, entry)
+				if opts.Limit > 0 && len(results) >= opts.Limit {
+					return results
+				}
+			}
+		}
+	}
+	
+	return results
+}
+
+// searchWildcard performs a wildcard pattern search.
+func (idx *Index) searchWildcard(pattern string, opts SearchOptions) []*Entry {
+	var results []*Entry
+	
+	// Special case: "*" matches everything
+	if pattern == "*" {
+		for _, entry := range idx.entries {
+			results = append(results, entry)
+			if opts.Limit > 0 && len(results) >= opts.Limit {
+				return results
+			}
+		}
+		return results
+	}
+	
+	// Decide search target based on Basename
+	if opts.Basename {
+		// Search only in file names
+		for name, entries := range idx.byName {
+			matched, err := filepath.Match(pattern, name)
+			if err != nil {
+				// Invalid pattern, skip
+				continue
+			}
+			if matched {
+				results = append(results, entries...)
+				if opts.Limit > 0 && len(results) >= opts.Limit {
+					return results
+				}
+			}
+		}
+	} else {
+		// Search in full paths
+		for path, entry := range idx.entries {
+			// For full path matching, use filepath.Match on the full path
+			matched, err := filepath.Match(pattern, path)
+			if err != nil {
+				// Invalid pattern, skip
+				continue
+			}
+			if matched {
 				results = append(results, entry)
 				if opts.Limit > 0 && len(results) >= opts.Limit {
 					return results

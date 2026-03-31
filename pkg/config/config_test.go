@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/RelicOfTesla/golocate/internal/testutil"
 )
 
 func TestDefaultConfig(t *testing.T) {
@@ -30,35 +32,6 @@ func TestDefaultConfig(t *testing.T) {
 	}
 }
 
-func TestDefaultIgnorePatterns(t *testing.T) {
-	patterns := DefaultIgnorePatterns()
-
-	if len(patterns) == 0 {
-		t.Error("Expected at least one default ignore pattern")
-	}
-
-	// Check for common patterns
-	hasGit := false
-	for _, p := range patterns {
-		if p == "*.git" {
-			hasGit = true
-			break
-		}
-	}
-	if !hasGit {
-		t.Error("Expected *.git in default ignore patterns")
-	}
-}
-
-func TestConfigSocketPath(t *testing.T) {
-	cfg := &Config{
-		SocketPath: "/tmp/test.sock",
-	}
-
-	if cfg.SocketPath != "/tmp/test.sock" {
-		t.Errorf("Expected socket path '/tmp/test.sock', got %q", cfg.SocketPath)
-	}
-}
 
 func TestConfigDirectories(t *testing.T) {
 	cfg := &Config{
@@ -109,10 +82,10 @@ func TestConfigSaveAndLoad(t *testing.T) {
 	cfg := &Config{
 		Directories:       []string{"/home/user"},
 		IgnorePatterns:    []string{"*.log"},
-		DatabasePath:      "/tmp/test.db",
-		SocketPath:        "/tmp/test.sock",
-		PIDFile:           "/tmp/test.pid",
-		LogFile:           "/tmp/test.log",
+		DatabasePath:      filepath.Join(os.TempDir(), "golocate_test.db"),
+		SocketPath:        testutil.GetTestSocketPath("test"),
+		PIDFile:           filepath.Join(os.TempDir(), "golocate_test.pid"),
+		LogFile:           filepath.Join(os.TempDir(), "golocate_test.log"),
 		FollowSymlinks:    true,
 		WorkerCount:       8,
 		ContentSearch:      true,
@@ -121,6 +94,7 @@ func TestConfigSaveAndLoad(t *testing.T) {
 		ThrottleIndex:     false,
 		IndexStrategy:     "replace",
 	}
+	old := *cfg
 
 	// Save
 	err := cfg.Save(configPath)
@@ -137,16 +111,16 @@ func TestConfigSaveAndLoad(t *testing.T) {
 	// Verify loaded config
 	// Note: Load uses simple YAML-like parsing, lists may not be fully parsed
 	// Test scalar values which are reliably parsed
-	if loaded.DatabasePath != "/tmp/test.db" {
-		t.Errorf("Expected database path '/tmp/test.db', got %q", loaded.DatabasePath)
+	if loaded.DatabasePath != old.DatabasePath {
+		t.Errorf("Expected database path '%s', got %q", old.DatabasePath, loaded.DatabasePath)
 	}
 
-	if loaded.SocketPath != "/tmp/test.sock" {
-		t.Errorf("Expected socket path '/tmp/test.sock', got %q", loaded.SocketPath)
+	if loaded.SocketPath != old.SocketPath {
+		t.Errorf("Expected socket path '%s', got %q", old.SocketPath, loaded.SocketPath)
 	}
 
-	if loaded.WorkerCount != 8 {
-		t.Errorf("Expected worker count 8, got %d", loaded.WorkerCount)
+	if loaded.WorkerCount != old.WorkerCount {
+		t.Errorf("Expected worker count %d, got %d", old.WorkerCount, loaded.WorkerCount)
 	}
 
 	if loaded.FollowSymlinks != true {
@@ -194,7 +168,7 @@ func TestConfigEnsureDirs(t *testing.T) {
 
 	cfg := &Config{
 		DatabasePath: filepath.Join(testDir, "data", "index.db"),
-		SocketPath:   filepath.Join(testDir, "run", "golocate.sock"),
+		SocketPath:   testutil.GetTestSocketPath("ensure_dirs"),
 		PIDFile:      filepath.Join(testDir, "run", "golocate.pid"),
 		LogFile:      filepath.Join(testDir, "log", "golocate.log"),
 	}

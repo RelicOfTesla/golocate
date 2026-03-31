@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/RelicOfTesla/golocate/internal/testutil"
 	"github.com/RelicOfTesla/golocate/pkg/index"
 	"github.com/RelicOfTesla/golocate/pkg/message/protocol"
 )
@@ -38,6 +39,9 @@ func TestServerStartAndStop(t *testing.T) {
 	idx := index.NewIndex()
 	server := New(idx)
 
+	// Use a unique socket path to avoid conflict with main server
+	server.socketPath = testutil.GetTestSocketPath("server_start_stop")
+
 	// Start server
 	err := server.Start()
 	if err != nil {
@@ -62,6 +66,9 @@ func TestServerStartAndStop(t *testing.T) {
 func TestServerStartTwice(t *testing.T) {
 	idx := index.NewIndex()
 	server := New(idx)
+
+	// Use a unique socket path to avoid conflict with main server
+	server.socketPath = testutil.GetTestSocketPath("server_start_twice")
 
 	// Start server
 	err := server.Start()
@@ -137,7 +144,7 @@ func TestServerWithCustomSocketPath(t *testing.T) {
 	server := New(idx)
 
 	// Set custom socket path
-	customPath := "/tmp/golocate_test_custom.sock"
+	customPath := testutil.GetTestSocketPath("custom")
 	server.socketPath = customPath
 
 	if server.socketPath != customPath {
@@ -150,7 +157,7 @@ func TestServerStartCreatesSocketFile(t *testing.T) {
 	server := New(idx)
 
 	// Use a unique socket path for testing
-	server.socketPath = "/tmp/golocate_test_socket.sock"
+	server.socketPath = testutil.GetTestSocketPath("server_socket")
 
 	// Start server
 	err := server.Start()

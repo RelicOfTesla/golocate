@@ -219,6 +219,7 @@ func TestIndexBuildPerformance(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			if testing.Short() && tc.count >= 1000000 {
 				t.Skip("Skipping large dataset in short mode")
+				return
 			}
 
 			start := time.Now()

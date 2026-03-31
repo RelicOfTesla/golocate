@@ -29,7 +29,7 @@ type Client struct {
 // New creates a new client instance.
 func New() *Client {
 	return &Client{
-		socketPath: config.DefaultSocketPath,
+		socketPath: config.GetDefaultSocketPath(),
 		timeout:    config.DefaultTimeout,
 		retryCount: config.DefaultRetryCount,
 		retryDelay: config.DefaultRetryDelay,

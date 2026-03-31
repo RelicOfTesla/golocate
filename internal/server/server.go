@@ -54,7 +54,7 @@ type Server struct {
 // New creates a new server instance.
 func New(idx *index.Index) *Server {
 	return &Server{
-		socketPath:    config.DefaultSocketPath,
+		socketPath:    config.GetDefaultSocketPath(),
 		index:         idx,
 		maxConns:      config.DefaultMaxConns,
 		connTimeout:   config.DefaultTimeout,
@@ -152,9 +152,17 @@ func (s *Server) Stop() error {
 		}
 	}
 	
-	// Remove socket file
-	if err := os.Remove(s.socketPath); err != nil && !os.IsNotExist(err) {
-		log.Printf("warning: failed to remove socket file: %v", err)
+	// Remove socket file only if no other server is using it
+	// Try to connect to the socket to check if another server is listening
+	if conn, err := net.DialTimeout("unix", s.socketPath, 5*time.Second); err == nil {
+		// Connection succeeded, another server is using this socket
+		conn.Close()
+		log.Printf("Socket file %s is still in use by another server, not removing", s.socketPath)
+	} else {
+		// Connection failed, no server is using this socket, safe to remove
+		if err := os.Remove(s.socketPath); err != nil && !os.IsNotExist(err) {
+			log.Printf("warning: failed to remove socket file: %v", err)
+		}
 	}
 	
 	log.Println("Server stopped")

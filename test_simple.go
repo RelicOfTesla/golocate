@@ -8,6 +8,7 @@ import (
 
 	"github.com/RelicOfTesla/golocate/internal/client"
 	"github.com/RelicOfTesla/golocate/internal/server"
+	"github.com/RelicOfTesla/golocate/internal/testutil"
 	"github.com/RelicOfTesla/golocate/pkg/index"
 )
 
@@ -15,7 +16,8 @@ func main() {
 	// Create and start server
 	idx := index.NewIndex()
 	srv := server.New(idx)
-	srv.SetSocketPath("/tmp/golocate_simple_test.sock")
+	socketPath := testutil.GetTestSocketPath("simple_test")
+	srv.SetSocketPath(socketPath)
 
 	if err := srv.Start(); err != nil {
 		fmt.Printf("Failed to start server: %v\n", err)
@@ -28,7 +30,7 @@ func main() {
 
 	// Create client with longer timeout
 	c := client.New()
-	c.SetSocketPath("/tmp/golocate_simple_test.sock")
+	c.SetSocketPath(socketPath)
 	c.SetTimeout(60 * time.Second) // Set longer timeout
 
 	// Perform search

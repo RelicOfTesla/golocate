@@ -1,6 +1,8 @@
 package svc
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/RelicOfTesla/golocate/pkg/config"
@@ -8,10 +10,10 @@ import (
 
 func TestNewDaemonService(t *testing.T) {
 	cfg := &config.Config{
-		Directories: []string{"/tmp"},
+		Directories: []string{os.TempDir()},
 	}
 	
-	d := NewDaemonService(cfg, "/tmp/test_config.yaml")
+	d := NewDaemonService(cfg, filepath.Join(os.TempDir(), "test_config.yaml"))
 	
 	if d == nil {
 		t.Error("Expected non-nil daemon service")
@@ -32,12 +34,12 @@ func TestNewDaemonService(t *testing.T) {
 
 func TestDaemonServiceStartAndStop(t *testing.T) {
 	cfg := &config.Config{
-		Directories:   []string{"/tmp/test_golocate_svc"},
-		DatabasePath:  "/tmp/test_golocate_svc.db",
+		Directories:   []string{filepath.Join(os.TempDir(), "test_golocate_svc")},
+		DatabasePath:  filepath.Join(os.TempDir(), "test_golocate_svc.db"),
 		WorkerCount:   1,
 	}
 	
-	_ = NewDaemonService(cfg, "/tmp/test_golocate_svc.yaml")
+	_ = NewDaemonService(cfg, filepath.Join(os.TempDir(), "test_golocate_svc.yaml"))
 	
 	t.Log("DaemonService created successfully")
 }
@@ -64,8 +66,8 @@ func TestServiceConfig(t *testing.T) {
 
 func TestRunWithoutService(t *testing.T) {
 	_ = &config.Config{
-		Directories:   []string{"/tmp/test_golocate_run"},
-		DatabasePath:  "/tmp/test_golocate_run.db",
+		Directories:   []string{filepath.Join(os.TempDir(), "test_golocate_run")},
+		DatabasePath:  filepath.Join(os.TempDir(), "test_golocate_run.db"),
 		WorkerCount:   1,
 	}
 	
@@ -84,12 +86,12 @@ func TestIntegration(t *testing.T) {
 	}
 	
 	cfg := &config.Config{
-		Directories:   []string{"/tmp/test_golocate_integration"},
-		DatabasePath:  "/tmp/test_golocate_integration.db",
+		Directories:   []string{filepath.Join(os.TempDir(), "test_golocate_integration")},
+		DatabasePath:  filepath.Join(os.TempDir(), "test_golocate_integration.db"),
 		WorkerCount:   1,
 	}
 	
-	d := NewDaemonService(cfg, "/tmp/test_golocate_integration.yaml")
+	d := NewDaemonService(cfg, filepath.Join(os.TempDir(), "test_golocate_integration.yaml"))
 	
 	if d.server != nil {
 		t.Error("Expected server to be nil initially")

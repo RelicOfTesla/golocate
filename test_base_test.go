@@ -10,8 +10,10 @@ import (
 	"strings"
 	"testing"
 	"os"
+	"path/filepath"
 	"github.com/RelicOfTesla/golocate/internal/client"
 	"github.com/RelicOfTesla/golocate/internal/server"
+	"github.com/RelicOfTesla/golocate/internal/testutil"
 	"github.com/RelicOfTesla/golocate/pkg/index"
 	
 	"github.com/stretchr/testify/require"
@@ -42,7 +44,7 @@ func TestMain(m *testing.M) {
 	testServer.SetSocketPath(socketPath)
 	
 	// Set a temporary config path for set-config tests
-	tempConfigPath := "/tmp/golocate-test-config.yaml"
+	tempConfigPath := filepath.Join(os.TempDir(), "golocate-test-config.yaml")
 	testServer.SetConfigPath(tempConfigPath)
 	
 	if err := testServer.Start(); err != nil {
@@ -65,7 +67,12 @@ func getTestClient(t *testing.T) *client.Client {
 }
 
 
-const socketPath = "/tmp/golocate.sock"
+// getSocketPath returns the test socket path for the current platform.
+func getSocketPath() string {
+	return testutil.GetTestSocketPath("base")
+}
+
+var socketPath = getSocketPath()  // Use unique socket path for testing to avoid conflict with main server
 
 // connectSocket creates a direct connection to golocated Unix socket.
 // This function is only used in test files and should not be used in production code.

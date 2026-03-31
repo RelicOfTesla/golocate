@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/RelicOfTesla/golocate/pkg/config"
 )
@@ -43,12 +44,12 @@ func createListener(socketPath string) (net.Listener, error) {
 
 // getDefaultAddress returns the default Unix socket path on Linux.
 func getDefaultAddress() string {
-	return config.DefaultSocketPath
+	return config.GetDefaultSocketPath()
 }
 
 // connect connects to the Unix socket on Linux.
 func connect(socketPath string) (net.Conn, error) {
-	conn, err := net.Dial("unix", socketPath)
+	conn, err := net.DialTimeout("unix", socketPath, 5*time.Second)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to Unix socket: %w", err)
 	}
@@ -62,8 +63,8 @@ func isRunning(socketPath string) bool {
 		return false
 	}
 
-	// Try to connect
-	conn, err := net.Dial("unix", socketPath)
+	// Try to connect with timeout
+	conn, err := net.DialTimeout("unix", socketPath, 5*time.Second)
 	if err != nil {
 		return false
 	}

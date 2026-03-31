@@ -44,13 +44,14 @@ type Config struct {
 func DefaultConfig() *Config {
 	homeDir, _ := os.UserHomeDir()
 	if homeDir == "" {
-		homeDir = "/tmp"
+		homeDir = os.TempDir()
 	}
 	
 	// 根据操作系统设置默认目录
 	var defaultDirs []string
 	if runtime.GOOS == "windows" {
 		// Windows 没有根目录，使用用户主目录
+		// TODO: 应当获取全部磁盘分区
 		defaultDirs = []string{homeDir}
 	} else {
 		// Unix/Linux 使用根目录
@@ -58,43 +59,13 @@ func DefaultConfig() *Config {
 	}
 	
 	// 根据操作系统设置忽略模式
-	var ignorePatterns []string
-	if runtime.GOOS == "windows" {
-		// Windows 特定的忽略模式
-		ignorePatterns = []string{
-			"C:\\Windows",
-			"C:\\Program Files",
-			"C:\\Program Files (x86)",
-			"C:\\$Recycle.Bin",
-			"*.git",
-			"*.svn",
-			"*.hg",
-			"*node_modules",
-			"*.cache",
-			"*.Cache",
-		}
-	} else {
-		// Unix/Linux 特定的忽略模式
-		ignorePatterns = []string{
-			"/proc",
-			"/sys",
-			"/dev",
-			"/run",
-			"/tmp",
-			"*.git",
-			"*.svn",
-			"*.hg",
-			"*node_modules",
-			"*.cache",
-			"*.Cache",
-		}
-	}
+	var ignorePatterns = DefaultIgnorePatterns()
 	
 	return &Config{
 		Directories:        defaultDirs,
 		IgnorePatterns:     ignorePatterns,
 		DatabasePath:       filepath.Join(homeDir, ".local/share/golocate/index.db"),
-		SocketPath:         DefaultSocketPath, // 使用常量
+		SocketPath:         GetDefaultSocketPath(), // 使用跨平台函数
 		PIDFile:            filepath.Join(homeDir, ".local/run/golocate.pid"),
 		LogFile:            filepath.Join(homeDir, ".local/log/golocate.log"),
 		FollowSymlinks:     false,
@@ -109,35 +80,40 @@ func DefaultConfig() *Config {
 
 // DefaultIgnorePatterns returns common patterns to ignore.
 func DefaultIgnorePatterns() []string {
-	return []string{
-		"/proc",
-		"/sys",
-		"/dev",
-		"/run",
-		"/tmp",
-		"/var/cache",
-		"/var/tmp",
-		"/var/log",
-		"*.git",
-		"*.svn",
-		"*.hg",
-		"*node_modules",
-		"*.cache",
-		"*.Cache",
-		"*__pycache__",
-		"*.pyc",
-		"*.pyo",
-		"*.o",
-		"*.a",
-		"*.so",
-		"*.dylib",
-		"*.dll",
-		"*.exe",
-		"*.class",
-		"*.jar",
-		"*.war",
-		"*.ear",
+	
+	var ignorePatterns []string
+	if runtime.GOOS == "windows" {
+		// Windows 特定的忽略模式
+		ignorePatterns = []string{
+			/*"C:\\Windows",
+			"C:\\Program Files",
+			"C:\\Program Files (x86)",
+			"C:\\$Recycle.Bin",
+			"*.git",
+			"*.svn",
+			"*.hg",
+			"*node_modules",
+			"*.cache",
+			"*.Cache",*/
+		}
+	} else {
+		// Unix/Linux 特定的忽略模式
+		ignorePatterns = []string{
+			"/proc",
+			"/sys",
+			"/dev",
+			"/run",
+			/*
+			"/tmp",
+			"*.git",
+			"*.svn",
+			"*.hg",
+			"*node_modules",
+			"*.cache",
+			"*.Cache",*/
+		}
 	}
+	return ignorePatterns
 }
 
 // Load loads the configuration from a file.

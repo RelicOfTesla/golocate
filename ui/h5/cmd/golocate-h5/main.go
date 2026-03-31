@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/RelicOfTesla/golocate/pkg/config"
 	"github.com/RelicOfTesla/golocate/ui/h5/internal/api"
 	"github.com/RelicOfTesla/golocate/ui/h5/internal/handler"
 )
@@ -19,7 +20,7 @@ var (
 func main() {
 	flag.StringVar(&flagAddr, "addr", ":8080", "server address")
 	flag.BoolVar(&flagVerbose, "verbose", false, "verbose output")
-	flag.StringVar(&flagSocket, "socket", "", "socket path or named pipe name (default: /tmp/golocate.sock)")
+	flag.StringVar(&flagSocket, "socket", "", "socket path or named pipe name (default: system default)")
 	flag.Parse()
 
 	// Create API client
@@ -68,7 +69,7 @@ func isGolocatedRunning() bool {
 	// Determine socket path
 	socketPath := flagSocket
 	if socketPath == "" {
-		socketPath = "/tmp/golocate.sock"
+		socketPath = config.GetDefaultSocketPath()
 	}
 	
 	// Check if socket exists

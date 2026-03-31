@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/RelicOfTesla/golocate/internal/server"
+	"github.com/RelicOfTesla/golocate/internal/testutil"
 	"github.com/RelicOfTesla/golocate/pkg/index"
 	"github.com/RelicOfTesla/golocate/pkg/message/protocol"
 )
@@ -28,7 +29,7 @@ func TestNew(t *testing.T) {
 func TestClientSetSocketPath(t *testing.T) {
 	client := New()
 
-	customPath := "/tmp/custom.sock"
+	customPath := testutil.GetTestSocketPath("custom")
 	client.SetSocketPath(customPath)
 
 	if client.socketPath != customPath {
@@ -49,7 +50,7 @@ func TestClientSetTimeout(t *testing.T) {
 
 func TestClientIsServerRunning(t *testing.T) {
 	client := New()
-	client.SetSocketPath("/tmp/nonexistent_socket_for_test.sock")
+	client.SetSocketPath(testutil.GetNonExistentSocketPath())
 
 	// Should return false for non-existent socket
 	if client.IsServerRunning() {
@@ -61,7 +62,7 @@ func TestClientIsServerRunningWithServer(t *testing.T) {
 	// Create and start server
 	idx := index.NewIndex()
 	srv := server.New(idx)
-	srv.SetSocketPath("/tmp/golocate_client_test.sock")
+	srv.SetSocketPath(testutil.GetTestSocketPath("client"))
 
 	if err := srv.Start(); err != nil {
 		t.Fatalf("Failed to start server: %v", err)
@@ -70,7 +71,7 @@ func TestClientIsServerRunningWithServer(t *testing.T) {
 
 	// Create client with matching socket path
 	client := New()
-	client.SetSocketPath("/tmp/golocate_client_test.sock")
+	client.SetSocketPath(testutil.GetTestSocketPath("client"))
 
 	// Should return true for running server
 	if !client.IsServerRunning() {
@@ -80,7 +81,7 @@ func TestClientIsServerRunningWithServer(t *testing.T) {
 
 func TestClientSearchWithoutServer(t *testing.T) {
 	client := New()
-	client.SetSocketPath("/tmp/nonexistent_socket_for_test.sock")
+	client.SetSocketPath(testutil.GetNonExistentSocketPath())
 
 	_, err := client.Search("test", index.SearchOptions{})
 	if err == nil {
@@ -101,7 +102,7 @@ func TestClientSearchWithServer(t *testing.T) {
 
 	// Create and start server
 	srv := server.New(idx)
-	srv.SetSocketPath("/tmp/golocate_client_search_test.sock")
+	srv.SetSocketPath(testutil.GetTestSocketPath("client_search"))
 
 	if err := srv.Start(); err != nil {
 		t.Fatalf("Failed to start server: %v", err)
@@ -113,7 +114,7 @@ func TestClientSearchWithServer(t *testing.T) {
 
 	// Create client
 	client := New()
-	client.SetSocketPath("/tmp/golocate_client_search_test.sock")
+	client.SetSocketPath(testutil.GetTestSocketPath("client_search"))
 
 	// Perform search (PATH is required, CONTENT is optional)
 	results, err := client.Search("test", index.SearchOptions{})
@@ -128,7 +129,7 @@ func TestClientSearchWithServer(t *testing.T) {
 
 func TestClientStatusWithoutServer(t *testing.T) {
 	client := New()
-	client.SetSocketPath("/tmp/nonexistent_socket_for_test.sock")
+	client.SetSocketPath(testutil.GetNonExistentSocketPath())
 
 	_, err := client.Status()
 	if err == nil {
@@ -140,7 +141,7 @@ func TestClientStatusWithServer(t *testing.T) {
 	// Create and start server
 	idx := index.NewIndex()
 	srv := server.New(idx)
-	srv.SetSocketPath("/tmp/golocate_client_status_test.sock")
+	srv.SetSocketPath(testutil.GetTestSocketPath("client_status"))
 
 	if err := srv.Start(); err != nil {
 		t.Fatalf("Failed to start server: %v", err)
@@ -152,7 +153,7 @@ func TestClientStatusWithServer(t *testing.T) {
 
 	// Create client
 	client := New()
-	client.SetSocketPath("/tmp/golocate_client_status_test.sock")
+	client.SetSocketPath(testutil.GetTestSocketPath("client_status"))
 
 	// Get status
 	status, err := client.Status()
@@ -167,7 +168,7 @@ func TestClientStatusWithServer(t *testing.T) {
 
 func TestClientBuildWithoutServer(t *testing.T) {
 	client := New()
-	client.SetSocketPath("/tmp/nonexistent_socket_for_test.sock")
+	client.SetSocketPath(testutil.GetNonExistentSocketPath())
 
 	err := client.Build()
 	if err == nil {
@@ -190,7 +191,7 @@ func TestClientUpdateDB(t *testing.T) {
 
 func TestClientSearchStreamWithoutServer(t *testing.T) {
 	client := New()
-	client.SetSocketPath("/tmp/nonexistent_socket_for_test.sock")
+	client.SetSocketPath(testutil.GetNonExistentSocketPath())
 
 	err := client.SearchStream("test", index.SearchOptions{}, func(e *index.Entry) bool {
 		return true
@@ -214,7 +215,7 @@ func TestClientSearchStreamWithServer(t *testing.T) {
 
 	// Create and start server
 	srv := server.New(idx)
-	srv.SetSocketPath("/tmp/golocate_client_stream_test.sock")
+	srv.SetSocketPath(testutil.GetTestSocketPath("client_stream"))
 
 	if err := srv.Start(); err != nil {
 		t.Fatalf("Failed to start server: %v", err)
@@ -226,7 +227,7 @@ func TestClientSearchStreamWithServer(t *testing.T) {
 
 	// Create client
 	client := New()
-	client.SetSocketPath("/tmp/golocate_client_stream_test.sock")
+	client.SetSocketPath(testutil.GetTestSocketPath("client_stream"))
 
 	// Stream search
 	count := 0
@@ -259,7 +260,7 @@ func TestClientSearchStreamStop(t *testing.T) {
 
 	// Create and start server
 	srv := server.New(idx)
-	srv.SetSocketPath("/tmp/golocate_client_stream_stop_test.sock")
+	srv.SetSocketPath(testutil.GetTestSocketPath("client_stream_stop"))
 
 	if err := srv.Start(); err != nil {
 		t.Fatalf("Failed to start server: %v", err)
@@ -271,7 +272,7 @@ func TestClientSearchStreamStop(t *testing.T) {
 
 	// Create client
 	client := New()
-	client.SetSocketPath("/tmp/golocate_client_stream_stop_test.sock")
+	client.SetSocketPath(testutil.GetTestSocketPath("client_stream_stop"))
 
 	// Stream search and stop after first result
 	count := 0
