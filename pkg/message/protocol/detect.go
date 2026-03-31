@@ -71,6 +71,30 @@ func DetectProtocolWithConfig(reader *bufio.Reader, cfg *DetectionConfig) (*Dete
 	
 	result := &DetectionResult{}
 	
+	// Skip leading whitespace (including newlines)
+	// This handles cases where clients send extra newlines
+	for {
+		b, err := reader.Peek(1)
+		if err != nil {
+			// If we reach EOF after skipping whitespace, return a special error
+			// to indicate that the data was all whitespace
+			if err == io.EOF {
+				return nil, fmt.Errorf("empty data (only whitespace)")
+			}
+			return nil, err
+		}
+		
+		// Skip whitespace characters: space, tab, newline, carriage return
+		if b[0] == ' ' || b[0] == '\t' || b[0] == '\n' || b[0] == '\r' {
+			// Consume the whitespace
+			reader.ReadByte()
+			continue
+		}
+		
+		// Non-whitespace character found, stop skipping
+		break
+	}
+	
 	// Phase 1: Quick detection based on first byte
 	b, err := reader.Peek(1)
 	if err != nil {
