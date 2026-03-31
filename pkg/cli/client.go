@@ -56,11 +56,10 @@ func Search(opts SearchOptions) (*SearchResult, error) {
 	
 	// Handle regex
 	if opts.Regex || opts.Regexp {
-		searchOpts.Regex = true
 		if opts.Regexp {
-			searchOpts.ExtendedRegex = false // basic regex
+			searchOpts.PatternMode = index.PatternModeRegex // basic regex
 		} else {
-			searchOpts.ExtendedRegex = true // extended regex
+			searchOpts.PatternMode = index.PatternModeExtendedRegex // extended regex
 		}
 	}
 	
@@ -99,7 +98,15 @@ func SearchStream(opts SearchOptions, callback func(*index.Entry) bool) error {
 		IgnoreCase: opts.IgnoreCase,
 		Basename:   opts.Basename,
 		Limit:      opts.Limit,
-		Regex:      opts.Regex || opts.Regexp,
+	}
+	
+	// Handle regex pattern mode
+	if opts.Regex || opts.Regexp {
+		if opts.Regexp {
+			searchOpts.PatternMode = index.PatternModeRegex // basic regex
+		} else {
+			searchOpts.PatternMode = index.PatternModeExtendedRegex // extended regex
+		}
 	}
 	
 	// Handle sorting

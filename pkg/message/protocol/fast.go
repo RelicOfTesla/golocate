@@ -4,6 +4,7 @@ package protocol
 import (
 	"bufio"
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -81,43 +82,50 @@ func (p *fastProtocol) ParseRequestWithRemainder(reader *bufio.Reader) (*Request
 		value := parts[1]
 
 		switch key {
-		case "method":
+		case FieldMethod:
 			req.Method = value
-		case "id":
+		case FieldID:
 			// Try to parse as integer first, then as string
 			if n, err := strconv.Atoi(value); err == nil {
 				req.ID = n
 			} else {
 				req.ID = value
 			}
-		case "mode":
-			req.Mode = value
-		case "path":
-			req.Path = value
-		case "content":
+		case FieldMode:
+			// Deprecated: mode field is no longer used
+		case FieldPattern:
+			// pattern is the path (Pattern = path, Content = file content)
+			req.Pattern = value
+		case FieldContent:
 			req.Content = value
-		case "accept_response_format":
+		case FieldAcceptResponseFormat:
 			req.AcceptResponseFormat = value
-		case "ignore_case":
+		case FieldIgnoreCase:
 			req.IgnoreCase = value == "true"
 			log.Printf("[Fast Protocol] Parsed ignore_case: value=%q, result=%v", value, req.IgnoreCase)
-		case "limit":
+		case FieldLimit:
 			if n, err := strconv.Atoi(value); err == nil {
 				req.Limit = n
 			}
-		case "basename":
+		case FieldBasename:
 			req.Basename = value == "true"
-		case "regex":
-			req.Regex = value == "true"
-		case "extended_regex":
-			req.ExtendedRegex = value == "true"
-		case "offset":
+		case FieldRegex:
+			if value == "true" {
+				req.PatternMode = PatternModeRegex
+			}
+		case FieldExtendedRegex:
+			if value == "true" {
+				req.PatternMode = PatternModeExtendedRegex
+			}
+		case FieldPatternMode:
+			req.PatternMode = value
+		case FieldOffset:
 			if n, err := strconv.ParseInt(value, 10, 64); err == nil {
 				req.Offset = n
 			}
-		case "sort_field":
+		case FieldSortField:
 			req.SortField = value
-		case "sort_order":
+		case FieldSortOrder:
 			req.SortOrder = value
 		}
 	}
@@ -130,20 +138,16 @@ func (p *fastProtocol) WriteRequest(writer *bufio.Writer, req *Request) error {
 	if req.ID != nil {
 		fmt.Fprintf(writer, "id=%v\n", req.ID)
 	}
-	if req.Mode != "" {
-		fmt.Fprintf(writer, "mode=%s\n", req.Mode)
-	}
-	if req.Path != "" {
-		fmt.Fprintf(writer, "path=%s\n", req.Path)
-	}
+	// mode and path are deprecated, pattern is the path
 	if req.Content != "" {
 		fmt.Fprintf(writer, "content=%s\n", req.Content)
 	}
 	fmt.Fprintf(writer, "ignore_case=%v\n", req.IgnoreCase)
 	fmt.Fprintf(writer, "limit=%d\n", req.Limit)
 	fmt.Fprintf(writer, "basename=%v\n", req.Basename)
-	fmt.Fprintf(writer, "regex=%v\n", req.Regex)
-	fmt.Fprintf(writer, "extended_regex=%v\n", req.ExtendedRegex)
+	if req.PatternMode != "" {
+		fmt.Fprintf(writer, "pattern_mode=%s\n", req.PatternMode)
+	}
 	fmt.Fprintf(writer, "offset=%d\n", req.Offset)
 	if req.SortField != "" {
 		fmt.Fprintf(writer, "sort_field=%s\n", req.SortField)
@@ -181,22 +185,22 @@ func (p *fastProtocol) ParseResponse(reader *bufio.Reader) (*Response, error) {
 		value := parts[1]
 
 		switch key {
-		case "id":
+		case FieldID:
 			// Try to parse as integer first, then as string
 			if n, err := strconv.Atoi(value); err == nil {
 				resp.ID = n
 			} else {
 				resp.ID = value
 			}
-		case "count":
+		case FieldCount:
 			if n, err := strconv.Atoi(value); err == nil {
 				resp.Count = n
 			}
-		case "total":
+		case FieldTotal:
 			if n, err := strconv.Atoi(value); err == nil {
 				resp.Total = n
 			}
-		case "error":
+		case FieldError:
 			resp.Error = value
 		}
 	}
@@ -227,8 +231,23 @@ func (p *fastProtocol) WriteResponse(writer *bufio.Writer, resp *Response) error
 	if resp.Error != "" {
 		fmt.Fprintf(writer, "error=%s\n", resp.Error)
 	}
-	fmt.Fprintf(writer, "count=%d\n", resp.Count)
-	fmt.Fprintf(writer, "total=%d\n", resp.Total)
+	
+	// Handle Result field (for status, get-config, etc.)
+	if resp.Result != nil {
+		// Serialize Result as JSON
+		resultJSON, err := json.Marshal(resp.Result)
+		if err != nil {
+			return fmt.Errorf("failed to marshal result: %w", err)
+		}
+		fmt.Fprintf(writer, "result=%s\n", string(resultJSON))
+	}
+	
+	// Only write count/total for search results (when Result is nil)
+	if resp.Result == nil {
+		fmt.Fprintf(writer, "count=%d\n", resp.Count)
+		fmt.Fprintf(writer, "total=%d\n", resp.Total)
+	}
+	
 	fmt.Fprint(writer, "\n") // empty line marks end of headers
 	
 	for _, path := range resp.Paths {

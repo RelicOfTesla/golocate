@@ -20,25 +20,10 @@ func NewJSONRPCProtocol() Protocol {
 
 // jsonrpcRequest represents a JSON-RPC request.
 type jsonrpcRequest struct {
-	Jsonrpc string          `json:"jsonrpc"`
-	ID      any     `json:"id"`
-	Method  string          `json:"method"`
-	Params  jsonrpcParams   `json:"params"`
-}
-
-// jsonrpcParams represents JSON-RPC params.
-type jsonrpcParams struct {
-	Content       string `json:"content"`
-	IgnoreCase    bool   `json:"ignore_case"`
-	Limit         int    `json:"limit"`
-	Mode          string `json:"mode,omitempty"`
-	Path          string `json:"path,omitempty"`
-	Basename      bool   `json:"basename,omitempty"`
-	Regex         bool   `json:"regex,omitempty"`
-	ExtendedRegex bool   `json:"extended_regex,omitempty"`
-	Offset        int64  `json:"offset,omitempty"`
-	SortField     string `json:"sort_field,omitempty"`
-	SortOrder     string `json:"sort_order,omitempty"`
+	Jsonrpc string        `json:"jsonrpc"`
+	ID      any           `json:"id"`
+	Method  string        `json:"method"`
+	Params  Request       `json:"params"` // Embed protocol.Request directly
 }
 
 // jsonrpcResponse represents a JSON-RPC response.
@@ -97,8 +82,8 @@ func (p *jsonrpcProtocol) ParseRequestWithRemainder(reader *bufio.Reader) (*Requ
 	}
 	
 	// Log the parsed request
-	log.Printf("[JSON-RPC Protocol] Parsed: method=%s, content=%s, path=%s, ignore_case=%v, limit=%d, mode=%s", 
-		req.Method, req.Params.Content, req.Params.Path, req.Params.IgnoreCase, req.Params.Limit, req.Params.Mode)
+	log.Printf("[JSON-RPC Protocol] Parsed: method=%s, content=%s, pattern_mode=%s, ignore_case=%v, limit=%d", 
+		req.Method, req.Params.Content, req.Params.PatternMode, req.Params.IgnoreCase, req.Params.Limit)
 	
 	// Check for more data in the reader (mixed protocol sticky packet)
 	var remainder []byte
@@ -120,14 +105,12 @@ func (p *jsonrpcProtocol) ParseRequestWithRemainder(reader *bufio.Reader) (*Requ
 	return &Request{
 		Method:        req.Method,
 		ID:            req.ID,
-		Content:       req.Params.Content,
+		Pattern:       req.Params.Pattern,     // Search pattern (path)
+		Content:       req.Params.Content,     // File content search
 		IgnoreCase:    req.Params.IgnoreCase,
 		Limit:         req.Params.Limit,
-		Mode:          req.Params.Mode,
-		Path:          req.Params.Path,
+		PatternMode:   req.Params.PatternMode,
 		Basename:      req.Params.Basename,
-		Regex:         req.Params.Regex,
-		ExtendedRegex: req.Params.ExtendedRegex,
 		Offset:        req.Params.Offset,
 		SortField:     req.Params.SortField,
 		SortOrder:     req.Params.SortOrder,
@@ -140,19 +123,7 @@ func (p *jsonrpcProtocol) WriteRequest(writer *bufio.Writer, req *Request) error
 		Jsonrpc: "2.0",
 		ID:      1,
 		Method:  req.Method,
-		Params: jsonrpcParams{
-			Content:       req.Content,
-			IgnoreCase:    req.IgnoreCase,
-			Limit:         req.Limit,
-			Mode:          req.Mode,
-			Path:          req.Path,
-			Basename:      req.Basename,
-			Regex:         req.Regex,
-			ExtendedRegex: req.ExtendedRegex,
-			Offset:        req.Offset,
-			SortField:     req.SortField,
-			SortOrder:     req.SortOrder,
-		},
+		Params:  *req, // Embed protocol.Request directly
 	}
 	
 	// Encode JSON

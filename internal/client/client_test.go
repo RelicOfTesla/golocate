@@ -6,6 +6,7 @@ import (
 
 	"github.com/RelicOfTesla/golocate/internal/server"
 	"github.com/RelicOfTesla/golocate/pkg/index"
+	"github.com/RelicOfTesla/golocate/pkg/message/protocol"
 )
 
 func TestNew(t *testing.T) {
@@ -81,7 +82,7 @@ func TestClientSearchWithoutServer(t *testing.T) {
 	client := New()
 	client.SetSocketPath("/tmp/nonexistent_socket_for_test.sock")
 
-	_, err := client.Search("test", index.SearchOptions{Path: "*"})
+	_, err := client.Search("test", index.SearchOptions{})
 	if err == nil {
 		t.Error("Expected error when searching without server")
 	}
@@ -115,7 +116,7 @@ func TestClientSearchWithServer(t *testing.T) {
 	client.SetSocketPath("/tmp/golocate_client_search_test.sock")
 
 	// Perform search (PATH is required, CONTENT is optional)
-	results, err := client.Search("test", index.SearchOptions{Path: "*", IgnoreCase: true})
+	results, err := client.Search("test", index.SearchOptions{})
 	if err != nil {
 		t.Fatalf("Search failed: %v", err)
 	}
@@ -191,7 +192,7 @@ func TestClientSearchStreamWithoutServer(t *testing.T) {
 	client := New()
 	client.SetSocketPath("/tmp/nonexistent_socket_for_test.sock")
 
-	err := client.SearchStream("test", index.SearchOptions{Path: "*"}, func(e *index.Entry) bool {
+	err := client.SearchStream("test", index.SearchOptions{}, func(e *index.Entry) bool {
 		return true
 	})
 	if err == nil {
@@ -204,12 +205,10 @@ func TestClientSearchStreamWithServer(t *testing.T) {
 	idx := index.NewIndex()
 	for i := 0; i < 5; i++ {
 		entry := &index.Entry{
-			Name:    "test.txt",
-			Path:    "/home/user/test.txt",
+			Name:    "test" + string(rune('0'+i)) + ".txt",
+			Path:    "/home/user/test" + string(rune('0'+i)) + ".txt",
 			ModTime: time.Now(),
 		}
-		entry.Path = entry.Path[:len("/home/user/")] + string(rune('0'+i)) + ".txt"
-		entry.Name = string(rune('0'+i)) + ".txt"
 		idx.Add(entry)
 	}
 
@@ -231,7 +230,7 @@ func TestClientSearchStreamWithServer(t *testing.T) {
 
 	// Stream search
 	count := 0
-	err := client.SearchStream("", index.SearchOptions{Path: "*", Limit: 10}, func(e *index.Entry) bool {
+	err := client.SearchStream("test", index.SearchOptions{}, func(e *index.Entry) bool {
 		count++
 		return true
 	})
@@ -276,7 +275,7 @@ func TestClientSearchStreamStop(t *testing.T) {
 
 	// Stream search and stop after first result
 	count := 0
-	err := client.SearchStream("", index.SearchOptions{Path: "*"}, func(e *index.Entry) bool {
+	err := client.SearchStream("", index.SearchOptions{}, func(e *index.Entry) bool {
 		count++
 		return false // Stop streaming
 	})
@@ -291,8 +290,10 @@ func TestClientSearchStreamStop(t *testing.T) {
 
 func TestRequestDefaults(t *testing.T) {
 	req := Request{
-		Method:  "search",
-		Content: "test",
+		Request: protocol.Request{
+			Method:  "search",
+			Content: "test",
+		},
 	}
 
 	if req.Method != "search" {

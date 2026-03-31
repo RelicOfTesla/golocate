@@ -188,13 +188,11 @@ func (c *Client) SearchWithTotal(pattern string, opts index.SearchOptions) (*Sea
 	req := &protocol.Request{
 		Method:      "search",
 		Content:     opts.Pattern,
-		Path:        opts.Path,
 		IgnoreCase:  opts.IgnoreCase,
+		PatternMode: string(opts.PatternMode),
 		Basename:    opts.Basename,
 		Limit:       opts.Limit,
 		Offset:      opts.Offset,
-		Regex:       opts.Regex,
-		ExtendedRegex: opts.ExtendedRegex,
 		SortField:   opts.SortField,
 		SortOrder:   opts.SortOrder,
 	}
@@ -358,31 +356,29 @@ func mapToProtocolRequest(m map[string]any) *protocol.Request {
 		Limit: 100, // 默认值
 	}
 
-	if method, ok := m["method"].(string); ok {
+	if method, ok := m[protocol.FieldMethod].(string); ok {
 		req.Method = method
 	}
 
-	if id, ok := m["id"]; ok {
+	if id, ok := m[protocol.FieldID]; ok {
 		req.ID = id
 	}
 
-	if content, ok := m["content"].(string); ok {
+	if content, ok := m[protocol.FieldContent].(string); ok {
 		req.Content = content
 	}
 
-	if path, ok := m["path"].(string); ok {
-		req.Path = path
-	}
+	// path is deprecated, pattern is the path
 
-	if ignoreCase, ok := m["ignore_case"].(bool); ok {
+	if ignoreCase, ok := m[protocol.FieldIgnoreCase].(bool); ok {
 		req.IgnoreCase = ignoreCase
 	}
 
-	if limit, ok := m["limit"].(int); ok {
+	if limit, ok := m[protocol.FieldLimit].(int); ok {
 		req.Limit = limit
 	}
 
-	if offset, ok := m["offset"].(int64); ok {
+	if offset, ok := m[protocol.FieldOffset].(int64); ok {
 		req.Offset = offset
 	}
 
@@ -390,12 +386,12 @@ func mapToProtocolRequest(m map[string]any) *protocol.Request {
 		req.Basename = basename
 	}
 
-	if regex, ok := m["regex"].(bool); ok {
-		req.Regex = regex
+	if regex, ok := m["regex"].(bool); ok && regex {
+		req.PatternMode = protocol.PatternModeRegex
 	}
 
-	if extendedRegex, ok := m["extended_regex"].(bool); ok {
-		req.ExtendedRegex = extendedRegex
+	if extendedRegex, ok := m["extended_regex"].(bool); ok && extendedRegex {
+		req.PatternMode = protocol.PatternModeExtendedRegex
 	}
 
 	if sortField, ok := m["sort_field"].(string); ok {
@@ -429,23 +425,9 @@ type SearchResult struct {
 }
 
 // Request represents a client request.
+// Embeds protocol.Request to reuse all fields.
 type Request struct {
-	ID                   any    `json:"id,omitempty"`                      // Request ID for async response support
-	Method               string `json:"method"`
-	Content              string `json:"content,omitempty"`                // Search file content (optional)
-	Path                 string `json:"path"`                             // Search/filter by path (required)
-	AcceptResponseFormat string `json:"accept_response_format,omitempty"` // json, json-rpc, or empty (fast protocol)
-	
-	// Search options (flattened, aligned with fast protocol)
-	IgnoreCase     bool   `json:"ignore_case,omitempty"`
-	Mode           string `json:"mode,omitempty"`
-	Limit          int    `json:"limit,omitempty"`
-	Offset         int64  `json:"offset,omitempty"` // For pagination
-	Basename       bool   `json:"basename,omitempty"`
-	Regex          bool   `json:"regex,omitempty"`
-	ExtendedRegex  bool   `json:"extended_regex,omitempty"`
-	SortField      string `json:"sort_field,omitempty"`
-	SortOrder      string `json:"sort_order,omitempty"`
+	protocol.Request
 }
 
 // Response represents a server response.

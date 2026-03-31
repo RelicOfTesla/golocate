@@ -295,11 +295,7 @@ func TestAPI_SetConfig_EmptyContent(t *testing.T) {
 
 	require.NotNil(t, response, "Should return a response")
 	assert.Equal(t, "error", response["type"], "Should return error for empty content")
-	
-	// Check error message
-	errMap, ok := response["error"].(map[string]interface{})
-	require.True(t, ok, "Error should be a map")
-	assert.Contains(t, errMap["message"], "empty", "Error message should mention empty content")
+	assert.Contains(t, response["error"], "empty", "Error message should mention empty content")
 }
 
 // TestAPI_SetConfig_InvalidYAML tests set-config with invalid YAML
@@ -421,7 +417,7 @@ index_strategy: "auto"
 		return
 	}
 
-	assert.Equal(t, "config", response["type"], "Should return config response")
+	assert.Equal(t, "set-config", response["type"], "Should return config response")
 	result, ok := response["result"].(map[string]any)
 	require.True(t, ok, "Should have result field")
 	assert.Equal(t, "saved", result["status"], "Status should be 'saved'")
@@ -445,7 +441,7 @@ worker_count: 4
 		return
 	}
 
-	assert.Equal(t, "config", response["type"], "Should return config response")
+	assert.Equal(t, "set-config", response["type"], "Should return config response")
 }
 
 // TestAPI_SetConfig_AllIndexStrategies tests set-config with all valid index strategies
@@ -469,7 +465,7 @@ index_strategy: "` + strategy + `"
 				return
 			}
 
-			assert.Equal(t, "config", response["type"], "Should accept valid strategy '%s'", strategy)
+			assert.Equal(t, "set-config", response["type"], "Should accept valid strategy '%s'", strategy)
 		})
 	}
 }

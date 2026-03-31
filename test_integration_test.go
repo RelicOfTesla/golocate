@@ -15,7 +15,6 @@ func TestSearch_Content_ExistingFile(t *testing.T) {
 	c := getTestClient(t)
 
 	results, err := c.Search("main.go", index.SearchOptions{
-		Path:  "*", // Search all directories
 		Limit: 5,
 	})
 
@@ -27,7 +26,6 @@ func TestSearch_Content_NonexistentFile(t *testing.T) {
 	c := getTestClient(t)
 
 	results, err := c.Search("xyz_nonexistent", index.SearchOptions{
-		Path:  "*", // Search all directories
 		Limit: 5,
 	})
 
@@ -39,7 +37,6 @@ func TestSearch_Path_Existing(t *testing.T) {
 	c := getTestClient(t)
 
 	results, err := c.Search("server.go", index.SearchOptions{
-		Path:  "internal",
 		Limit: 5,
 	})
 
@@ -47,23 +44,11 @@ func TestSearch_Path_Existing(t *testing.T) {
 	assert.NotEmpty(t, results, "Expected to find server.go in internal/")
 }
 
-func TestSearch_Path_Nonexistent(t *testing.T) {
-	c := getTestClient(t)
-
-	results, err := c.Search("main.go", index.SearchOptions{
-		Path:  "nonexistent_path_12345",
-		Limit: 5,
-	})
-
-	require.NoError(t, err, "Search should not return error")
-	assert.Empty(t, results, "Expected no results in nonexistent path")
-}
 
 func TestSearch_IgnoreCase_False(t *testing.T) {
 	c := getTestClient(t)
 
 	results, err := c.Search("MAIN.GO", index.SearchOptions{
-		Path:       "*",
 		IgnoreCase: false,
 		Limit:      5,
 	})
@@ -76,7 +61,6 @@ func TestSearch_IgnoreCase_True(t *testing.T) {
 	c := getTestClient(t)
 
 	results, err := c.Search("MAIN.GO", index.SearchOptions{
-		Path:       "*",
 		IgnoreCase: true,
 		Limit:      5,
 	})
@@ -89,7 +73,6 @@ func TestSearch_Basename(t *testing.T) {
 	c := getTestClient(t)
 
 	results, err := c.Search("config", index.SearchOptions{
-		Path:     "*",
 		Basename: true,
 		Limit:    10,
 	})
@@ -102,7 +85,6 @@ func TestSearch_Limit_3(t *testing.T) {
 	c := getTestClient(t)
 
 	results, err := c.Search(".go", index.SearchOptions{
-		Path:  "*",
 		Limit: 3,
 	})
 
@@ -114,7 +96,6 @@ func TestSearch_Limit_0(t *testing.T) {
 	c := getTestClient(t)
 
 	results, err := c.Search("main", index.SearchOptions{
-		Path:  "*",
 		Limit: 0,
 	})
 
@@ -128,8 +109,7 @@ func TestSearch_Regex_Basic(t *testing.T) {
 	c := getTestClient(t)
 
 	results, err := c.Search(".*\\.go$", index.SearchOptions{
-		Path:  "*",
-		Regex: true,
+		PatternMode: index.PatternModeRegex,
 		Limit: 10,
 	})
 
@@ -141,8 +121,7 @@ func TestSearch_Regex_Invalid(t *testing.T) {
 	c := getTestClient(t)
 
 	_, err := c.Search("[invalid(", index.SearchOptions{
-		Path:  "*",
-		Regex: true,
+		PatternMode: index.PatternModeRegex,
 		Limit: 5,
 	})
 
@@ -154,8 +133,6 @@ func TestSearch_ExtendedRegex(t *testing.T) {
 	c := getTestClient(t)
 
 	results, err := c.Search("[a-z]+\\.go", index.SearchOptions{
-		Path:          "*",
-		ExtendedRegex: true,
 		Limit:         10,
 	})
 
@@ -167,8 +144,6 @@ func TestSearch_Regex_IgnoreCase(t *testing.T) {
 	c := getTestClient(t)
 
 	results, err := c.Search("MAIN", index.SearchOptions{
-		Path:       "*",
-		Regex:      true,
 		IgnoreCase: true,
 		Limit:      5,
 	})
@@ -183,7 +158,6 @@ func TestSearch_Sort_ByName(t *testing.T) {
 	c := getTestClient(t)
 
 	results, err := c.Search(".go", index.SearchOptions{
-		Path:       "*",
 		SortField:  "name",
 		SortOrder:  "asc",
 		Limit:      10,
@@ -197,7 +171,6 @@ func TestSearch_Sort_BySize(t *testing.T) {
 	c := getTestClient(t)
 
 	results, err := c.Search(".go", index.SearchOptions{
-		Path:       "*",
 		SortField:  "size",
 		SortOrder:  "desc",
 		Limit:      10,
@@ -211,7 +184,6 @@ func TestSearch_Sort_ByTime(t *testing.T) {
 	c := getTestClient(t)
 
 	results, err := c.Search(".go", index.SearchOptions{
-		Path:       "*",
 		SortField:  "time",
 		SortOrder:  "desc",
 		Limit:      10,
@@ -225,7 +197,6 @@ func TestSearch_Sort_ByPath(t *testing.T) {
 	c := getTestClient(t)
 
 	results, err := c.Search(".go", index.SearchOptions{
-		Path:       "*",
 		SortField:  "path",
 		SortOrder:  "asc",
 		Limit:      10,
@@ -241,7 +212,6 @@ func TestSearch_Combined_ContentPath(t *testing.T) {
 	c := getTestClient(t)
 
 	results, err := c.Search("server", index.SearchOptions{
-		Path:  "internal",
 		Limit: 10,
 	})
 
@@ -253,7 +223,6 @@ func TestSearch_Combined_IgnoreCaseBasenameLimit(t *testing.T) {
 	c := getTestClient(t)
 
 	results, err := c.Search("CONFIG", index.SearchOptions{
-		Path:       "*",
 		IgnoreCase: true,
 		Basename:   true,
 		Limit:      5,
@@ -267,7 +236,6 @@ func TestSearch_Combined_PathSortFieldSortOrder(t *testing.T) {
 	c := getTestClient(t)
 
 	results, err := c.Search(".go", index.SearchOptions{
-		Path:       "pkg",
 		SortField:  "name",
 		SortOrder:  "asc",
 		Limit:      10,
@@ -283,7 +251,6 @@ func TestSearch_EmptyContent(t *testing.T) {
 	c := getTestClient(t)
 
 	results, _ := c.Search("", index.SearchOptions{
-		Path:  "*",
 		Limit: 5,
 	})
 
@@ -295,7 +262,6 @@ func TestSearch_OnlyPath(t *testing.T) {
 	c := getTestClient(t)
 
 	results, _ := c.Search("", index.SearchOptions{
-		Path:  "internal",
 		Limit: 10,
 	})
 
@@ -308,7 +274,6 @@ func TestSearch_LargeLimit(t *testing.T) {
 	c := getTestClient(t)
 
 	results, err := c.Search(".go", index.SearchOptions{
-		Path:  "*",
 		Limit: 10000,
 	})
 
@@ -321,7 +286,6 @@ func TestSearch_SpecialChars(t *testing.T) {
 	c := getTestClient(t)
 
 	results, err := c.Search("-", index.SearchOptions{
-		Path:  "*",
 		Limit: 10,
 	})
 
@@ -336,7 +300,6 @@ func TestSearch_MainGo(t *testing.T) {
 	c := getTestClient(t)
 
 	results, err := c.Search("main.go", index.SearchOptions{
-		Path:  "*",
 		Limit: 5,
 	})
 
@@ -358,7 +321,6 @@ func TestSearch_README(t *testing.T) {
 	c := getTestClient(t)
 
 	results, err := c.Search("README", index.SearchOptions{
-		Path:       "*",
 		IgnoreCase: true,
 		Limit:      5,
 	})
@@ -371,7 +333,6 @@ func TestSearch_GoMod(t *testing.T) {
 	c := getTestClient(t)
 
 	results, err := c.Search("go.mod", index.SearchOptions{
-		Path:  "*",
 		Limit: 5,
 	})
 
@@ -385,7 +346,6 @@ func TestSearch_InvalidSortField(t *testing.T) {
 	c := getTestClient(t)
 
 	results, err := c.Search("test", index.SearchOptions{
-		Path:       "*",
 		SortField:  "invalid_field",
 		Limit:      5,
 	})
@@ -403,7 +363,6 @@ func TestSearch_InvalidSortOrder(t *testing.T) {
 	c := getTestClient(t)
 
 	results, err := c.Search("test", index.SearchOptions{
-		Path:       "*",
 		SortOrder:  "invalid_order",
 		Limit:      5,
 	})
@@ -420,7 +379,6 @@ func TestSearch_NegativeLimit(t *testing.T) {
 	c := getTestClient(t)
 
 	results, err := c.Search("test", index.SearchOptions{
-		Path:  "*",
 		Limit: -1,
 	})
 
@@ -442,7 +400,6 @@ func TestSearch_ExtremelyLongPattern(t *testing.T) {
 	}
 
 	results, err := c.Search(longPattern, index.SearchOptions{
-		Path:  "*",
 		Limit: 5,
 	})
 
@@ -455,7 +412,6 @@ func TestSearch_UnicodePattern(t *testing.T) {
 	c := getTestClient(t)
 
 	results, err := c.Search("中文测试", index.SearchOptions{
-		Path:  "*",
 		Limit: 5,
 	})
 
@@ -469,8 +425,6 @@ func TestSearch_SpecialRegexChars(t *testing.T) {
 
 	// Test with regex chars but regex=false (should be treated as literal)
 	results, err := c.Search("test.go", index.SearchOptions{
-		Path:  "*",
-		Regex: false,
 		Limit: 5,
 	})
 
@@ -485,7 +439,6 @@ func TestSearch_PathWithHyphen(t *testing.T) {
 
 	// Search in path containing hyphen (e.g., golocate-h5)
 	results, err := c.Search("go", index.SearchOptions{
-		Path:  "golocate-h5",
 		Limit: 10,
 	})
 
@@ -500,8 +453,6 @@ func TestSearch_Combined_RegexIgnoreCaseLimit(t *testing.T) {
 	c := getTestClient(t)
 
 	results, err := c.Search("MAIN", index.SearchOptions{
-		Path:       "*",
-		Regex:      true,
 		IgnoreCase: true,
 		Limit:      5,
 	})
@@ -514,7 +465,6 @@ func TestSearch_Combined_BasenameSortFieldSortOrderLimit(t *testing.T) {
 	c := getTestClient(t)
 
 	results, err := c.Search("config", index.SearchOptions{
-		Path:       "*",
 		Basename:   true,
 		SortField:  "name",
 		SortOrder:  "desc",
@@ -531,7 +481,6 @@ func TestSearch_Combined_PathAndPathNonexistent(t *testing.T) {
 
 	// Search for 'main' in nonexistent path
 	results, err := c.Search("main", index.SearchOptions{
-		Path:  "nonexistent",
 		Limit: 5,
 	})
 
@@ -546,7 +495,6 @@ func TestSearch_ContentAndPath_Existing(t *testing.T) {
 
 	// 搜索 Content="server" 且 Path 包含 "internal" 的文件
 	results, err := c.Search("server", index.SearchOptions{
-		Path:  "internal",
 		Limit: 10,
 	})
 
@@ -564,7 +512,6 @@ func TestSearch_ContentAndPath_SpecificFile(t *testing.T) {
 
 	// 搜索 Content="main.go" 且 Path 包含 "cmd" 的文件
 	results, err := c.Search("main.go", index.SearchOptions{
-		Path:  "cmd",
 		Limit: 10,
 	})
 
@@ -582,7 +529,6 @@ func TestSearch_ContentAndPath_NoMatch(t *testing.T) {
 
 	// 搜索 Content="main.go" 且 Path 包含 "nonexistent" 的文件
 	results, err := c.Search("main.go", index.SearchOptions{
-		Path:  "nonexistent_path_xyz",
 		Limit: 10,
 	})
 
@@ -595,7 +541,6 @@ func TestSearch_ContentAndPath_PkgDir(t *testing.T) {
 
 	// 搜索 Content=".go" 且 Path 包含 "pkg" 的文件
 	results, err := c.Search(".go", index.SearchOptions{
-		Path:  "pkg",
 		Limit: 10,
 	})
 
@@ -616,7 +561,6 @@ func TestSearch_WhitespacePattern(t *testing.T) {
 	// 搜索只包含空白字符的 Pattern
 	// 根据新的输入验证，服务器应该返回错误
 	results, err := c.Search("   ", index.SearchOptions{
-		Path:  "*",
 		Limit: 5,
 	})
 
@@ -635,7 +579,6 @@ func TestSearch_WhitespaceContentWithValidPath(t *testing.T) {
 	// 搜索只包含空白字符的 Content，但有有效的 Path
 	// 根据 handleSearch 的逻辑，如果 Content 为空但 Path 不为空，会用 Path 来搜索
 	results, err := c.Search("   ", index.SearchOptions{
-		Path:  "internal",
 		Limit: 5,
 	})
 

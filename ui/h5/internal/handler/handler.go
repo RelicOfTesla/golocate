@@ -79,7 +79,7 @@ func (h *Handler) Search(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Call API client with parsed parameters
-	resp, err := h.client.Search(params.Content, params.Path, params.IgnoreCase, limit, offset)
+	resp, err := h.client.Search(params.Content, params.IgnoreCase, limit, offset)
 	if err != nil {
 		log.Printf("Search error: %v", err)
 		json.NewEncoder(w).Encode(&api.SearchResponse{
@@ -119,5 +119,43 @@ func (h *Handler) Build(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{
 		"status": "build triggered",
+	})
+}
+
+// GetConfig handles GET /api/config requests.
+func (h *Handler) GetConfig(w http.ResponseWriter, r *http.Request) {
+	config, err := h.client.GetConfig()
+	if err != nil {
+		log.Printf("GetConfig error: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(config)
+}
+
+// SetConfig handles POST /api/config requests.
+func (h *Handler) SetConfig(w http.ResponseWriter, r *http.Request) {
+	// Read YAML content from request body
+	var body struct {
+		YAML string `json:"yaml"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		log.Printf("SetConfig decode error: %v", err)
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Set config via client
+	if err := h.client.SetConfig(body.YAML); err != nil {
+		log.Printf("SetConfig error: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{
+		"status": "saved",
 	})
 }

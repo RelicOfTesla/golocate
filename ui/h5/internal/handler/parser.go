@@ -9,7 +9,6 @@ import (
 // SearchParams represents parsed search parameters
 type SearchParams struct {
 	Content    string
-	Path       string
 	IgnoreCase bool
 	Limit      int
 	Regex      bool
@@ -62,8 +61,6 @@ func ParseSearchQuery(input string) *SearchParams {
 			switch key {
 			case "content":
 				params.Content = value
-			case "path":
-				params.Path = value
 			case "limit":
 				if n, err := parseInt(value); err == nil {
 					params.Limit = n

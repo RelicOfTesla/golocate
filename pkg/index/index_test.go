@@ -200,7 +200,7 @@ func TestIndexSearchRegex(t *testing.T) {
 	}
 
 	// Regex search for test[0-9]+.txt
-	results := idx.Search(SearchOptions{Pattern: "test[0-9]+", Regex: true})
+	results := idx.Search(SearchOptions{Pattern: "test[0-9]+", PatternMode: PatternModeRegex})
 	if len(results) != 2 {
 		t.Errorf("Expected 2 results (regex), got %d", len(results))
 	}
@@ -220,7 +220,7 @@ func TestIndexSearchExtendedRegex(t *testing.T) {
 	}
 
 	// Extended regex search
-	results := idx.Search(SearchOptions{Pattern: "test[0-9]+", ExtendedRegex: true})
+	results := idx.Search(SearchOptions{Pattern: "test[0-9]+", PatternMode: PatternModeExtendedRegex})
 	if len(results) != 2 {
 		t.Errorf("Expected 2 results (extended regex), got %d", len(results))
 	}

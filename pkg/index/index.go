@@ -15,6 +15,20 @@ import (
 	"github.com/RelicOfTesla/golocate/pkg/watcher"
 )
 
+// PatternMode defines the pattern matching mode.
+type PatternMode string
+
+const (
+	// PatternModeNormal performs substring matching
+	PatternModeNormal PatternMode = "normal"
+	// PatternModeRegex performs regex matching
+	PatternModeRegex PatternMode = "regex"
+	// PatternModeExtendedRegex performs extended regex matching
+	PatternModeExtendedRegex PatternMode = "extended_regex"
+	// PatternModeWildcard performs wildcard matching
+	PatternModeWildcard PatternMode = "wildcard"
+)
+
 // Entry represents a file or directory entry in the index.
 type Entry struct {
 	// Name is the file/directory name
@@ -117,7 +131,7 @@ func (idx *Index) Search(opts SearchOptions) []*Entry {
 	defer idx.mu.RUnlock()
 	
 	// Handle regex search
-	if opts.Regex || opts.ExtendedRegex {
+	if opts.PatternMode == PatternModeRegex || opts.PatternMode == PatternModeExtendedRegex {
 		return idx.searchRegex(opts.Pattern, opts)
 	}
 	
@@ -125,8 +139,8 @@ func (idx *Index) Search(opts SearchOptions) []*Entry {
 	query := opts.Pattern
 	var results []*Entry
 	
-	switch {
-	case opts.Basename:
+	// Decide search target based on Basename
+	if opts.Basename {
 		// Search only in file names
 		for name, entries := range idx.byName {
 			if opts.IgnoreCase {
@@ -139,8 +153,7 @@ func (idx *Index) Search(opts SearchOptions) []*Entry {
 				}
 			}
 		}
-		
-	default:
+	} else {
 		// Search in full paths
 		for path, entry := range idx.entries {
 			if opts.IgnoreCase {
@@ -153,20 +166,6 @@ func (idx *Index) Search(opts SearchOptions) []*Entry {
 				}
 			}
 		}
-	}
-	
-	// Filter by path if specified
-	if opts.Path != "" {
-		filtered := make([]*Entry, 0, len(results))
-		for _, entry := range results {
-			// Support wildcard "*" to match all paths
-			if opts.Path == "*" {
-				filtered = append(filtered, entry)
-			} else if strings.HasPrefix(entry.Path, opts.Path) {
-				filtered = append(filtered, entry)
-			}
-		}
-		results = filtered
 	}
 	
 	// Apply offset (skip first N results)
@@ -193,7 +192,7 @@ func (idx *Index) searchRegex(query string, opts SearchOptions) []*Entry {
 	var re *regexp.Regexp
 	var err error
 	
-	if opts.ExtendedRegex {
+	if opts.PatternMode == PatternModeExtendedRegex {
 		// Extended regex (POSIX ERE)
 		if opts.IgnoreCase {
 			re, err = regexp.Compile("(?i)" + query)
@@ -214,31 +213,20 @@ func (idx *Index) searchRegex(query string, opts SearchOptions) []*Entry {
 		return results
 	}
 	
-	switch {
-	case opts.Basename:
+	// Decide search target based on Basename
+	if opts.Basename {
 		// Search only in file names
 		for name, entries := range idx.byName {
 			if re.MatchString(name) {
-				for _, entry := range entries {
-					// Filter by path if specified
-					if opts.Path != "" && !strings.HasPrefix(entry.Path, opts.Path) {
-						continue
-					}
-					results = append(results, entry)
-					if opts.Limit > 0 && len(results) >= opts.Limit {
-						return results
-					}
+				results = append(results, entries...)
+				if opts.Limit > 0 && len(results) >= opts.Limit {
+					return results
 				}
 			}
 		}
-		
-	default:
+	} else {
 		// Search in full paths
 		for path, entry := range idx.entries {
-			// Filter by path if specified
-			if opts.Path != "" && !strings.HasPrefix(entry.Path, opts.Path) {
-				continue
-			}
 			if re.MatchString(path) {
 				results = append(results, entry)
 				if opts.Limit > 0 && len(results) >= opts.Limit {
@@ -258,8 +246,8 @@ func (idx *Index) Count(query string, opts SearchOptions) int {
 	
 	count := 0
 	
-	switch {
-	case opts.Basename:
+	// Decide search target based on Basename
+	if opts.Basename {
 		for name, entries := range idx.byName {
 			if opts.IgnoreCase {
 				if strings.Contains(strings.ToLower(name), strings.ToLower(query)) {
@@ -272,7 +260,7 @@ func (idx *Index) Count(query string, opts SearchOptions) int {
 			}
 		}
 		
-	default:
+	} else {
 		for path := range idx.entries {
 			if opts.IgnoreCase {
 				if strings.Contains(strings.ToLower(path), strings.ToLower(query)) {
@@ -298,26 +286,22 @@ func (idx *Index) Len() int {
 
 // SearchOptions contains options for searching.
 type SearchOptions struct {
-	// Pattern is the search pattern (filename or content)
+	// Pattern is the search pattern (regex path, normal path, or wildcard path)
 	Pattern string
+	// PatternMode defines how the pattern is interpreted
+	PatternMode PatternMode
+	// Basename searches only in file names (can be combined with any PatternMode)
+	Basename bool
 	// IgnoreCase makes the search case-insensitive
 	IgnoreCase bool
-	// Basename searches only in file names
-	Basename bool
 	// Limit limits the number of results
 	Limit int
 	// Offset skips the first N results (for pagination)
 	Offset int64
-	// Regex enables regex search
-	Regex bool
-	// ExtendedRegex enables extended regex search
-	ExtendedRegex bool
 	// SortField specifies the field to sort by (name, size, time, path)
 	SortField string
 	// SortOrder specifies the sort order (asc, desc)
 	SortOrder string
-	// Path filters results to only include entries under this path
-	Path string
 }
 
 // Builder builds the file index.

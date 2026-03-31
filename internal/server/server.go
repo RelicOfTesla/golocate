@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/RelicOfTesla/golocate/internal/socket"
+	contentpkg "github.com/RelicOfTesla/golocate/pkg/content"
 	"github.com/RelicOfTesla/golocate/pkg/config"
 	"github.com/RelicOfTesla/golocate/pkg/index"
 	"github.com/RelicOfTesla/golocate/pkg/message"
@@ -301,20 +302,7 @@ func (s *Server) sendLegacyError(conn net.Conn, errMsg string) {
 // handleSearchHandler 处理搜索请求（Message 接口）
 func (s *Server) handleSearchHandler(ctx context.Context, msg message.Message) (any, error) {
 	// 1. 从 Message 中解析请求参数
-	var req struct {
-		Method      string `json:"method"`
-		Content     string `json:"content,omitempty"`
-		Path        string `json:"path,omitempty"`
-		IgnoreCase  bool   `json:"ignore_case,omitempty"`
-		Mode        string `json:"mode,omitempty"`
-		Limit       int    `json:"limit,omitempty"`
-		Offset      int64  `json:"offset,omitempty"`
-		Basename    bool   `json:"basename,omitempty"`
-		Regex       bool   `json:"regex,omitempty"`
-		ExtendedRegex bool  `json:"extended_regex,omitempty"`
-		SortField   string `json:"sort_field,omitempty"`
-		SortOrder   string `json:"sort_order,omitempty"`
-	}
+	var req protocol.SearchRequest
 	
 	if err := json.Unmarshal(msg.Payload(), &req); err != nil {
 		return nil, fmt.Errorf("invalid request format: %w", err)
@@ -322,10 +310,16 @@ func (s *Server) handleSearchHandler(ctx context.Context, msg message.Message) (
 	
 	// 2. 输入验证
 	
-	// Path 是必选项，但如果为空，使用默认值 "*"（搜索所有目录）
-	path := req.Path
-	if path == "" || strings.TrimSpace(path) == "" {
-		path = "*"
+	// Pattern 是路径（必选项），如果为空使用默认值 "*"（搜索所有目录）
+	pattern := req.Pattern
+	if pattern == "" {
+		pattern = "*"
+	}
+	
+	// Content 是文件内容搜索（可选项）
+	content := req.Content
+	if content != "" && strings.TrimSpace(content) == "" {
+		return nil, fmt.Errorf("invalid parameter: content cannot be only whitespace")
 	}
 	
 	// 验证 Limit 不能为负数
@@ -338,51 +332,41 @@ func (s *Server) handleSearchHandler(ctx context.Context, msg message.Message) (
 		return nil, fmt.Errorf("invalid parameter: offset cannot be negative")
 	}
 	
-	// 验证 Content：如果非空但只包含空白字符，返回错误
-	content := req.Content
-	if content != "" && strings.TrimSpace(content) == "" {
-		return nil, fmt.Errorf("invalid parameter: content cannot be only whitespace")
-	}
-	
 	// 3. 解析搜索选项
 	opts := index.SearchOptions{
 		IgnoreCase:     req.IgnoreCase,
 		Basename:       req.Basename,
 		Limit:          req.Limit,
 		Offset:         req.Offset,
-		Regex:          req.Regex,
-		ExtendedRegex:  req.ExtendedRegex,
+		PatternMode:    index.PatternMode(req.PatternMode),
 		SortField:      req.SortField,
 		SortOrder:      req.SortOrder,
-		Path:           path,
+	}
+	
+	// 3.1 设置默认 PatternMode 为通配符模式
+	if opts.PatternMode == "" {
+		opts.PatternMode = index.PatternModeWildcard
 	}
 	
 	// 3.5 验证正则表达式（如果启用了正则模式）
-	query := content
-	if query == "" {
-		// 如果 content 为空，搜索所有文件（query = "" 表示匹配所有）
-		query = ""
-		// opts.Path 保持为 path（用于路径过滤）
-	}
-	
-	if opts.Regex || opts.ExtendedRegex {
+	if opts.PatternMode == index.PatternModeRegex || opts.PatternMode == index.PatternModeExtendedRegex {
 		// 尝试编译正则表达式，验证其有效性
 		var re *regexp.Regexp
 		var err error
 		
-		if opts.ExtendedRegex {
+		if opts.PatternMode == index.PatternModeExtendedRegex {
 			// 扩展正则（ERE）
 			if opts.IgnoreCase {
-				re, err = regexp.Compile("(?i)" + query)
+				re, err = regexp.Compile("(?i)" + pattern)
 			} else {
-				re, err = regexp.Compile(query)
+				re, err = regexp.Compile(pattern)
 			}
 		} else {
 			// 基本正则（BRE）- 使用 POSIX
 			if opts.IgnoreCase {
-				re, err = regexp.CompilePOSIX("(?i)" + query)
+				re, err = regexp.CompilePOSIX("(?i)" + pattern)
 			} else {
-				re, err = regexp.CompilePOSIX(query)
+				re, err = regexp.CompilePOSIX(pattern)
 			}
 		}
 		
@@ -392,19 +376,63 @@ func (s *Server) handleSearchHandler(ctx context.Context, msg message.Message) (
 		_ = re // 验证通过，不需要使用
 	}
 	
-	// 4. 执行搜索
-	opts.Pattern = query
-	log.Printf("[handleSearchHandler] Searching for pattern=%q, opts.Path=%q, opts.IgnoreCase=%v, opts.Basename=%v", opts.Pattern, opts.Path, opts.IgnoreCase, opts.Basename)
+	// 4. 执行路径搜索（Pattern 用于文件路径匹配）
+	opts.Pattern = pattern
+	log.Printf("[handleSearchHandler] Searching for pattern=%q, opts.PatternMode=%s, opts.IgnoreCase=%v, opts.Basename=%v", opts.Pattern, opts.PatternMode, opts.IgnoreCase, opts.Basename)
 	results := s.index.Search(opts)
-	log.Printf("[handleSearchHandler] Found %d results", len(results))
+	log.Printf("[handleSearchHandler] Found %d results from path search", len(results))
+	
+	// 5. 如果有 Content 参数，进行文件内容搜索
+	if content != "" {
+		log.Printf("[handleSearchHandler] Performing content search for %q", content)
+		
+		// 获取 MaxFileSize，如果 config 为 nil 则使用默认值
+		maxFileSize := int64(10 * 1024 * 1024) // 默认 10MB
+		if s.config != nil && s.config.MaxContentFileSize > 0 {
+			maxFileSize = s.config.MaxContentFileSize
+		}
+		
+		// 创建内容搜索器
+		contentSearcher, err := contentpkg.NewSearcher(contentpkg.SearchOptions{
+			Pattern:       content,
+			IgnoreCase:    req.IgnoreCase,
+			Regex:         opts.PatternMode == index.PatternModeRegex,
+			ExtendedRegex: opts.PatternMode == index.PatternModeExtendedRegex,
+			MaxFileSize:   maxFileSize,
+			MaxResults:    req.Limit,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to create content searcher: %w", err)
+		}
+		
+		// 提取文件路径列表
+		filePaths := make([]string, len(results))
+		for i, entry := range results {
+			filePaths[i] = entry.Path
+		}
+		
+		// 执行内容搜索
+		contentResults, err := contentSearcher.Search(ctx, filePaths)
+		if err != nil {
+			return nil, fmt.Errorf("content search failed: %w", err)
+		}
+		
+		log.Printf("[handleSearchHandler] Found %d content results", len(contentResults))
+		
+		// 转换内容搜索结果为响应格式
+		resultMap := make(map[string]interface{})
+		resultMap["results"] = contentResults
+		resultMap["count"] = len(contentResults)
+		resultMap["total"] = len(contentResults)
+		
+		return resultMap, nil
+	}
 	
 	// 6. 获取总数（用于分页）
-	totalCount := s.index.Count(query, index.SearchOptions{
+	totalCount := s.index.Count(pattern, index.SearchOptions{
 		IgnoreCase:     opts.IgnoreCase,
 		Basename:       opts.Basename,
-		Regex:          opts.Regex,
-		ExtendedRegex:  opts.ExtendedRegex,
-		Path:           opts.Path,
+		PatternMode:    opts.PatternMode,
 	})
 	
 	// 7. 安全过滤
@@ -418,22 +446,17 @@ func (s *Server) handleSearchHandler(ctx context.Context, msg message.Message) (
 		results = filteredResults
 	}
 	
-	// 8. 转换为 protocol.Results
-	protoResults := make([]*protocol.Result, len(results))
+	// 8. 转换为响应格式
+	resultMap := make(map[string]interface{})
+	paths := make([]string, len(results))
 	for i, entry := range results {
-		protoResults[i] = &protocol.Result{
-			Path: entry.Path,
-			Name: entry.Name,
-			Size: entry.Size,
-		}
+		paths[i] = entry.Path
 	}
+	resultMap["paths"] = paths
+	resultMap["count"] = len(results)
+	resultMap["total"] = totalCount
 	
-	// 9. 返回结果（Message.Reply 会自动发送）
-	return &protocol.SearchResults{
-		Results: protoResults,
-		Count:   len(protoResults),
-		Total:   totalCount,
-	}, nil
+	return resultMap, nil
 }
 
 // handleStatusHandler 处理状态请求（Message 接口）

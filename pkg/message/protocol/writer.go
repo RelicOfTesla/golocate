@@ -380,9 +380,7 @@ func mapToRequest(m map[string]any) *Request {
 		req.Content = content
 	}
 
-	if path, ok := m["path"].(string); ok {
-		req.Path = path
-	}
+	// path is deprecated, pattern is the path
 
 	if ignoreCase, ok := m["ignore_case"].(bool); ok {
 		req.IgnoreCase = ignoreCase

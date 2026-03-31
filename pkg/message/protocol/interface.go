@@ -18,8 +18,144 @@ import (
 	"bufio"
 )
 
+// ============================================================================
+// Pattern Mode Constants
+// ============================================================================
+
+// PatternMode constants define how the pattern is interpreted.
+const (
+	PatternModeNormal         = "normal"          // Normal substring matching
+	PatternModeRegex          = "regex"           // Regex matching
+	PatternModeExtendedRegex  = "extended_regex"  // Extended regex matching
+	PatternModeWildcard       = "wildcard"        // Wildcard matching (default)
+)
+
+// ============================================================================
+// Field Name Constants
+// ============================================================================
+
+// Field name constants for JSON and Fast protocol field names.
+// Use these constants instead of hardcoded strings to ensure consistency.
+const (
+	// Request field names
+	FieldMethod               = "method"
+	FieldID                   = "id"
+	FieldJSONRPC              = "jsonrpc"
+	FieldParams               = "params"
+	FieldAcceptResponseFormat = "accept_response_format"
+	
+	// Search parameter field names
+	FieldPattern     = "pattern"
+	FieldPatternMode = "pattern_mode"
+	FieldContent     = "content"
+	FieldIgnoreCase  = "ignore_case"
+	FieldBasename    = "basename"
+	FieldLimit       = "limit"
+	FieldOffset      = "offset"
+	FieldSortField   = "sort_field"
+	FieldSortOrder   = "sort_order"
+	
+	// Legacy/deprecated field names (for backward compatibility)
+	FieldMode          = "mode"
+	FieldRegex         = "regex"
+	FieldExtendedRegex = "extended_regex"
+	
+	// Config parameter field names
+	FieldConfig = "config"
+	
+	// Response field names
+	FieldResult = "result"
+	FieldError  = "error"
+	FieldCount  = "count"
+	FieldTotal  = "total"
+	FieldPaths  = "paths"
+	
+	// Method names
+	MethodSearch    = "search"
+	MethodStatus    = "status"
+	MethodGetConfig = "get-config"
+	MethodSetConfig = "set-config"
+)
+
+// ============================================================================
+// Base Types (Shared Fields)
+// ============================================================================
+
+// BaseRequest contains fields shared by all request types.
+type BaseRequest struct {
+	ID                   any    `json:"id,omitempty"`                    // Request ID for async response support
+	Method               string `json:"method"`                          // The action to perform (e.g., "search", "status")
+	AcceptResponseFormat string `json:"accept_response_format,omitempty"` // Desired response format: "json-rpc", "fast", or empty (same as request)
+}
+
+// ============================================================================
+// Command-Specific Parameter Types
+// ============================================================================
+
+// SearchParams contains parameters specific to the search command.
+type SearchParams struct {
+	Pattern     string `json:"pattern"`               // Search pattern (required)
+	PatternMode string `json:"pattern_mode"`          // Pattern mode: "normal", "regex", "extended_regex", "wildcard"
+	Content     string `json:"content,omitempty"`     // Search file content (optional)
+	IgnoreCase  bool   `json:"ignore_case"`           // Case-insensitive search
+	Basename    bool   `json:"basename"`              // Search by basename only
+	Limit       int    `json:"limit"`                 // Maximum number of results (default: 100)
+	Offset      int64  `json:"offset,omitempty"`      // Offset for pagination
+	SortField   string `json:"sort_field,omitempty"`  // Sort field: "name", "size", "time", "path"
+	SortOrder   string `json:"sort_order,omitempty"`  // Sort order: "asc", "desc"
+}
+
+// StatusParams contains parameters specific to the status command.
+type StatusParams struct {
+	// No parameters for status command
+}
+
+// GetConfigParams contains parameters specific to the get-config command.
+type GetConfigParams struct {
+	// No parameters for get-config command
+}
+
+// SetConfigParams contains parameters specific to the set-config command.
+type SetConfigParams struct {
+	Config string `json:"config"` // Configuration content (YAML format)
+}
+
+// ============================================================================
+// Command-Specific Request Types
+// ============================================================================
+
+// SearchRequest represents a search request.
+type SearchRequest struct {
+	BaseRequest
+	SearchParams
+}
+
+// StatusRequest represents a status request.
+type StatusRequest struct {
+	BaseRequest
+	StatusParams
+}
+
+// GetConfigRequest represents a get-config request.
+type GetConfigRequest struct {
+	BaseRequest
+	GetConfigParams
+}
+
+// SetConfigRequest represents a set-config request.
+type SetConfigRequest struct {
+	BaseRequest
+	SetConfigParams
+}
+
+// ============================================================================
+// Unified Request Type (Protocol Layer)
+// ============================================================================
+
 // Request represents a unified request structure.
-// Only Method is required. All other fields are optional.
+// This is a union type that can hold any command-specific request.
+// Business logic should use command-specific types (SearchRequest, StatusRequest, etc.)
+// when possible for better type safety.
 type Request struct {
 	// Required fields
 	Method string `json:"method"` // The action to perform (e.g., "search", "status")
@@ -29,17 +165,18 @@ type Request struct {
 	AcceptResponseFormat string `json:"accept_response_format,omitempty"` // Desired response format: "json-rpc", "fast", or empty (same as request)
 
 	// Optional fields - search parameters
-	Content       string `json:"content,omitempty"`        // Search content/pattern (optional, for search)
-	Path          string `json:"path,omitempty"`           // Path filter (optional, for search)
-	IgnoreCase    bool   `json:"ignore_case"`              // Case-insensitive search (optional, for search)
-	Mode          string `json:"mode,omitempty"`           // Search mode: "regex", "extended_regex", etc. (optional, for search)
-	Limit         int    `json:"limit"`                    // Maximum number of results (optional, for search, default: 100)
-	Basename      bool   `json:"basename"`                 // Search by basename only (optional, for search)
-	Regex         bool   `json:"regex"`                    // Enable regex search mode (optional, for search)
-	ExtendedRegex bool   `json:"extended_regex"`           // Enable extended regex mode (optional, for search)
-	Offset        int64  `json:"offset,omitempty"`         // Offset for pagination (optional, for search)
-	SortField     string `json:"sort_field,omitempty"`     // Sort field: "name", "size", "time", "path" (optional, for search)
-	SortOrder     string `json:"sort_order,omitempty"`     // Sort order: "asc", "desc" (optional, for search)
+	Pattern     string `json:"pattern"`             // Search path/pattern (required for search, can be wildcard/regex/normal path)
+	Content     string `json:"content,omitempty"`   // Search content/pattern (optional, for search)
+	IgnoreCase  bool   `json:"ignore_case"`          // Case-insensitive search (optional, for search)
+	PatternMode string `json:"pattern_mode"`         // Pattern mode: "normal", "regex", "extended_regex", "wildcard" (optional, for search)
+	Basename    bool   `json:"basename"`             // Search by basename only (optional, for search)
+	Limit       int    `json:"limit"`                // Maximum number of results (optional, for search, default: 100)
+	Offset      int64  `json:"offset,omitempty"`     // Offset for pagination (optional, for search)
+	SortField   string `json:"sort_field,omitempty"` // Sort field: "name", "size", "time", "path" (optional, for search)
+	SortOrder   string `json:"sort_order,omitempty"` // Sort order: "asc", "desc" (optional, for search)
+	
+	// Optional fields - set-config parameters
+	Config string `json:"config,omitempty"` // Configuration content (YAML format, for set-config)
 }
 
 // Response represents a unified response structure.

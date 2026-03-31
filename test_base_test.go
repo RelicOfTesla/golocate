@@ -6,6 +6,7 @@ import (
 	"time"
 	"bufio"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"os"
@@ -158,9 +159,10 @@ func sendAPIRequest(t *testing.T, method string, content string) map[string]any 
 		"jsonrpc": "2.0",
 		"method":  method,
 		"id":      1,
+		"params":  map[string]any{},
 	}
 	if content != "" {
-		req["content"] = content
+		req["params"].(map[string]any)["content"] = content
 	}
 
 	// Send request
@@ -193,9 +195,20 @@ func sendAPIRequest(t *testing.T, method string, content string) map[string]any 
 	// Check for JSON-RPC error
 	if jsonrpcResp.Error != nil {
 		t.Logf("JSON-RPC error: %v", jsonrpcResp.Error)
+		// Convert error to string for easier testing
+		var errMsg string
+		if errMap, ok := jsonrpcResp.Error.(map[string]any); ok {
+			if msg, ok := errMap["message"].(string); ok {
+				errMsg = msg
+			} else {
+				errMsg = fmt.Sprintf("%v", jsonrpcResp.Error)
+			}
+		} else {
+			errMsg = fmt.Sprintf("%v", jsonrpcResp.Error)
+		}
 		return map[string]any{
 			"type":  "error",
-			"error": jsonrpcResp.Error,
+			"error": errMsg,
 		}
 	}
 
