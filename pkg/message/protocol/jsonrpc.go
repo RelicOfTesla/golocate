@@ -23,7 +23,7 @@ type jsonrpcRequest struct {
 	Jsonrpc string        `json:"jsonrpc"`
 	ID      any           `json:"id"`
 	Method  string        `json:"method"`
-	Params  Request       `json:"params"` // Embed protocol.Request directly
+	Params  *Request      `json:"params,omitempty"` // Pointer to support optional params (JSON-RPC 2.0 spec)
 }
 
 // jsonrpcResponse represents a JSON-RPC response.
@@ -82,8 +82,17 @@ func (p *jsonrpcProtocol) ParseRequestWithRemainder(reader *bufio.Reader) (*Requ
 	}
 	
 	// Log the parsed request
+	var content, patternMode string
+	var ignoreCase bool
+	var limit int
+	if req.Params != nil {
+		content = req.Params.Content
+		patternMode = req.Params.PatternMode
+		ignoreCase = req.Params.IgnoreCase
+		limit = req.Params.Limit
+	}
 	log.Printf("[JSON-RPC Protocol] Parsed: method=%s, content=%s, pattern_mode=%s, ignore_case=%v, limit=%d", 
-		req.Method, req.Params.Content, req.Params.PatternMode, req.Params.IgnoreCase, req.Params.Limit)
+		req.Method, content, patternMode, ignoreCase, limit)
 	
 	// Check for more data in the reader (mixed protocol sticky packet)
 	var remainder []byte
@@ -92,28 +101,36 @@ func (p *jsonrpcProtocol) ParseRequestWithRemainder(reader *bufio.Reader) (*Requ
 		remainder = jsonRemainder
 	} else if reader.Buffered() > 0 {
 		// There's more data in the buffer (could be another protocol)
-		remainingData, err := io.ReadAll(reader)
-		if err != nil {
+		// Only read already-buffered data to avoid blocking
+		remainingData := make([]byte, reader.Buffered())
+		n, err := reader.Read(remainingData)
+		if err != nil && err != io.EOF {
 			log.Printf("[JSON-RPC Protocol] Error reading remaining data: %v", err)
-		} else if len(remainingData) > 0 {
-			remainder = remainingData
+		} else if n > 0 {
+			remainder = remainingData[:n]
 			log.Printf("[JSON-RPC Protocol] Detected mixed protocol sticky packet, remainder: %d bytes", len(remainder))
 		}
 	}
 	
 	// Convert to unified request
+	// Handle optional params (JSON-RPC 2.0 spec)
+	var params Request
+	if req.Params != nil {
+		params = *req.Params
+	}
+	
 	return &Request{
 		Method:        req.Method,
 		ID:            req.ID,
-		Pattern:       req.Params.Pattern,     // Search pattern (path)
-		Content:       req.Params.Content,     // File content search
-		IgnoreCase:    req.Params.IgnoreCase,
-		Limit:         req.Params.Limit,
-		PatternMode:   req.Params.PatternMode,
-		Basename:      req.Params.Basename,
-		Offset:        req.Params.Offset,
-		SortField:     req.Params.SortField,
-		SortOrder:     req.Params.SortOrder,
+		Pattern:       params.Pattern,     // Search pattern (path)
+		Content:       params.Content,     // File content search
+		IgnoreCase:    params.IgnoreCase,
+		Limit:         params.Limit,
+		PatternMode:   params.PatternMode,
+		Basename:      params.Basename,
+		Offset:        params.Offset,
+		SortField:     params.SortField,
+		SortOrder:     params.SortOrder,
 	}, remainder, nil
 }
 
@@ -123,7 +140,7 @@ func (p *jsonrpcProtocol) WriteRequest(writer *bufio.Writer, req *Request) error
 		Jsonrpc: "2.0",
 		ID:      1,
 		Method:  req.Method,
-		Params:  *req, // Embed protocol.Request directly
+		Params:  req, // Pointer to Request
 	}
 	
 	// Encode JSON
