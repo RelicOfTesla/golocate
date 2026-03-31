@@ -133,7 +133,12 @@ func (c *Client) doRequest(req any) (*protocol.Response, error) {
 		return nil, fmt.Errorf("server error: %s", resp.Error)
 	}
 
-	log.Printf("[Client] Response received: id=%v, count=%d, total=%d", resp.ID, resp.Count, resp.Total)
+	// 只在有意义时打印 count/total（仅对 search 命令）
+	if resp.Count > 0 || resp.Total > 0 {
+		log.Printf("[Client] Response received: id=%v, count=%d, total=%d", resp.ID, resp.Count, resp.Total)
+	} else {
+		log.Printf("[Client] Response received: id=%v", resp.ID)
+	}
 
 	return resp, nil
 }

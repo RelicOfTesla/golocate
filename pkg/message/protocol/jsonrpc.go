@@ -182,6 +182,7 @@ func (p *jsonrpcProtocol) ParseResponse(reader *bufio.Reader) (*Response, error)
 	// Handle error
 	if resp.Error != nil {
 		return &Response{
+			ID:    resp.ID,  // Preserve the request ID
 			Error: resp.Error.Message,
 		}, nil
 	}
@@ -212,6 +213,7 @@ func (p *jsonrpcProtocol) ParseResponse(reader *bufio.Reader) (*Response, error)
 			}
 			
 			result := &Response{
+				ID:     resp.ID,  // Preserve the request ID
 				Count:  count,
 				Total:  total,
 				Paths:  paths,
@@ -225,11 +227,14 @@ func (p *jsonrpcProtocol) ParseResponse(reader *bufio.Reader) (*Response, error)
 		
 		// For non-map results, keep the original result
 		return &Response{
+			ID:     resp.ID,  // Preserve the request ID
 			Result: resp.Result,
 		}, nil
 	}
 	
-	return &Response{}, nil
+	return &Response{
+		ID: resp.ID,  // Preserve the request ID
+	}, nil
 }
 
 func (p *jsonrpcProtocol) WriteResponse(writer *bufio.Writer, resp *Response) error {
