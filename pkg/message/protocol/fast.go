@@ -207,6 +207,12 @@ func (p *fastProtocol) ParseResponse(reader *bufio.Reader) (*Response, error) {
 			}
 		case FieldError:
 			resp.Error = value
+		case FieldResult:
+			// Parse Result field as JSON
+			var result interface{}
+			if err := json.Unmarshal([]byte(value), &result); err == nil {
+				resp.Result = result
+			}
 		}
 	}
 

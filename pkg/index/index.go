@@ -263,7 +263,15 @@ func (idx *Index) searchWildcard(pattern string, opts SearchOptions) []*Entry {
 	if opts.Basename {
 		// Search only in file names
 		for name, entries := range idx.byName {
-			matched, err := filepath.Match(pattern, name)
+			// Handle IgnoreCase
+			comparePattern := pattern
+			compareName := name
+			if opts.IgnoreCase {
+				comparePattern = strings.ToLower(pattern)
+				compareName = strings.ToLower(name)
+			}
+			
+			matched, err := filepath.Match(comparePattern, compareName)
 			if err != nil {
 				// Invalid pattern, skip
 				continue
@@ -278,8 +286,16 @@ func (idx *Index) searchWildcard(pattern string, opts SearchOptions) []*Entry {
 	} else {
 		// Search in full paths
 		for path, entry := range idx.entries {
+			// Handle IgnoreCase
+			comparePattern := pattern
+			comparePath := path
+			if opts.IgnoreCase {
+				comparePattern = strings.ToLower(pattern)
+				comparePath = strings.ToLower(path)
+			}
+			
 			// For full path matching, use filepath.Match on the full path
-			matched, err := filepath.Match(pattern, path)
+			matched, err := filepath.Match(comparePattern, comparePath)
 			if err != nil {
 				// Invalid pattern, skip
 				continue

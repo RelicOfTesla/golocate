@@ -332,6 +332,13 @@ func (s *Server) handleSearchHandler(ctx context.Context, msg message.Message) (
 		opts.PatternMode = index.PatternModeWildcard
 	}
 	
+	// 3.2 自动判断 Basename
+	// 如果 pattern 不包含路径分隔符，则自动设置为 Basename=true（搜索文件名）
+	// 这样用户搜索 "main.go" 时会自动搜索文件名，而不是完整路径
+	if !opts.Basename && !strings.Contains(pattern, "/") && !strings.Contains(pattern, "\\") {
+		opts.Basename = true
+	}
+	
 	// 3.5 验证正则表达式（如果启用了正则模式）
 	if opts.PatternMode == index.PatternModeRegex || opts.PatternMode == index.PatternModeExtendedRegex {
 		// 尝试编译正则表达式，验证其有效性
