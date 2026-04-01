@@ -129,7 +129,8 @@ func responseHasResults(response string) bool {
 	return strings.Contains(response, `"type":"result"`) ||
 		strings.Contains(response, "count=") ||
 		strings.Contains(response, `"count"`) ||
-		strings.Contains(response, `"result"`) // JSON-RPC 响应包含 result 字段
+		strings.Contains(response, `"result"`) || // JSON-RPC 响应包含 result 字段
+		strings.Contains(response, "result=") // Fast 协议响应包含 result= 字段
 }
 
 // ========== API Response Structures ==========

@@ -223,7 +223,7 @@ func (s *Server) handleConnection(conn net.Conn) {
 	log.Printf("[Server] Parsing request using MessageParser...")
 	
 	// 使用 MessageParser 解析消息
-	msg, _, err := s.parser.ParseMessage(conn, reader)
+	msg, remainder, err := s.parser.ParseMessage(conn, reader)
 	if err != nil {
 		log.Printf("[Server] Failed to parse message: %v", err)
 		// 尝试使用旧方式发送错误响应（向后兼容）
@@ -232,6 +232,13 @@ func (s *Server) handleConnection(conn net.Conn) {
 	}
 	
 	log.Printf("[Server] Message parsed: id=%s, method=%s", msg.ID(), msg.Method())
+	
+	// 处理粘包：如果有剩余数据，记录日志
+	if len(remainder) > 0 {
+		log.Printf("[Server] Detected sticky packet, remainder: %d bytes", len(remainder))
+		// 注意：当前实现不处理粘包的后续部分
+		// 未来可以在这里实现粘包的递归处理
+	}
 	
 	// 为消息设置完成回调
 	connWg.Add(1)
