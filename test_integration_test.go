@@ -84,7 +84,7 @@ func TestSearch_Basename(t *testing.T) {
 func TestSearch_Limit_3(t *testing.T) {
 	c := getTestClient(t)
 
-	results, err := c.Search(".go", index.SearchOptions{
+	results, err := c.Search("*.go", index.SearchOptions{
 		Limit: 3,
 	})
 
@@ -95,7 +95,7 @@ func TestSearch_Limit_3(t *testing.T) {
 func TestSearch_Limit_0(t *testing.T) {
 	c := getTestClient(t)
 
-	results, err := c.Search("main", index.SearchOptions{
+	results, err := c.Search("main*", index.SearchOptions{
 		Limit: 0,
 	})
 
@@ -159,7 +159,7 @@ func TestSearch_Regex_IgnoreCase(t *testing.T) {
 func TestSearch_Sort_ByName(t *testing.T) {
 	c := getTestClient(t)
 
-	results, err := c.Search(".go", index.SearchOptions{
+	results, err := c.Search("*.go", index.SearchOptions{
 		SortField:  "name",
 		SortOrder:  "asc",
 		Limit:      10,
@@ -172,7 +172,7 @@ func TestSearch_Sort_ByName(t *testing.T) {
 func TestSearch_Sort_BySize(t *testing.T) {
 	c := getTestClient(t)
 
-	results, err := c.Search(".go", index.SearchOptions{
+	results, err := c.Search("*.go", index.SearchOptions{
 		SortField:  "size",
 		SortOrder:  "desc",
 		Limit:      10,
@@ -185,7 +185,7 @@ func TestSearch_Sort_BySize(t *testing.T) {
 func TestSearch_Sort_ByTime(t *testing.T) {
 	c := getTestClient(t)
 
-	results, err := c.Search(".go", index.SearchOptions{
+	results, err := c.Search("*.go", index.SearchOptions{
 		SortField:  "time",
 		SortOrder:  "desc",
 		Limit:      10,
@@ -198,7 +198,7 @@ func TestSearch_Sort_ByTime(t *testing.T) {
 func TestSearch_Sort_ByPath(t *testing.T) {
 	c := getTestClient(t)
 
-	results, err := c.Search(".go", index.SearchOptions{
+	results, err := c.Search("*.go", index.SearchOptions{
 		SortField:  "path",
 		SortOrder:  "asc",
 		Limit:      10,
@@ -237,7 +237,7 @@ func TestSearch_Combined_IgnoreCaseBasenameLimit(t *testing.T) {
 func TestSearch_Combined_PathSortFieldSortOrder(t *testing.T) {
 	c := getTestClient(t)
 
-	results, err := c.Search(".go", index.SearchOptions{
+	results, err := c.Search("*.go", index.SearchOptions{
 		SortField:  "name",
 		SortOrder:  "asc",
 		Limit:      10,
@@ -275,7 +275,7 @@ func TestSearch_OnlyPath(t *testing.T) {
 func TestSearch_LargeLimit(t *testing.T) {
 	c := getTestClient(t)
 
-	results, err := c.Search(".go", index.SearchOptions{
+	results, err := c.Search("*.go", index.SearchOptions{
 		Limit: 10000,
 	})
 
@@ -322,7 +322,7 @@ func TestSearch_MainGo(t *testing.T) {
 func TestSearch_README(t *testing.T) {
 	c := getTestClient(t)
 
-	results, err := c.Search("README", index.SearchOptions{
+	results, err := c.Search("README*", index.SearchOptions{
 		IgnoreCase: true,
 		Limit:      5,
 	})
@@ -482,7 +482,7 @@ func TestSearch_Combined_PathAndPathNonexistent(t *testing.T) {
 	c := getTestClient(t)
 
 	// Search for 'main' in nonexistent path
-	results, err := c.Search("main", index.SearchOptions{
+	results, err := c.Search("main*", index.SearchOptions{
 		Limit: 5,
 	})
 
@@ -536,7 +536,7 @@ func TestSearch_ContentAndPath_PkgDir(t *testing.T) {
 	c := getTestClient(t)
 
 	// 搜索 Path 包含 ".go" 的文件
-	results, err := c.Search(".go", index.SearchOptions{
+	results, err := c.Search("*.go", index.SearchOptions{
 		Limit: 10,
 	})
 
