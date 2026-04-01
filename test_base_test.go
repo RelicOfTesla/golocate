@@ -63,7 +63,9 @@ func TestMain(m *testing.M) {
 // getTestClient creates a test client connected to golocated.
 // This function is only used in test files and should not be used in production code.
 func getTestClient(t *testing.T) *client.Client {
-	return client.New()
+	c := client.New()
+	c.SetSocketPath(socketPath)
+	return c
 }
 
 
