@@ -118,12 +118,15 @@ func (c *Client) doRequest(req any) (*protocol.Response, error) {
 
 	log.Printf("[Client] Request sent, receiving response...")
 
-	// 使用通用的 ResponseReader 接收响应
-	responseReader := protocol.NewResponseReader(conn)
+	// 使用对应的协议读取响应（与请求协议匹配）
+	// 不依赖自动检测，避免协议选择错误
+	responseReader := protocol.NewResponseReaderWithProtocol(conn, proto)
 	resp, err := responseReader.ReadResponse(context.Background())
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response: %w", err)
 	}
+
+	log.Printf("[Client] ReadResponse returned: ID=%v, Error=%s, Result type=%T, Result=%v", resp.ID, resp.Error, resp.Result, resp.Result)
 
 	// 验证响应 ID
 	c.verifyResponseID(resp, requestID)
@@ -190,9 +193,11 @@ func (c *Client) SearchWithTotal(pattern string, opts index.SearchOptions) (*Sea
 	opts.Pattern = pattern
 	
 	// 构建请求
+	// Pattern = PATH（路径过滤），Content = CONTENT（文件内容搜索）
 	req := &protocol.Request{
 		Method:      "search",
-		Content:     opts.Pattern,
+		Pattern:     opts.Pattern,     // PATH: 路径过滤
+		Content:     "",                // CONTENT: 文件内容搜索（暂不支持）
 		IgnoreCase:  opts.IgnoreCase,
 		PatternMode: string(opts.PatternMode),
 		Basename:    opts.Basename,
@@ -392,11 +397,11 @@ func mapToProtocolRequest(m map[string]any) *protocol.Request {
 	}
 
 	if regex, ok := m["regex"].(bool); ok && regex {
-		req.PatternMode = protocol.PatternModeRegex
+		req.PatternMode = string(index.PatternModeRegex)
 	}
 
 	if extendedRegex, ok := m["extended_regex"].(bool); ok && extendedRegex {
-		req.PatternMode = protocol.PatternModeExtendedRegex
+		req.PatternMode = string(index.PatternModeExtendedRegex)
 	}
 
 	if sortField, ok := m["sort_field"].(string); ok {

@@ -26,7 +26,6 @@ var (
 //
 // 设计变更（2026-03-30）：
 // - Handle() 改为异步队列调用（默认行为）
-// - HandleSync() 提供同步处理能力（可选）
 // - 使用内部队列和后台 worker 实现异步处理
 // - 支持优雅关闭：处理完队列中所有消息后再退出
 type MessageWorker interface {
@@ -49,7 +48,6 @@ type MessageWorker interface {
 	//
 	// 注意：
 	//   - 此方法是异步的，不会阻塞等待处理完成
-	//   - 如果需要同步处理，使用 HandleSync()
 	//   - 如果队列满，会返回 ErrQueueFull
 	Handle(msg Message) error
 
@@ -66,9 +64,7 @@ type MessageWorker interface {
 	//   - 测试场景
 	//   - 特殊的同步处理需求
 	//
-	// Deprecated: 使用 Handle() 替代，并配合连接状态管理机制（如 WaitGroup）
-	// 确保连接关闭前所有消息都已处理完成。同步处理会阻塞连接，影响并发性能。
-	HandleSync(msg Message) error
+
 
 	// ========== 方法注册 ==========
 
@@ -209,18 +205,6 @@ func (w *defaultMessageWorker) Handle(msg Message) error {
 	default:
 		return ErrQueueFull
 	}
-}
-
-// HandleSync 实现 MessageWorker 接口
-//
-// 同步处理消息，阻塞等待处理完成
-func (w *defaultMessageWorker) HandleSync(msg Message) error {
-	// 检查 Worker 是否正在运行
-	if !w.IsRunning() {
-		return ErrWorkerNotRunning
-	}
-
-	return w.processMessage(msg)
 }
 
 // processMessage 处理单个消息

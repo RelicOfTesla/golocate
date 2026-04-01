@@ -156,41 +156,6 @@ func TestMessageWorker_Handle_AsyncQueue(t *testing.T) {
 	mu.Unlock()
 }
 
-func TestMessageWorker_HandleSync(t *testing.T) {
-	worker := NewMessageWorker()
-
-	// 启动 worker
-	if err := worker.Start(); err != nil {
-		t.Fatalf("Start() failed: %v", err)
-	}
-	defer worker.Stop()
-
-	// 注册测试方法
-	var receivedPayload []byte
-	handler := MethodHandlerFunc(func(ctx context.Context, msg Message) (any, error) {
-		receivedPayload = msg.Payload()
-		return map[string]any{
-			"result": "success",
-			"echo":   string(msg.Payload()),
-		}, nil
-	})
-	worker.RegisterMethod("echo", handler)
-
-	// 创建测试消息
-	payload := []byte("test payload")
-	msg := createTestMessage("1", "echo", payload)
-
-	// HandleSync 是同步的，会阻塞等待处理完成
-	err := worker.HandleSync(msg)
-	if err != nil {
-		t.Fatalf("HandleSync() failed: %v", err)
-	}
-
-	// 验证收到的 payload（不需要等待）
-	if string(receivedPayload) != "test payload" {
-		t.Errorf("received payload = %s, want 'test payload'", receivedPayload)
-	}
-}
 
 func TestMessageWorker_HandleUnknownMethod(t *testing.T) {
 	worker := NewMessageWorker()
@@ -204,12 +169,15 @@ func TestMessageWorker_HandleUnknownMethod(t *testing.T) {
 	// 创建测试消息（未注册的方法）
 	msg, recordedReply := createTestMessageThatRecordsReply("1", "unknown", nil)
 
-	// 使用 HandleSync 以便同步检查结果
-	err := worker.HandleSync(msg)
+	// 使用 Handle 异步处理
+	err := worker.Handle(msg)
 	// Reply() 会成功发送错误响应，所以这里不会返回错误
 	if err != nil {
-		t.Logf("HandleSync() returned error: %v", err)
+		t.Logf("Handle() returned error: %v", err)
 	}
+
+	// 等待处理完成
+	time.Sleep(100 * time.Millisecond)
 
 	// 验证回复内容包含错误信息
 	if *recordedReply == nil {
@@ -237,15 +205,6 @@ func TestMessageWorker_HandleNotRunning(t *testing.T) {
 	}
 	if err != ErrWorkerNotRunning {
 		t.Errorf("Handle() error = %v, want ErrWorkerNotRunning", err)
-	}
-
-	// HandleSync 也应该失败
-	err = worker.HandleSync(msg)
-	if err == nil {
-		t.Error("HandleSync() should fail when worker is not running")
-	}
-	if err != ErrWorkerNotRunning {
-		t.Errorf("HandleSync() error = %v, want ErrWorkerNotRunning", err)
 	}
 }
 
@@ -431,12 +390,15 @@ func TestMessageWorker_HandlerReturnsError(t *testing.T) {
 	// 创建测试消息
 	msg, recordedReply := createTestMessageThatRecordsReply("1", "error", nil)
 
-	// 使用 HandleSync 同步处理
-	err := worker.HandleSync(msg)
+	// 使用 Handle 异步处理
+	err := worker.Handle(msg)
 	// Reply() 会成功发送错误响应，所以这里不会返回错误
 	if err != nil {
-		t.Logf("HandleSync() returned error: %v", err)
+		t.Logf("Handle() returned error: %v", err)
 	}
+
+	// 等待处理完成
+	time.Sleep(100 * time.Millisecond)
 
 	// 验证回复内容包含错误信息
 	if *recordedReply == nil {
@@ -468,10 +430,13 @@ func TestMessageWorker_HandlerReturnsNil(t *testing.T) {
 	msg := createTestMessage("1", "async-reply", nil)
 
 	// 处理消息（应该成功，因为返回 nil）
-	err := worker.HandleSync(msg)
+	err := worker.Handle(msg)
 	if err != nil {
-		t.Fatalf("HandleSync() failed: %v", err)
+		t.Fatalf("Handle() failed: %v", err)
 	}
+
+	// 等待处理完成
+	time.Sleep(100 * time.Millisecond)
 }
 
 func TestMessageWorker_ConcurrentRegister(t *testing.T) {
@@ -582,23 +547,6 @@ func BenchmarkMessageWorker_Handle(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		worker.Handle(msg)
-	}
-}
-
-func BenchmarkMessageWorker_HandleSync(b *testing.B) {
-	worker := NewMessageWorker()
-	worker.Start()
-	defer worker.Stop()
-
-	worker.RegisterMethod("bench", MethodHandlerFunc(func(ctx context.Context, msg Message) (any, error) {
-		return "ok", nil
-	}))
-
-	msg := createTestMessage("1", "bench", nil)
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		worker.HandleSync(msg)
 	}
 }
 

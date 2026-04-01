@@ -223,7 +223,7 @@ func (s *Server) handleConnection(conn net.Conn) {
 	log.Printf("[Server] Parsing request using MessageParser...")
 	
 	// 使用 MessageParser 解析消息
-	msg, remainder, err := s.parser.ParseMessage(conn, reader)
+	msg, _, err := s.parser.ParseMessage(conn, reader)
 	if err != nil {
 		log.Printf("[Server] Failed to parse message: %v", err)
 		// 尝试使用旧方式发送错误响应（向后兼容）
@@ -244,44 +244,6 @@ func (s *Server) handleConnection(conn net.Conn) {
 		log.Printf("[Server] Failed to handle message: %v", err)
 		connWg.Done() // 处理失败，也要 Done，避免死锁
 		return
-	}
-	
-	// 处理粘包 - 处理剩余数据
-	if len(remainder) > 0 {
-		log.Printf("[Server] Detected sticky packet, processing remainder: %d bytes", len(remainder))
-		s.processRemainder(conn, remainder, &connWg)
-	}
-}
-
-// processRemainder processes remaining data from a sticky packet.
-func (s *Server) processRemainder(conn net.Conn, remainder []byte, connWg *sync.WaitGroup) {
-	// 使用 MessageParser 批量解析剩余消息
-	messages, nextRemainder, err := s.parser.ParseMessages(conn, remainder)
-	if err != nil {
-		log.Printf("[Server] Failed to parse remainder: %v", err)
-		return
-	}
-	
-	// 使用 MessageWorker 异步处理每个消息
-	for _, msg := range messages {
-		log.Printf("[Server] Processing remainder message: method=%s", msg.Method())
-		
-		// 为消息设置完成回调
-		connWg.Add(1)
-		msg.SetOnComplete(func() {
-			connWg.Done()
-		})
-		
-		if err := s.worker.Handle(msg); err != nil {
-			log.Printf("[Server] Failed to handle remainder message: %v", err)
-			connWg.Done() // 处理失败，也要 Done，避免死锁
-		}
-	}
-	
-	// 如果还有剩余数据，递归处理
-	if len(nextRemainder) > 0 {
-		log.Printf("[Server] Processing additional remainder: %d bytes", len(nextRemainder))
-		s.processRemainder(conn, nextRemainder, connWg)
 	}
 }
 

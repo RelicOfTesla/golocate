@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"log"
 )
 
 // ========== 错误定义 ==========
@@ -268,6 +269,41 @@ func NewResponseReader(r io.Reader) ResponseReader {
 	}
 }
 
+// NewResponseReaderWithProtocol creates a new ResponseReader with a specified protocol.
+// This bypasses protocol detection and uses the specified protocol directly.
+//
+// Parameters:
+//   - r: The underlying reader (can be net.Conn, io.Reader, etc.)
+//   - proto: The protocol to use for reading responses
+//
+// Returns:
+//   - ResponseReader: The created reader
+func NewResponseReaderWithProtocol(r io.Reader, proto Protocol) ResponseReader {
+	return &protocolSpecificResponseReader{
+		reader: bufio.NewReader(r),
+		proto:  proto,
+	}
+}
+
+// protocolSpecificResponseReader implements ResponseReader with a specified protocol.
+type protocolSpecificResponseReader struct {
+	reader *bufio.Reader
+	proto  Protocol
+}
+
+// ReadResponse implements ResponseReader interface.
+func (r *protocolSpecificResponseReader) ReadResponse(ctx context.Context) (*Response, error) {
+	// Check context cancellation
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+	}
+
+	// Use the specified protocol directly
+	return r.proto.ParseResponse(r.reader)
+}
+
 // ReadResponse implements ResponseReader interface.
 func (r *defaultResponseReader) ReadResponse(ctx context.Context) (*Response, error) {
 	// Check context cancellation
@@ -277,17 +313,32 @@ func (r *defaultResponseReader) ReadResponse(ctx context.Context) (*Response, er
 	default:
 	}
 
-	// Detect protocol
-	protoType, err := DetectProtocol(r.reader)
+	// Use SelectDecoder to determine protocol type
+	decoder, bufReader, err := SelectDecoder(r.reader)
 	if err != nil {
+		log.Printf("[ReadResponse] SelectDecoder failed: %v", err)
 		return nil, err
 	}
 
-	// Get protocol implementation
-	proto := GetProtocol(protoType)
+	// Determine protocol type based on decoder
+	var proto Protocol
+	switch decoder.(type) {
+	case *JSONDecoder:
+		log.Printf("[ReadResponse] Selected JSON-RPC protocol")
+		proto = NewJSONRPCProtocol()
+	default:
+		log.Printf("[ReadResponse] Selected Fast protocol")
+		proto = NewFastProtocol()
+	}
 
 	// Use protocol to read response
-	return proto.ParseResponse(r.reader)
+	result, err := proto.ParseResponse(bufReader)
+	if err != nil {
+		log.Printf("[ReadResponse] ParseResponse failed: %v", err)
+		return nil, err
+	}
+	log.Printf("[ReadResponse] ParseResponse success: ID=%v, Result=%v", result.ID, result.Result)
+	return result, nil
 }
 
 // defaultRequestReader implements RequestReader interface.
@@ -319,17 +370,8 @@ func (r *defaultRequestReader) ReadRequest(ctx context.Context) (*Request, error
 	default:
 	}
 
-	// Detect protocol
-	protoType, err := DetectProtocol(r.reader)
-	if err != nil {
-		return nil, err
-	}
-
-	// Get protocol implementation
-	proto := GetProtocol(protoType)
-
-	// Use protocol to read request
-	return proto.ParseRequest(r.reader)
+	// Use the new DecodeRequest function
+	return DecodeRequest(r.reader)
 }
 
 // ========== 辅助函数 ==========

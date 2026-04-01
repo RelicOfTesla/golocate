@@ -3,7 +3,6 @@ package message
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -24,22 +23,6 @@ import (
 // - 构建 Message 对象
 // - 提供回复能力
 type MessageParser interface {
-	// ========== 协议检测 ==========
-
-	// DetectProtocol 从数据中检测协议类型
-	//
-	// 参数：
-	//   - reader: 缓冲读取器
-	//
-	// 返回：
-	//   - ProtocolType: 检测到的协议类型
-	//   - error: 检测失败时返回错误
-	//
-	// 注意：
-	//   - 此方法只检测，不消费数据
-	//   - 如果无法确定协议，返回默认协议
-	DetectProtocol(reader *bufio.Reader) (ProtocolType, error)
-
 	// ========== 消息解析 ==========
 
 	// ParseMessage 从连接解析一个完整的消息
@@ -63,22 +46,6 @@ type MessageParser interface {
 	//   - 每次调用只解析一个完整的消息
 	//   - 如果有粘包，剩余数据需要在下次调用时处理
 	ParseMessage(conn net.Conn, reader *bufio.Reader) (Message, []byte, error)
-
-	// ParseMessages 批量解析消息（处理粘包）
-	//
-	// 参数：
-	//   - conn: 网络连接
-	//   - data: 原始数据（可能包含多个消息）
-	//
-	// 返回：
-	//   - []Message: 解析的消息列表
-	//   - []byte: 剩余不完整的数据
-	//   - error: 解析失败时返回错误
-	//
-	// 使用场景：
-	//   - 一次性读取大量数据
-	//   - 处理多个粘在一起的消息
-	ParseMessages(conn net.Conn, data []byte) ([]Message, []byte, error)
 
 	// ========== 消息构建 ==========
 
@@ -142,102 +109,76 @@ func NewMessageParser() MessageParser {
 	}
 }
 
-// DetectProtocol 实现 MessageParser 接口
-func (p *defaultMessageParser) DetectProtocol(reader *bufio.Reader) (ProtocolType, error) {
-	// 使用 protocol 包的检测函数
-	protoType, err := protocol.DetectProtocol(reader)
-	if err != nil {
-		return p.defaultProto, err
-	}
-	return ProtocolType(protoType), nil
-}
 
 // ParseMessage 实现 MessageParser 接口
 func (p *defaultMessageParser) ParseMessage(conn net.Conn, reader *bufio.Reader) (Message, []byte, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	// 1. 检测协议
-	protoType, err := p.DetectProtocol(reader)
+	// 使用新的 SelectDecoder 函数选择解码器
+	decoder, bufReader, err := protocol.SelectDecoder(reader)
 	if err != nil {
-		return nil, nil, fmt.Errorf("detect protocol failed: %w", err)
+		return nil, nil, fmt.Errorf("select decoder failed: %w", err)
 	}
 
-	// 2. 获取协议实现
-	proto := protocol.GetProtocol(protocol.ProtocolType(protoType))
-
-	// 3. 解析请求（包含粘包处理）
-	req, remainder, err := proto.ParseRequestWithRemainder(reader)
+	// 使用 DecodeWithRemainder 方法解码请求并获取剩余数据
+	req, remainder, err := decoder.DecodeWithRemainder(bufReader)
 	if err != nil {
-		return nil, remainder, fmt.Errorf("parse request failed: %w", err)
+		return nil, nil, fmt.Errorf("decode request failed: %w", err)
 	}
 
-	// 4. 创建回复函数
+	// 创建回复函数
+	// 确定响应协议
+	responseProto := protocol.GetResponseProtocol(protocol.ProtocolFast, req.AcceptResponseFormat)
+	proto := protocol.GetProtocol(responseProto)
+
 	replyFunc := p.createReplyFunc(conn, proto, req)
 
-	// 6. 序列化请求数据作为 payload
+	// 序列化请求数据作为 payload
 	payload, err := json.Marshal(req)
 	if err != nil {
-		return nil, remainder, fmt.Errorf("marshal request failed: %w", err)
+		return nil, nil, fmt.Errorf("marshal request failed: %w", err)
 	}
 
-	// 7. 构建消息（如果没有 builder，使用默认构建器）
+	// 构建消息（如果没有 builder，使用默认构建器）
 	builder := p.builder
 	if builder == nil {
 		builder = &defaultMessageBuilder{}
 	}
 
-	// 8. 构建 Message 对象
+	// 构建 Message 对象
 	msg, err := builder.Build(payload, replyFunc)
 	if err != nil {
-		return nil, remainder, fmt.Errorf("build message failed: %w", err)
+		return nil, nil, fmt.Errorf("build message failed: %w", err)
 	}
 
-	// 9. 设置元数据
+	// 设置元数据
 	if m, ok := msg.(*defaultMessage); ok {
-		m.metadata["protocol"] = string(protoType)
+		m.metadata["protocol"] = "auto-detected"
 		m.metadata["arrival_time"] = time.Now()
 		if conn != nil {
 			m.metadata["remote_addr"] = conn.RemoteAddr().String()
 		}
 	}
 
+	// 检查 remainder 是否只包含空白字符
+	// 如果是，返回 nil remainder
+	if isAllWhitespace(remainder) {
+		return msg, nil, nil
+	}
+
+	// 返回消息和剩余数据（用于粘包处理）
 	return msg, remainder, nil
 }
 
-// ParseMessages 实现 MessageParser 接口
-func (p *defaultMessageParser) ParseMessages(conn net.Conn, data []byte) ([]Message, []byte, error) {
-	var messages []Message
-	var remainder []byte
-
-	// 创建 reader 从 data 读取
-	reader := bufio.NewReader(bytes.NewReader(data))
-
-	for {
-		// 尝试解析一个消息
-		msg, rem, err := p.ParseMessage(conn, reader)
-		if err != nil {
-			// 如果解析失败，返回已解析的消息和剩余数据
-			if len(messages) > 0 {
-				return messages, data, nil
-			}
-			return nil, data, err
-		}
-
-		messages = append(messages, msg)
-
-		// 如果有剩余数据，继续处理
-		if len(rem) > 0 {
-			// 将剩余数据放回 reader
-			reader = bufio.NewReader(bytes.NewReader(rem))
-			data = rem
-		} else {
-			// 没有剩余数据，解析完成
-			break
+// isAllWhitespace 检查字节数组是否只包含空白字符
+func isAllWhitespace(data []byte) bool {
+	for _, b := range data {
+		if b != ' ' && b != '\t' && b != '\n' && b != '\r' {
+			return false
 		}
 	}
-
-	return messages, remainder, nil
+	return true
 }
 
 // SetMessageBuilder 实现 MessageParser 接口

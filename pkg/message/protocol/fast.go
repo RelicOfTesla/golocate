@@ -10,6 +10,8 @@ import (
 	"log"
 	"strconv"
 	"strings"
+
+	"github.com/RelicOfTesla/golocate/pkg/index"
 )
 
 // fastProtocol implements the Protocol interface for fast text protocol.
@@ -111,11 +113,11 @@ func (p *fastProtocol) ParseRequestWithRemainder(reader *bufio.Reader) (*Request
 			req.Basename = value == "true"
 		case FieldRegex:
 			if value == "true" {
-				req.PatternMode = PatternModeRegex
+				req.PatternMode = string(index.PatternModeRegex)
 			}
 		case FieldExtendedRegex:
 			if value == "true" {
-				req.PatternMode = PatternModeExtendedRegex
+				req.PatternMode = string(index.PatternModeExtendedRegex)
 			}
 		case FieldPatternMode:
 			req.PatternMode = value

@@ -19,18 +19,6 @@ import (
 )
 
 // ============================================================================
-// Pattern Mode Constants
-// ============================================================================
-
-// PatternMode constants define how the pattern is interpreted.
-const (
-	PatternModeNormal         = "normal"          // Normal substring matching
-	PatternModeRegex          = "regex"           // Regex matching
-	PatternModeExtendedRegex  = "extended_regex"  // Extended regex matching
-	PatternModeWildcard       = "wildcard"        // Wildcard matching (default)
-)
-
-// ============================================================================
 // Field Name Constants
 // ============================================================================
 
@@ -244,21 +232,6 @@ const (
 	ProtocolJSONRPC ProtocolType = "json-rpc" // JSON-RPC protocol
 )
 
-// DetectProtocol detects the protocol type from the first byte.
-// It reads all available buffered data to detect JSON-RPC fields,
-// supporting detection even when the "jsonrpc" field appears after large content.
-//
-// This function uses the default detection configuration, which waits up to 100ms
-// for more data when the buffered data is insufficient for confident detection.
-// For custom detection behavior, use DetectProtocolWithConfig.
-func DetectProtocol(reader *bufio.Reader) (ProtocolType, error) {
-	result, err := DetectProtocolWithConfig(reader, DefaultDetectionConfig())
-	if err != nil {
-		return ProtocolFast, err
-	}
-	return result.ProtocolType, nil
-}
-
 // GetProtocol returns the protocol implementation for the given type.
 func GetProtocol(protoType ProtocolType) Protocol {
 	switch protoType {
@@ -292,37 +265,4 @@ func GetResponseProtocol(requestProto ProtocolType, acceptFormat string) Protoco
 	}
 }
 
-// ProtocolPair represents a pair of request and response protocols.
-// This is used to make the protocol separation explicit and clear.
-type ProtocolPair struct {
-	RequestProtocol  ProtocolType // Protocol detected from request
-	ResponseProtocol ProtocolType // Protocol to use for response
-}
 
-// DetectProtocolPair detects both request and response protocols from a request.
-// This is a convenience function that combines DetectProtocol and GetResponseProtocol.
-//
-// Parameters:
-//   - reader: The buffered reader to detect protocol from
-//
-// Returns:
-//   - ProtocolPair containing both request and response protocols
-//   - error if detection fails
-//
-// Note: This function peeks at the reader but does not consume data.
-// The caller should use the returned requestProtocol to parse the request.
-func DetectProtocolPair(reader *bufio.Reader) (*ProtocolPair, error) {
-	// Detect request protocol
-	requestProto, err := DetectProtocol(reader)
-	if err != nil {
-		return nil, err
-	}
-
-	// For now, we can't determine AcceptResponseFormat without parsing the request
-	// So we return the request protocol as both request and response protocol
-	// The caller should call GetResponseProtocol after parsing the request
-	return &ProtocolPair{
-		RequestProtocol:  requestProto,
-		ResponseProtocol: requestProto, // Default: same as request
-	}, nil
-}
