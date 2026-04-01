@@ -128,8 +128,15 @@ func (p *defaultMessageParser) ParseMessage(conn net.Conn, reader *bufio.Reader)
 	}
 
 	// 创建回复函数
-	// 确定响应协议
-	responseProto := protocol.GetResponseProtocol(protocol.ProtocolFast, req.AcceptResponseFormat)
+	// 确定响应协议：根据 decoder 类型推断请求协议类型
+	var requestProto protocol.ProtocolType
+	switch decoder.(type) {
+	case *protocol.JSONDecoder:
+		requestProto = protocol.ProtocolJSONRPC
+	default:
+		requestProto = protocol.ProtocolFast
+	}
+	responseProto := protocol.GetResponseProtocol(requestProto, req.AcceptResponseFormat)
 	proto := protocol.GetProtocol(responseProto)
 
 	replyFunc := p.createReplyFunc(conn, proto, req)
