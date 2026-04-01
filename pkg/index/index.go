@@ -206,8 +206,10 @@ func (idx *Index) searchRegex(query string, opts SearchOptions) []*Entry {
 		}
 	} else {
 		// Basic regex (POSIX BRE)
+		// 注意：regexp.CompilePOSIX 不支持 (?i) 语法
+		// 如果需要 IgnoreCase，使用 regexp.Compile 代替
 		if opts.IgnoreCase {
-			re, err = regexp.CompilePOSIX("(?i)" + query)
+			re, err = regexp.Compile("(?i)" + query)
 		} else {
 			re, err = regexp.CompilePOSIX(query)
 		}

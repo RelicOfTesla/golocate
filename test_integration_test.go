@@ -133,6 +133,7 @@ func TestSearch_ExtendedRegex(t *testing.T) {
 	c := getTestClient(t)
 
 	results, err := c.Search("[a-z]+\\.go", index.SearchOptions{
+		PatternMode:   index.PatternModeExtendedRegex,
 		Limit:         10,
 	})
 
@@ -144,6 +145,7 @@ func TestSearch_Regex_IgnoreCase(t *testing.T) {
 	c := getTestClient(t)
 
 	results, err := c.Search("MAIN", index.SearchOptions{
+		PatternMode: index.PatternModeRegex,
 		IgnoreCase: true,
 		Limit:      5,
 	})

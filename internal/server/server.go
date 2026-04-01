@@ -354,8 +354,10 @@ func (s *Server) handleSearchHandler(ctx context.Context, msg message.Message) (
 			}
 		} else {
 			// 基本正则（BRE）- 使用 POSIX
+			// 注意：regexp.CompilePOSIX 不支持 (?i) 语法
+			// 如果需要 IgnoreCase，使用 regexp.Compile 代替
 			if opts.IgnoreCase {
-				re, err = regexp.CompilePOSIX("(?i)" + pattern)
+				re, err = regexp.Compile("(?i)" + pattern)
 			} else {
 				re, err = regexp.CompilePOSIX(pattern)
 			}
