@@ -287,8 +287,15 @@ func (s *Server) handleSearchHandler(ctx context.Context, msg message.Message) (
 	
 	// 2. 输入验证
 	
-	// Pattern 是路径（必选项），如果为空使用默认值 "*"（搜索所有目录）
+	// Pattern 是路径（必选项）
 	pattern := req.Pattern
+	
+	// 验证 Pattern 不能只包含空白字符
+	if strings.TrimSpace(pattern) == "" && pattern != "" {
+		return nil, fmt.Errorf("invalid parameter: pattern cannot be only whitespace")
+	}
+	
+	// 如果 Pattern 为空，使用默认值 "*"（搜索所有目录）
 	if pattern == "" {
 		pattern = "*"
 	}
