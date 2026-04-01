@@ -141,6 +141,9 @@ func (p *fastProtocol) WriteRequest(writer *bufio.Writer, req *Request) error {
 		fmt.Fprintf(writer, "id=%v\n", req.ID)
 	}
 	// mode and path are deprecated, pattern is the path
+	if req.Pattern != "" {
+		fmt.Fprintf(writer, "pattern=%s\n", req.Pattern)
+	}
 	if req.Content != "" {
 		fmt.Fprintf(writer, "content=%s\n", req.Content)
 	}
