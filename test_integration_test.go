@@ -458,6 +458,7 @@ func TestSearch_Combined_RegexIgnoreCaseLimit(t *testing.T) {
 	c := getTestClient(t)
 
 	results, err := c.Search("MAIN", index.SearchOptions{
+		PatternMode: index.PatternModeRegex,
 		IgnoreCase: true,
 		Limit:      5,
 	})
