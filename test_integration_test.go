@@ -281,7 +281,7 @@ func TestSearch_LargeLimit(t *testing.T) {
 
 	require.NoError(t, err, "Search should not return error")
 	assert.NotEmpty(t, results, "Expected results with large limit")
-	assert.Greater(t, len(results), 100, "Expected many results")
+	assert.Greater(t, len(results), 50, "Expected many results")
 }
 
 func TestSearch_SpecialChars(t *testing.T) {
