@@ -483,15 +483,10 @@ func TestSearch_Combined_BasenameSortFieldSortOrderLimit(t *testing.T) {
 }
 
 func TestSearch_Combined_PathAndPathNonexistent(t *testing.T) {
-	c := getTestClient(t)
-
-	// Search for 'main' in nonexistent path
-	results, err := c.Search("main*", index.SearchOptions{
-		Limit: 5,
-	})
-
-	require.NoError(t, err, "Search should not return error")
-	assert.Empty(t, results, "Expected no results in nonexistent path")
+	// Note: SearchOptions does not have a path filter field
+	// This test is incomplete - it cannot test "search in nonexistent path"
+	// Skip this test for now
+	t.Skip("SearchOptions does not support path filtering")
 }
 
 // ========== 第十部分：Content AND Path 双条件测试 ==========
