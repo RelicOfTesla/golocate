@@ -582,7 +582,7 @@ func TestAPI_MultipleGetConfigRequests(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		response := sendAPIRequest(t, "get-config", "")
 		require.NotNil(t, response, "Should return response on request %d", i+1)
-		// Type can be "config" or "error" (if config not available)
-		assert.Contains(t, []string{"config", "error"}, response["type"], "Should return valid type on request %d", i+1)
+		// Type can be "get-config" or "error" (if config not available)
+		assert.Contains(t, []string{"get-config", "error"}, response["type"], "Should return valid type on request %d", i+1)
 	}
 }

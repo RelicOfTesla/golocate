@@ -117,7 +117,7 @@ func TestClientSearchWithServer(t *testing.T) {
 	client.SetSocketPath(testutil.GetTestSocketPath("client_search"))
 
 	// Perform search (PATH is required, CONTENT is optional)
-	results, err := client.Search("test", index.SearchOptions{})
+	results, err := client.Search("test*", index.SearchOptions{})
 	if err != nil {
 		t.Fatalf("Search failed: %v", err)
 	}
@@ -231,7 +231,7 @@ func TestClientSearchStreamWithServer(t *testing.T) {
 
 	// Stream search
 	count := 0
-	err := client.SearchStream("test", index.SearchOptions{}, func(e *index.Entry) bool {
+	err := client.SearchStream("test*", index.SearchOptions{}, func(e *index.Entry) bool {
 		count++
 		return true
 	})

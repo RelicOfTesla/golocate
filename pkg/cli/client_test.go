@@ -105,7 +105,7 @@ func TestSearchWithServer(t *testing.T) {
 
 	// Perform search
 	opts := SearchOptions{
-		Pattern:    "test",
+		Pattern:    "test*",
 		IgnoreCase: true,
 		SocketPath: testutil.GetTestSocketPath("cli_search"),
 	}

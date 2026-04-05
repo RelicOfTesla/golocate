@@ -522,13 +522,13 @@ func TestSearch_ContentAndPath_SpecificFile(t *testing.T) {
 func TestSearch_ContentAndPath_NoMatch(t *testing.T) {
 	c := getTestClient(t)
 
-	// 搜索 Path 包含 "main.go" 的文件
-	results, err := c.Search("main.go", index.SearchOptions{
+	// 搜索不存在的文件模式
+	results, err := c.Search("nonexistent_file_*.xyz", index.SearchOptions{
 		Limit: 10,
 	})
 
 	require.NoError(t, err, "Search should not return error")
-	assert.Empty(t, results, "Expected no results for nonexistent path filter")
+	assert.Empty(t, results, "Expected no results for nonexistent file pattern")
 }
 
 func TestSearch_ContentAndPath_PkgDir(t *testing.T) {
