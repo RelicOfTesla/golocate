@@ -1,92 +1,269 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>golocate - Fast File Search</title>
+    <title>golocate - 快速文件搜索</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #1a1a1a; color: #e0e0e0; }
-        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
-        h1 { color: #4CAF50; margin-bottom: 20px; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+            background: #1a1a1a; 
+            color: #e0e0e0; 
+        }
+        .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+        
+        /* Header */
+        .header { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #333;
+        }
+        .header h1 { color: #4CAF50; font-size: 24px; }
+        .header-buttons { display: flex; gap: 10px; }
         
         /* Search Box */
-        .search-box { display: flex; gap: 10px; margin-bottom: 10px; }
-        input[type="text"] { flex: 1; padding: 12px; border: 1px solid #333; border-radius: 4px; background: #2a2a2a; color: #e0e0e0; font-size: 16px; }
+        .search-box { display: flex; gap: 10px; margin-bottom: 15px; }
+        input[type="text"] { 
+            flex: 1; 
+            padding: 12px; 
+            border: 1px solid #333; 
+            border-radius: 4px; 
+            background: #2a2a2a; 
+            color: #e0e0e0; 
+            font-size: 16px; 
+        }
         input[type="text"]:focus { outline: none; border-color: #4CAF50; }
-        button { padding: 12px 24px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }
+        button { 
+            padding: 12px 24px; 
+            background: #4CAF50; 
+            color: white; 
+            border: none; 
+            border-radius: 4px; 
+            cursor: pointer; 
+            font-size: 16px; 
+            transition: background 0.2s;
+        }
         button:hover { background: #45a049; }
         button.secondary { background: #555; }
         button.secondary:hover { background: #666; }
         
         /* Advanced Options */
-        .advanced-options { display: flex; gap: 15px; margin-bottom: 15px; flex-wrap: wrap; align-items: center; }
-        .advanced-options label { display: flex; align-items: center; gap: 5px; cursor: pointer; }
-        .advanced-options input[type="checkbox"] { width: 16px; height: 16px; }
-        .advanced-options input[type="number"] { width: 80px; padding: 5px; border: 1px solid #333; border-radius: 4px; background: #2a2a2a; color: #e0e0e0; }
+        .advanced-options { 
+            display: flex; 
+            gap: 15px; 
+            margin-bottom: 15px; 
+            flex-wrap: wrap; 
+            align-items: center; 
+        }
+        .advanced-options label { 
+            display: flex; 
+            align-items: center; 
+            gap: 5px; 
+            cursor: pointer; 
+            font-size: 14px;
+        }
+        .advanced-options input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
+        .advanced-options input[type="number"] { 
+            width: 80px; 
+            padding: 5px; 
+            border: 1px solid #333; 
+            border-radius: 4px; 
+            background: #2a2a2a; 
+            color: #e0e0e0; 
+        }
         
         /* Search History */
         .search-history { margin-bottom: 15px; }
         .search-history-title { color: #888; font-size: 0.9em; margin-bottom: 5px; }
         .search-history-items { display: flex; gap: 8px; flex-wrap: wrap; }
-        .search-history-item { padding: 4px 10px; background: #333; border-radius: 12px; font-size: 0.85em; cursor: pointer; transition: background 0.2s; }
+        .search-history-item { 
+            padding: 4px 10px; 
+            background: #333; 
+            border-radius: 12px; 
+            font-size: 0.85em; 
+            cursor: pointer; 
+            transition: background 0.2s; 
+        }
         .search-history-item:hover { background: #444; }
         
-        /* Results */
-        .results-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-        .results { background: #2a2a2a; border-radius: 4px; padding: 20px; }
-        .result-item { padding: 10px; border-bottom: 1px solid #333; }
-        .result-item:last-child { border-bottom: none; }
-        .result-path { color: #4CAF50; font-family: monospace; }
-        .result-name { color: #e0e0e0; font-weight: bold; }
-        .result-size { color: #888; font-size: 0.9em; }
-        .status { color: #888; font-size: 0.9em; margin-top: 10px; }
-        .error { color: #f44336; }
-        .searching { opacity: 0.6; }
-        
-        /* Export Buttons */
+        /* Results Header */
+        .results-header { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            margin-bottom: 10px; 
+        }
+        .results-count { color: #888; font-size: 14px; }
         .export-buttons { display: flex; gap: 8px; }
         .export-buttons button { padding: 6px 12px; font-size: 0.85em; background: #555; }
         .export-buttons button:hover { background: #666; }
+        
+        /* Results Table */
+        .results-table-container {
+            background: #2a2a2a;
+            border-radius: 4px;
+            overflow: hidden;
+            border: 1px solid #333;
+        }
+        
+        table.results-table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+        }
+        
+        table.results-table thead {
+            background: #333;
+            position: sticky;
+            top: 0;
+        }
+        
+        table.results-table th {
+            padding: 12px 10px;
+            text-align: left;
+            font-weight: 600;
+            color: #e0e0e0;
+            cursor: pointer;
+            user-select: none;
+            border-bottom: 2px solid #4CAF50;
+            transition: background 0.2s;
+        }
+        
+        table.results-table th:hover {
+            background: #444;
+        }
+        
+        table.results-table th.sortable::after {
+            content: ' ↕';
+            color: #666;
+            font-size: 12px;
+        }
+        
+        table.results-table th.sort-asc::after {
+            content: ' ↑';
+            color: #4CAF50;
+        }
+        
+        table.results-table th.sort-desc::after {
+            content: ' ↓';
+            color: #4CAF50;
+        }
+        
+        /* Column widths */
+        table.results-table th.col-name { width: 25%; }
+        table.results-table th.col-path { width: 45%; }
+        table.results-table th.col-size { width: 15%; }
+        table.results-table th.col-modtime { width: 15%; }
+        
+        table.results-table td {
+            padding: 10px;
+            border-bottom: 1px solid #333;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        
+        table.results-table tbody tr {
+            transition: background 0.2s;
+            cursor: pointer;
+        }
+        
+        table.results-table tbody tr:hover {
+            background: #333;
+        }
+        
+        table.results-table tbody tr:last-child td {
+            border-bottom: none;
+        }
+        
+        td.col-name { color: #e0e0e0; font-weight: 500; }
+        td.col-path { color: #4CAF50; font-family: monospace; font-size: 13px; }
+        td.col-size { color: #888; font-size: 13px; text-align: right; }
+        td.col-modtime { color: #888; font-size: 13px; }
+        
+        /* Empty State */
+        .empty-state {
+            padding: 40px;
+            text-align: center;
+            color: #888;
+        }
+        
+        /* Status & Error */
+        .status { color: #888; font-size: 0.9em; padding: 20px; text-align: center; }
+        .error { color: #f44336; padding: 20px; text-align: center; }
+        
+        /* Settings Panel */
+        .settings-panel { 
+            display: none; 
+            background: #2a2a2a; 
+            padding: 20px; 
+            border-radius: 4px; 
+            margin-bottom: 15px;
+            border: 1px solid #333;
+        }
+        .settings-panel h3 { margin-bottom: 15px; color: #4CAF50; }
+        .settings-panel label { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            margin-bottom: 10px;
+        }
+        .settings-panel input, .settings-panel select { 
+            padding: 5px; 
+            background: #1a1a1a; 
+            border: 1px solid #333; 
+            color: #e0e0e0; 
+            border-radius: 4px; 
+        }
+        
+        /* Responsive */
+        @media (max-width: 768px) {
+            .container { padding: 10px; }
+            .header h1 { font-size: 20px; }
+            table.results-table th, table.results-table td { padding: 8px 5px; font-size: 12px; }
+            .advanced-options { flex-direction: column; align-items: flex-start; }
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🔍 golocate</h1>
-        
         <!-- Header -->
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-            <h1>🔍 golocate</h1>
-            <button class="secondary" onclick="toggleSettings()">⚙️ 设置</button>
+        <div class="header">
+            <h1>🔍 golocate - 快速文件搜索</h1>
+            <div class="header-buttons">
+                <button class="secondary" onclick="toggleSettings()">⚙️ 设置</button>
+            </div>
         </div>
         
         <!-- Settings Panel -->
-        <div class="settings-panel" id="settingsPanel" style="display: none; background: #2a2a2a; padding: 20px; border-radius: 4px; margin-bottom: 15px;">
-            <h3 style="margin-bottom: 15px; color: #4CAF50;">设置</h3>
-            <div style="display: grid; gap: 15px;">
-                <label style="display: flex; justify-content: space-between; align-items: center;">
-                    <span>默认最大结果数:</span>
-                    <input type="number" id="defaultLimit" value="100" min="1" max="10000" style="width: 100px; padding: 5px; background: #1a1a1a; border: 1px solid #333; color: #e0e0e0; border-radius: 4px;">
-                </label>
-                <label style="display: flex; justify-content: space-between; align-items: center;">
-                    <span>默认忽略大小写:</span>
-                    <input type="checkbox" id="defaultIgnoreCase" checked>
-                </label>
-                <label style="display: flex; justify-content: space-between; align-items: center;">
-                    <span>主题:</span>
-                    <select id="themeSelect" style="padding: 5px; background: #1a1a1a; border: 1px solid #333; color: #e0e0e0; border-radius: 4px;">
-                        <option value="dark">暗色</option>
-                        <option value="light">亮色</option>
-                    </select>
-                </label>
-                <button onclick="saveSettings()" style="margin-top: 10px;">保存设置</button>
-            </div>
+        <div class="settings-panel" id="settingsPanel">
+            <h3>设置</h3>
+            <label>
+                <span>默认最大结果数:</span>
+                <input type="number" id="defaultLimit" value="100" min="1" max="10000" style="width: 100px;">
+            </label>
+            <label>
+                <span>默认忽略大小写:</span>
+                <input type="checkbox" id="defaultIgnoreCase" checked>
+            </label>
+            <label>
+                <span>主题:</span>
+                <select id="themeSelect" style="width: 100px;">
+                    <option value="dark">暗色</option>
+                    <option value="light">亮色</option>
+                </select>
+            </label>
+            <button onclick="saveSettings()" style="margin-top: 10px;">保存设置</button>
         </div>
         
         <!-- Search Box -->
         <div class="search-box">
-            <input type="text" id="searchInput" placeholder="Search files..." autofocus>
-            <button onclick="search()">Search</button>
+            <input type="text" id="searchInput" placeholder="搜索文件..." autofocus>
+            <button onclick="search()">搜索</button>
         </div>
         
         <!-- Advanced Options -->
@@ -108,36 +285,52 @@
             <div class="search-history-items" id="searchHistoryItems"></div>
         </div>
         
-        <!-- Results -->
+        <!-- Results Header -->
         <div class="results-header">
-            <div id="resultsCount"></div>
+            <div class="results-count" id="resultsCount"></div>
             <div class="export-buttons" id="exportButtons" style="display: none;">
                 <button onclick="exportResults('json')">导出 JSON</button>
                 <button onclick="exportResults('csv')">导出 CSV</button>
                 <button onclick="exportResults('txt')">导出 TXT</button>
             </div>
         </div>
-        <div class="results" id="results">
-            <p class="status">Start typing to search...</p>
+        
+        <!-- Results Table -->
+        <div class="results-table-container" id="resultsContainer">
+            <table class="results-table" id="resultsTable">
+                <thead>
+                    <tr>
+                        <th class="col-name sortable" data-sort="Name">文件名</th>
+                        <th class="col-path sortable" data-sort="Path">路径</th>
+                        <th class="col-size sortable" data-sort="Size">大小</th>
+                        <th class="col-modtime sortable" data-sort="ModTime">修改时间</th>
+                    </tr>
+                </thead>
+                <tbody id="resultsBody">
+                    <tr><td colspan="4" class="empty-state">开始输入以搜索...</td></tr>
+                </tbody>
+            </table>
         </div>
     </div>
     
     <script>
         const searchInput = document.getElementById('searchInput');
-        const resultsDiv = document.getElementById('results');
+        const resultsBody = document.getElementById('resultsBody');
         const resultsCount = document.getElementById('resultsCount');
         const exportButtons = document.getElementById('exportButtons');
         const searchHistoryContainer = document.getElementById('searchHistoryContainer');
         const searchHistoryItems = document.getElementById('searchHistoryItems');
         
         let debounceTimer = null;
-        const DEBOUNCE_DELAY = 300; // 300ms delay
+        const DEBOUNCE_DELAY = 300;
         let currentResults = [];
+        let currentSort = { field: null, direction: 'asc' };
         
-        // Load search history on page load
+        // Initialize
         document.addEventListener('DOMContentLoaded', () => {
             loadSearchHistory();
             loadSettings();
+            initSortHandlers();
         });
         
         // Settings Functions
@@ -175,10 +368,73 @@
         
         function applySettings(settings) {
             // Theme would be applied here
-            // For now, just store it
         }
         
-        // Debounced search on input
+        // Sort Functions
+        function initSortHandlers() {
+            const headers = document.querySelectorAll('th.sortable');
+            headers.forEach(th => {
+                th.addEventListener('click', () => {
+                    const field = th.dataset.sort;
+                    sortResults(field);
+                });
+            });
+        }
+        
+        function sortResults(field) {
+            if (!currentResults || currentResults.length === 0) return;
+            
+            // Toggle direction
+            if (currentSort.field === field) {
+                currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+            } else {
+                currentSort.field = field;
+                currentSort.direction = 'asc';
+            }
+            
+            // Sort results
+            currentResults.sort((a, b) => {
+                let aVal = a[field];
+                let bVal = b[field];
+                
+                // Handle different types
+                if (field === 'Size') {
+                    aVal = aVal || 0;
+                    bVal = bVal || 0;
+                } else if (field === 'ModTime') {
+                    aVal = new Date(aVal || 0).getTime();
+                    bVal = new Date(bVal || 0).getTime();
+                } else {
+                    aVal = (aVal || '').toString().toLowerCase();
+                    bVal = (bVal || '').toString().toLowerCase();
+                }
+                
+                if (aVal < bVal) return currentSort.direction === 'asc' ? -1 : 1;
+                if (aVal > bVal) return currentSort.direction === 'asc' ? 1 : -1;
+                return 0;
+            });
+            
+            // Update UI
+            updateSortIndicators();
+            renderResults();
+        }
+        
+        function updateSortIndicators() {
+            // Remove all sort classes
+            document.querySelectorAll('th.sortable').forEach(th => {
+                th.classList.remove('sort-asc', 'sort-desc');
+            });
+            
+            // Add current sort class
+            if (currentSort.field) {
+                const th = document.querySelector(`th[data-sort="${currentSort.field}"]`);
+                if (th) {
+                    th.classList.add(`sort-${currentSort.direction}`);
+                }
+            }
+        }
+        
+        // Search Functions
         searchInput.addEventListener('input', () => {
             clearTimeout(debounceTimer);
             debounceTimer = setTimeout(() => {
@@ -186,7 +442,6 @@
             }, DEBOUNCE_DELAY);
         });
         
-        // Also search on Enter
         searchInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
                 clearTimeout(debounceTimer);
@@ -197,15 +452,15 @@
         async function search() {
             const query = searchInput.value.trim();
             if (!query) {
-                resultsDiv.innerHTML = '<p class="status">Start typing to search...</p>';
+                resultsBody.innerHTML = '<tr><td colspan="4" class="empty-state">开始输入以搜索...</td></tr>';
                 resultsCount.textContent = '';
                 exportButtons.style.display = 'none';
+                currentResults = [];
                 return;
             }
             
-            resultsDiv.innerHTML = '<p class="status">Searching...</p>';
+            resultsBody.innerHTML = '<tr><td colspan="4" class="status">搜索中...</td></tr>';
             
-            // Get advanced options
             const ignoreCase = document.getElementById('ignoreCase').checked;
             const maxResults = document.getElementById('maxResults').value;
             
@@ -215,61 +470,68 @@
                 const data = await response.json();
                 
                 if (data.error) {
-                    resultsDiv.innerHTML = '<p class="error">Error: ' + data.error + '</p>';
+                    resultsBody.innerHTML = '<tr><td colspan="4" class="error">错误: ' + escapeHtml(data.error) + '</td></tr>';
                     resultsCount.textContent = '';
                     exportButtons.style.display = 'none';
+                    currentResults = [];
                     return;
                 }
                 
                 if (!data.results || data.results.length === 0) {
-                    resultsDiv.innerHTML = '<p class="status">No results found</p>';
-                    resultsCount.textContent = 'No results';
+                    resultsBody.innerHTML = '<tr><td colspan="4" class="empty-state">未找到结果</td></tr>';
+                    resultsCount.textContent = '无结果';
                     exportButtons.style.display = 'none';
+                    currentResults = [];
                     return;
                 }
                 
                 // Save to search history
                 saveSearchHistory(query);
                 
-                // Store results for export
+                // Store results for export and sorting
                 currentResults = data.results;
                 
-                // Display results
-                let html = '';
-                data.results.forEach(result => {
-                    html += '<div class="result-item">';
-                    html += '<div class="result-path">' + escapeHtml(result.Path) + '</div>';
-                    html += '<div class="result-name">' + escapeHtml(result.Name) + '</div>';
-                    html += '<div class="result-size">' + formatSize(result.Size) + '</div>';
-                    html += '</div>';
-                });
+                // Reset sort
+                currentSort = { field: null, direction: 'asc' };
+                updateSortIndicators();
                 
-                resultsDiv.innerHTML = html;
-                resultsCount.textContent = 'Found ' + data.results.length + ' results';
+                // Render results
+                renderResults();
+                resultsCount.textContent = `找到 ${data.results.length} 个结果`;
                 exportButtons.style.display = 'flex';
             } catch (err) {
-                resultsDiv.innerHTML = '<p class="error">Error: ' + err.message + '</p>';
+                resultsBody.innerHTML = '<tr><td colspan="4" class="error">错误: ' + escapeHtml(err.message) + '</td></tr>';
                 resultsCount.textContent = '';
                 exportButtons.style.display = 'none';
+                currentResults = [];
             }
+        }
+        
+        function renderResults() {
+            if (!currentResults || currentResults.length === 0) return;
+            
+            let html = '';
+            currentResults.forEach(result => {
+                const modTime = result.ModTime ? formatDate(result.ModTime) : '-';
+                const size = result.Size ? formatSize(result.Size) : '-';
+                
+                html += '<tr>';
+                html += '<td class="col-name" title="' + escapeHtml(result.Name || '') + '">' + escapeHtml(result.Name || '-') + '</td>';
+                html += '<td class="col-path" title="' + escapeHtml(result.Path || '') + '">' + escapeHtml(result.Path || '-') + '</td>';
+                html += '<td class="col-size">' + size + '</td>';
+                html += '<td class="col-modtime">' + modTime + '</td>';
+                html += '</tr>';
+            });
+            
+            resultsBody.innerHTML = html;
         }
         
         // Search History Functions
         function saveSearchHistory(query) {
             const history = JSON.parse(localStorage.getItem('searchHistory') || '[]');
-            
-            // Remove duplicate
             const filtered = history.filter(item => item.query !== query);
-            
-            // Add new item
-            filtered.unshift({
-                query: query,
-                timestamp: Date.now()
-            });
-            
-            // Keep only last 20
+            filtered.unshift({ query: query, timestamp: Date.now() });
             const trimmed = filtered.slice(0, 20);
-            
             localStorage.setItem('searchHistory', JSON.stringify(trimmed));
             loadSearchHistory();
         }
@@ -300,7 +562,7 @@
         // Export Functions
         function exportResults(format) {
             if (!currentResults || currentResults.length === 0) {
-                alert('No results to export');
+                alert('无结果可导出');
                 return;
             }
             
@@ -313,8 +575,8 @@
                     mimeType = 'application/json';
                     break;
                 case 'csv':
-                    content = 'Path,Name,Size\n' + currentResults.map(r => 
-                        `"${r.Path}","${r.Name}",${r.Size}`
+                    content = '文件名,路径,大小,修改时间\n' + currentResults.map(r => 
+                        `"${r.Name || ''}","${r.Path || ''}","${formatSize(r.Size)}","${formatDate(r.ModTime)}"`
                     ).join('\n');
                     filename = 'search_results.csv';
                     mimeType = 'text/csv';
@@ -326,7 +588,6 @@
                     break;
             }
             
-            // Download file
             const blob = new Blob([content], { type: mimeType });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
@@ -338,13 +599,33 @@
         
         // Utility Functions
         function formatSize(bytes) {
+            if (!bytes || bytes === 0) return '0 B';
             if (bytes < 1024) return bytes + ' B';
             if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
             if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
             return (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' GB';
         }
         
+        function formatDate(dateStr) {
+            if (!dateStr) return '-';
+            try {
+                const date = new Date(dateStr);
+                if (isNaN(date.getTime())) return '-';
+                
+                const year = date.getFullYear();
+                const month = String(date.getMonth() + 1).padStart(2, '0');
+                const day = String(date.getDate()).padStart(2, '0');
+                const hour = String(date.getHours()).padStart(2, '0');
+                const minute = String(date.getMinutes()).padStart(2, '0');
+                
+                return `${year}-${month}-${day} ${hour}:${minute}`;
+            } catch (e) {
+                return '-';
+            }
+        }
+        
         function escapeHtml(text) {
+            if (!text) return '';
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
