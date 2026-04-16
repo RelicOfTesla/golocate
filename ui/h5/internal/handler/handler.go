@@ -115,10 +115,19 @@ func (h *Handler) Build(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: Implement build trigger
+	// Trigger index build
+	if err := h.client.Build(); err != nil {
+		log.Printf("Build error: %v", err)
+		json.NewEncoder(w).Encode(map[string]any{
+			"status": "error",
+			"error": err.Error(),
+		})
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{
-		"status": "build triggered",
+		"status": "build started",
 	})
 }
 

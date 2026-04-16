@@ -58,7 +58,7 @@ func New(idx *index.Index) *Server {
 		index:         idx,
 		maxConns:      config.DefaultMaxConns,
 		connTimeout:   config.DefaultTimeout,
-		pathValidator: security.NewPathValidator(nil), // TODO: configure allowed directories
+		pathValidator: security.NewPathValidator(nil), // Will be updated when config is set
 	}
 }
 
@@ -564,8 +564,82 @@ func (s *Server) handleSetConfigHandler(ctx context.Context, msg message.Message
 
 // handleBuildHandler 处理构建索引请求（Message 接口）
 func (s *Server) handleBuildHandler(ctx context.Context, msg message.Message) (any, error) {
-	// TODO: Implement index building
-	return nil, fmt.Errorf("build not implemented yet")
+	s.mu.Lock()
+	
+	// 检查是否已经在构建中
+	if s.isBuilding {
+		s.mu.Unlock()
+		return nil, fmt.Errorf("index build already in progress")
+	}
+	
+	// 设置构建状态
+	s.isBuilding = true
+	s.buildStartTime = time.Now()
+	s.mu.Unlock()
+	
+	// 异步执行索引构建
+	go func() {
+		defer func() {
+			s.mu.Lock()
+			s.isBuilding = false
+			if !s.buildStartTime.IsZero() {
+				s.lastBuildTime = s.buildStartTime
+			}
+			s.mu.Unlock()
+		}()
+		
+		// 获取配置
+		var directories []string
+		if s.config != nil && len(s.config.Directories) > 0 {
+			directories = s.config.Directories
+		} else {
+			// 使用默认目录
+			directories = []string{"/"}
+			log.Printf("warning: no directories configured, using default: %v", directories)
+		}
+		
+		// 创建 Builder
+		opts := index.BuilderOptions{
+			WorkerCount: 4,
+		}
+		if s.config != nil {
+			opts.WorkerCount = s.config.WorkerCount
+			opts.IgnorePatterns = s.config.IgnorePatterns
+		}
+		builder := index.NewBuilder(opts)
+		
+		// 构建索引
+		log.Printf("starting index build for directories: %v", directories)
+		if err := builder.Build(context.Background(), directories); err != nil {
+			log.Printf("index build failed: %v", err)
+			return
+		}
+		
+		// 获取新索引
+		newIndex := builder.Index()
+		
+		// 更新服务器的索引
+		s.mu.Lock()
+		oldIndex := s.index
+		s.index = newIndex
+		s.indexedFileCount = newIndex.Len()
+		s.mu.Unlock()
+		
+		log.Printf("index build completed: %d files indexed", newIndex.Len())
+		
+		// 旧索引会被垃圾回收
+		_ = oldIndex
+	}()
+	
+	return map[string]any{
+		"status": "build started",
+		"directories": func() []string {
+			if s.config != nil && len(s.config.Directories) > 0 {
+				return s.config.Directories
+			}
+			return []string{"/"}
+		}(),
+	}, nil
 }
 
 // handleStopHandler 处理停止服务请求（Message 接口）
@@ -642,4 +716,9 @@ func (s *Server) SetConfig(cfg *config.Config) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.config = cfg
+	
+	// Update pathValidator with allowed directories from config
+	if cfg != nil && len(cfg.Directories) > 0 {
+		s.pathValidator = security.NewPathValidator(cfg.Directories)
+	}
 }

@@ -108,3 +108,12 @@ func (c *Client) SetConfig(yamlContent string) error {
 	}
 	return nil
 }
+
+// Build triggers an index rebuild on the server.
+func (c *Client) Build() error {
+	err := c.socketClient.Build()
+	if err != nil {
+		return err
+	}
+	return nil
+}
