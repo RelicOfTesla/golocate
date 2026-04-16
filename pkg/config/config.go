@@ -4,8 +4,10 @@ package config
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -40,6 +42,39 @@ type Config struct {
 	IndexStrategy string `yaml:"index_strategy"`
 }
 
+// getWindowsDrives returns a list of available drive letters on Windows.
+// On non-Windows systems, it returns nil.
+func getWindowsDrives() []string {
+	if runtime.GOOS != "windows" {
+		return nil
+	}
+	
+	// Use wmic to get list of drives
+	// Note: This requires wmic to be available on the system
+	cmd := exec.Command("wmic", "logicaldisk", "get", "caption")
+	output, err := cmd.Output()
+	if err != nil {
+		// Fallback: return common drives
+		return []string{"C:\\"}
+	}
+	
+	// Parse output
+	lines := strings.Split(string(output), "\n")
+	var drives []string
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if len(line) == 2 && line[1] == ':' {
+			drives = append(drives, line+"\\")
+		}
+	}
+	
+	if len(drives) == 0 {
+		return []string{"C:\\"}
+	}
+	
+	return drives
+}
+
 // DefaultConfig returns the default configuration.
 func DefaultConfig() *Config {
 	homeDir, _ := os.UserHomeDir()
@@ -50,9 +85,12 @@ func DefaultConfig() *Config {
 	// 根据操作系统设置默认目录
 	var defaultDirs []string
 	if runtime.GOOS == "windows" {
-		// Windows 没有根目录，使用用户主目录
-		// TODO: 应当获取全部磁盘分区
-		defaultDirs = []string{homeDir}
+		// Windows: 获取所有磁盘分区
+		defaultDirs = getWindowsDrives()
+		if len(defaultDirs) == 0 {
+			// Fallback: 使用用户主目录
+			defaultDirs = []string{homeDir}
+		}
 	} else {
 		// Unix/Linux 使用根目录
 		defaultDirs = []string{"/"}
