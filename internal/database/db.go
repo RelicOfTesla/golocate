@@ -257,3 +257,39 @@ func (d *DB) GetMeta(key string) ([]byte, error) {
 	})
 	return value, err
 }
+
+// ReplaceAllEntries atomically replaces all entries in the database.
+// This operation is performed within a single transaction, ensuring atomicity.
+// If the operation fails, the database remains unchanged.
+func (d *DB) ReplaceAllEntries(entries []*index.Entry) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	return d.db.Update(func(tx *bolt.Tx) error {
+		// Clear existing entries by deleting and recreating the bucket
+		// Note: BBolt doesn't have a "clear bucket" operation,
+		// so we delete and recreate the bucket
+		if err := tx.DeleteBucket(filesBucket); err != nil && err != bolt.ErrBucketNotFound {
+			return fmt.Errorf("failed to delete files bucket: %w", err)
+		}
+
+		// Recreate the bucket
+		newB, err := tx.CreateBucket(filesBucket)
+		if err != nil {
+			return fmt.Errorf("failed to recreate files bucket: %w", err)
+		}
+
+		// Write new entries
+		for _, entry := range entries {
+			data, err := json.Marshal(entry)
+			if err != nil {
+				return fmt.Errorf("failed to marshal entry %s: %w", entry.Path, err)
+			}
+			if err := newB.Put([]byte(entry.Path), data); err != nil {
+				return fmt.Errorf("failed to put entry %s: %w", entry.Path, err)
+			}
+		}
+
+		return nil
+	})
+}

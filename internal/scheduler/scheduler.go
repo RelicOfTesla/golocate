@@ -145,8 +145,11 @@ func (s *Scheduler) rebuild() {
 	newIdx := builder.Index()
 	count := newIdx.Len()
 
-	// TODO: Implement atomic index replacement in database
-	// For now, we just log the result
+	// Atomically replace all entries in the database
+	if err := s.db.ReplaceAllEntries(newIdx.GetAllEntries()); err != nil {
+		log.Printf("failed to replace index in database: %v", err)
+		return
+	}
 
 	elapsed := time.Since(start)
 	s.mu.Lock()

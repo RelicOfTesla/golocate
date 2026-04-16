@@ -359,6 +359,19 @@ func (idx *Index) Len() int {
 	return len(idx.entries)
 }
 
+// GetAllEntries returns all entries in the index.
+// The returned slice is a shallow copy of the internal entries map.
+func (idx *Index) GetAllEntries() []*Entry {
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
+
+	entries := make([]*Entry, 0, len(idx.entries))
+	for _, entry := range idx.entries {
+		entries = append(entries, entry)
+	}
+	return entries
+}
+
 // SearchOptions contains options for searching.
 type SearchOptions struct {
 	// Pattern is the search pattern (regex path, normal path, or wildcard path)
