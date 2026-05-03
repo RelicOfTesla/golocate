@@ -62,14 +62,30 @@ func NewIndex() *Index {
 	}
 }
 
+// NewIndexWithCapacity creates a new file index with pre-allocated capacity.
+// This is more efficient for large indexes as it avoids map rehashing.
+func NewIndexWithCapacity(capacity int) *Index {
+	return &Index{
+		entries:    make(map[string]*Entry, capacity),
+		byName:     make(map[string][]*Entry, capacity/10), // Assume avg 10 files share same name
+		pathTrie:   NewTrie(),
+		nameFilter: make(map[string]bool, capacity),
+	}
+}
+
 // Add adds an entry to the index.
 func (idx *Index) Add(entry *Entry) {
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
 	
+	idx.addLocked(entry)
+}
+
+// addLocked adds an entry to the index without locking (caller must hold lock).
+func (idx *Index) addLocked(entry *Entry) {
 	// Remove old entry if exists
 	if old, exists := idx.entries[entry.Path]; exists {
-		idx.removeFromNameIndex(old)
+		idx.removeFromNameIndexLocked(old)
 		// Remove from Patricia Trie (note: Patricia Trie doesn't support delete, will rebuild if needed)
 	}
 	
@@ -87,6 +103,17 @@ func (idx *Index) Add(entry *Entry) {
 	})
 }
 
+// AddBatch adds multiple entries to the index efficiently.
+// This is more efficient than calling Add multiple times as it only acquires the lock once.
+func (idx *Index) AddBatch(entries []*Entry) {
+	idx.mu.Lock()
+	defer idx.mu.Unlock()
+	
+	for _, entry := range entries {
+		idx.addLocked(entry)
+	}
+}
+
 // Remove removes an entry from the index.
 func (idx *Index) Remove(path string) {
 	idx.mu.Lock()
@@ -100,6 +127,11 @@ func (idx *Index) Remove(path string) {
 
 // removeFromNameIndex removes an entry from the name index.
 func (idx *Index) removeFromNameIndex(entry *Entry) {
+	idx.removeFromNameIndexLocked(entry)
+}
+
+// removeFromNameIndexLocked removes an entry from the name index without locking.
+func (idx *Index) removeFromNameIndexLocked(entry *Entry) {
 	entries := idx.byName[entry.Name]
 	for i, e := range entries {
 		if e.Path == entry.Path {
