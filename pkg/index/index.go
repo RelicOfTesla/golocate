@@ -41,6 +41,10 @@ type Entry struct {
 	Size int64
 	// ModTime is the modification time
 	ModTime time.Time
+	// nameLower is the precomputed lowercase name for case-insensitive search
+	nameLower string
+	// pathLower is the precomputed lowercase path for case-insensitive search
+	pathLower string
 }
 
 // Index is the file index.
@@ -48,8 +52,6 @@ type Index struct {
 	mu      sync.RWMutex
 	entries map[string]*Entry // path -> Entry
 	byName  map[string][]*Entry // name -> []Entry (for basename search)
-	pathTrie *Trie    // Patricia Trie for fast path prefix search
-	nameFilter map[string]bool // Bloom filter for fast name filtering (simplified)
 }
 
 // NewIndex creates a new file index.
@@ -57,8 +59,6 @@ func NewIndex() *Index {
 	return &Index{
 		entries:    make(map[string]*Entry),
 		byName:     make(map[string][]*Entry),
-		pathTrie:   NewTrie(),
-		nameFilter: make(map[string]bool),
 	}
 }
 
@@ -68,8 +68,6 @@ func NewIndexWithCapacity(capacity int) *Index {
 	return &Index{
 		entries:    make(map[string]*Entry, capacity),
 		byName:     make(map[string][]*Entry, capacity/10), // Assume avg 10 files share same name
-		pathTrie:   NewTrie(),
-		nameFilter: make(map[string]bool, capacity),
 	}
 }
 
@@ -83,10 +81,13 @@ func (idx *Index) Add(entry *Entry) {
 
 // addLocked adds an entry to the index without locking (caller must hold lock).
 func (idx *Index) addLocked(entry *Entry) {
+	// Precompute lowercase strings for case-insensitive search
+	entry.nameLower = strings.ToLower(entry.Name)
+	entry.pathLower = strings.ToLower(entry.Path)
+	
 	// Remove old entry if exists
 	if old, exists := idx.entries[entry.Path]; exists {
 		idx.removeFromNameIndexLocked(old)
-		// Remove from Patricia Trie (note: Patricia Trie doesn't support delete, will rebuild if needed)
 	}
 	
 	// Add to path index
@@ -94,13 +95,6 @@ func (idx *Index) addLocked(entry *Entry) {
 	
 	// Add to name index
 	idx.byName[entry.Name] = append(idx.byName[entry.Name], entry)
-	
-	// Add to Patricia Trie
-	idx.pathTrie.Insert(entry.Path, &Entry{
-		Path: entry.Path,
-		Name: entry.Name,
-		Size: entry.Size,
-	})
 }
 
 // AddBatch adds multiple entries to the index efficiently.
@@ -176,12 +170,16 @@ func (idx *Index) Search(opts SearchOptions) []*Entry {
 	query := opts.Pattern
 	var results []*Entry
 	
+	// Precompute lowercase query for case-insensitive search
+	queryLower := strings.ToLower(query)
+	
 	// Decide search target based on Basename
 	if opts.Basename {
 		// Search only in file names
 		for name, entries := range idx.byName {
 			if opts.IgnoreCase {
-				if strings.Contains(strings.ToLower(name), strings.ToLower(query)) {
+				// Use first entry's nameLower (all entries with same name have same nameLower)
+				if len(entries) > 0 && strings.Contains(entries[0].nameLower, queryLower) {
 					results = append(results, entries...)
 				}
 			} else {
@@ -194,7 +192,8 @@ func (idx *Index) Search(opts SearchOptions) []*Entry {
 		// Search in full paths
 		for path, entry := range idx.entries {
 			if opts.IgnoreCase {
-				if strings.Contains(strings.ToLower(path), strings.ToLower(query)) {
+				// Use precomputed lowercase path
+				if strings.Contains(entry.pathLower, queryLower) {
 					results = append(results, entry)
 				}
 			} else {
