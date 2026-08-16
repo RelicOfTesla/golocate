@@ -5,11 +5,14 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/RelicOfTesla/golocate/internal/client"
 	"github.com/RelicOfTesla/golocate/pkg/errors"
 	"github.com/RelicOfTesla/golocate/pkg/index"
+	"github.com/RelicOfTesla/golocate/pkg/search"
 	coreglib "github.com/diamondburned/gotk4/pkg/core/glib"
 	"github.com/diamondburned/gotk4/pkg/gdk/v4"
 	"github.com/diamondburned/gotk4/pkg/glib/v2"
@@ -19,6 +22,10 @@ import (
 
 // Socket path for the client connection
 var socketPath string
+
+// mainWindow is the top-level application window, used as dialog parent
+// (gotk4's NewMessageDialog requires a non-nil parent Window).
+var mainWindow *gtk.ApplicationWindow
 
 // Pagination state
 type PaginationState struct {
@@ -56,7 +63,83 @@ var (
 var (
 	resultsStore *gtk.ListStore
 	resultsTree  *gtk.TreeView
+	nameCol      *gtk.TreeViewColumn
+	pathCol      *gtk.TreeViewColumn
+	sizeCol      *gtk.TreeViewColumn
+	timeCol      *gtk.TreeViewColumn
 )
+
+// Current page results + sort state (for click-to-sort and export)
+var (
+	currentEntries []*index.Entry
+	sortField      string // "", "name", "path", "size", "time"
+	sortOrder      string // "asc", "desc"
+)
+
+// Search history state
+var (
+	searchHistory []string
+	historyStore  *gtk.ListStore
+	searchEntry   *gtk.Entry
+)
+
+// Advanced search options
+var (
+	ignoreCaseBtn *gtk.CheckButton
+	regexBtn      *gtk.CheckButton
+	exportBtn     *gtk.Button
+)
+
+// historyFile returns the path of the search-history file.
+func historyFile() string {
+	base, err := os.UserCacheDir()
+	if err != nil {
+		base = os.TempDir()
+	}
+	return base + "/golocate/search_history.txt"
+}
+
+// loadHistory loads saved search history from disk.
+func loadHistory() {
+	searchHistory = nil
+	data, err := os.ReadFile(historyFile())
+	if err != nil {
+		return
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" && len(searchHistory) < 20 {
+			searchHistory = append(searchHistory, line)
+		}
+	}
+}
+
+// saveHistory persists search history to disk.
+func saveHistory() {
+	dir := filepath.Dir(historyFile())
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return
+	}
+	_ = os.WriteFile(historyFile(), []byte(histories()), 0644)
+}
+
+// histories joins the history into a text blob.
+func histories() string {
+	out := ""
+	for _, h := range searchHistory {
+		out += h + "\n"
+	}
+	return out
+}
+
+// refreshHistoryModel pushes history entries into the completion store.
+func refreshHistoryModel() {
+	historyStore.Clear()
+	for _, h := range searchHistory {
+		iter := historyStore.Append()
+		historyStore.SetValue(iter, 0, coreglib.NewValue(h))
+	}
+}
 
 func main() {
 	app := gtk.NewApplication("com.github.golocate", 0)
@@ -87,6 +170,7 @@ func main() {
 func createMainWindow(app *gtk.Application) {
 	// Create main window
 	win := gtk.NewApplicationWindow(app)
+	mainWindow = win
 	win.SetTitle("golocate - Fast File Search")
 	win.SetDefaultSize(900, 700)
 	
@@ -101,10 +185,20 @@ func createMainWindow(app *gtk.Application) {
 	searchBox := gtk.NewBox(gtk.OrientationHorizontal, 10)
 	
 	// Create search entry
-	entry := gtk.NewEntry()
-	entry.SetPlaceholderText("Search files...")
-	entry.SetHExpand(true)
-	searchBox.Append(entry)
+	searchEntry = gtk.NewEntry()
+	searchEntry.SetPlaceholderText("Search files...")
+	searchEntry.SetHExpand(true)
+	searchBox.Append(searchEntry)
+	entry := searchEntry
+	
+	// Search history completion
+	historyStore = gtk.NewListStore([]coreglib.Type{coreglib.TypeString})
+	loadHistory()
+	refreshHistoryModel()
+	completion := gtk.NewEntryCompletion()
+	completion.SetModel(historyStore)
+	completion.SetTextColumn(0)
+	entry.SetCompletion(completion)
 	
 	// Create search button
 	searchBtn := gtk.NewButtonWithLabel("Search")
@@ -117,6 +211,20 @@ func createMainWindow(app *gtk.Application) {
 	// Create config button
 	configBtn := gtk.NewButtonWithLabel("Config")
 	searchBox.Append(configBtn)
+	
+	// Advanced search options
+	ignoreCaseBtn = gtk.NewCheckButtonWithLabel("忽略大小写")
+	ignoreCaseBtn.SetActive(false)
+	searchBox.Append(ignoreCaseBtn)
+	
+	regexBtn = gtk.NewCheckButtonWithLabel("正则")
+	regexBtn.SetActive(false)
+	searchBox.Append(regexBtn)
+	
+	// Export results button (saves current page as CSV)
+	exportBtn = gtk.NewButtonWithLabel("导出 CSV")
+	exportBtn.Connect("clicked", exportResults)
+	searchBox.Append(exportBtn)
 	
 	mainBox.Append(searchBox)
 	
@@ -136,36 +244,44 @@ func createMainWindow(app *gtk.Application) {
 	resultsTree = gtk.NewTreeViewWithModel(resultsStore)
 	resultsTree.SetHeadersVisible(true)
 	
-	nameCol := gtk.NewTreeViewColumn()
+	nameCol = gtk.NewTreeViewColumn()
 	nameCol.SetTitle("文件名")
 	nameCol.SetExpand(true)
 	nameRenderer := gtk.NewCellRendererText()
 	nameCol.PackStart(nameRenderer, false)
 	nameCol.AddAttribute(nameRenderer, "text", 0)
+	nameCol.ConnectClicked(func() { toggleSort("name") })
 	resultsTree.AppendColumn(nameCol)
 	
-	pathCol := gtk.NewTreeViewColumn()
+	pathCol = gtk.NewTreeViewColumn()
 	pathCol.SetTitle("路径")
 	pathCol.SetExpand(true)
 	pathRenderer := gtk.NewCellRendererText()
 	pathCol.PackStart(pathRenderer, false)
 	pathCol.AddAttribute(pathRenderer, "text", 1)
+	pathCol.ConnectClicked(func() { toggleSort("path") })
 	resultsTree.AppendColumn(pathCol)
 	
-	sizeCol := gtk.NewTreeViewColumn()
+	sizeCol = gtk.NewTreeViewColumn()
 	sizeCol.SetTitle("大小")
 	sizeCol.SetResizable(true)
 	sizeRenderer := gtk.NewCellRendererText()
 	sizeCol.PackStart(sizeRenderer, false)
 	sizeCol.AddAttribute(sizeRenderer, "text", 2)
+	sizeCol.SetSizing(gtk.TreeViewColumnFixed)
+	sizeCol.SetFixedWidth(100)
+	sizeCol.ConnectClicked(func() { toggleSort("size") })
 	resultsTree.AppendColumn(sizeCol)
 	
-	timeCol := gtk.NewTreeViewColumn()
+	timeCol = gtk.NewTreeViewColumn()
 	timeCol.SetTitle("修改时间")
 	timeCol.SetResizable(true)
 	timeRenderer := gtk.NewCellRendererText()
 	timeCol.PackStart(timeRenderer, false)
 	timeCol.AddAttribute(timeRenderer, "text", 3)
+	timeCol.SetSizing(gtk.TreeViewColumnFixed)
+	timeCol.SetFixedWidth(150)
+	timeCol.ConnectClicked(func() { toggleSort("time") })
 	resultsTree.AppendColumn(timeCol)
 	
 	scrolled.SetChild(resultsTree)
@@ -203,6 +319,20 @@ func createMainWindow(app *gtk.Application) {
 			pagination.currentPage = 1
 			pagination.currentQuery = query
 		}
+		
+		// Save to search history (most recent first, deduped)
+		var rest []string
+		for _, h := range searchHistory {
+			if h != query {
+				rest = append(rest, h)
+			}
+		}
+		searchHistory = append([]string{query}, rest...)
+		if len(searchHistory) > 20 {
+			searchHistory = searchHistory[:20]
+		}
+		refreshHistoryModel()
+		saveHistory()
 		
 		performSearch(c, query)
 	}
@@ -401,8 +531,10 @@ func performSearch(c *client.Client, query string) {
 	
 	// Search
 	result, err := c.SearchFast(query, index.SearchOptions{
-		Limit:  pagination.pageSize,
-		Offset: offset,
+		Limit:       pagination.pageSize,
+		Offset:      offset,
+		IgnoreCase:  ignoreCaseBtn.Active(),
+		PatternMode: modeFromUI(),
 	})
 	
 	pagination.isLoading = false
@@ -428,13 +560,11 @@ func performSearch(c *client.Client, query string) {
 		return
 	}
 	
-	for _, r := range result.Entries {
-		iter := resultsStore.Append()
-		resultsStore.SetValue(iter, 0, coreglib.NewValue(r.Name))
-		resultsStore.SetValue(iter, 1, coreglib.NewValue(r.Path))
-		resultsStore.SetValue(iter, 2, coreglib.NewValue(formatSize(r.Size)))
-		resultsStore.SetValue(iter, 3, coreglib.NewValue(formatModTime(r.ModTime)))
+	currentEntries = result.Entries
+	if sortField != "" {
+		applySort()
 	}
+	populateTable(resultsStore, currentEntries)
 	
 	// Update pagination state
 	pagination.totalResults = result.Total
@@ -469,6 +599,105 @@ func formatModTime(t time.Time) string {
 		return "-"
 	}
 	return t.Format("2006-01-02 15:04")
+}
+
+// modeFromUI maps the regex checkbox to a search pattern mode.
+// Empty means auto-detect on the server (wildcard vs substring).
+func modeFromUI() index.PatternMode {
+	if regexBtn != nil && regexBtn.Active() {
+		return index.PatternModeExtendedRegex
+	}
+	return index.PatternMode("")
+}
+
+// populateTable fills the results tree store from entries.
+func populateTable(store *gtk.ListStore, entries []*index.Entry) {
+	store.Clear()
+	for _, r := range entries {
+		iter := store.Append()
+		store.SetValue(iter, 0, coreglib.NewValue(r.Name))
+		store.SetValue(iter, 1, coreglib.NewValue(r.Path))
+		store.SetValue(iter, 2, coreglib.NewValue(formatSize(r.Size)))
+		store.SetValue(iter, 3, coreglib.NewValue(formatModTime(r.ModTime)))
+	}
+}
+
+// toggleSort toggles field/order on header click and re-renders.
+func toggleSort(field string) {
+	if sortField == field {
+		if sortOrder == "asc" {
+			sortOrder = "desc"
+		} else {
+			sortOrder = "asc"
+		}
+	} else {
+		sortField = field
+		sortOrder = "asc"
+	}
+	applySort()
+}
+
+// applySort sorts the current page entries in place and repopulates the table.
+func applySort() {
+	if sortField == "" {
+		return
+	}
+	sortOpts := search.ParseSort(sortField + ":" + sortOrder)
+	search.Sort(currentEntries, sortOpts)
+	populateTable(resultsStore, currentEntries)
+	updateSortHeader()
+}
+
+// exportResults writes the current page rows to a CSV file in Downloads.
+func exportResults() {
+	if len(currentEntries) == 0 {
+		resultsInfoLabel.SetText("没有可导出的结果")
+		return
+	}
+	dir, err := os.UserHomeDir()
+	if err != nil {
+		dir = os.TempDir()
+	}
+	dir = filepath.Join(dir, "Downloads")
+	_ = os.MkdirAll(dir, 0755)
+	path := filepath.Join(dir, fmt.Sprintf("golocate_export_%s.csv", time.Now().Format("20060102_150405")))
+	
+	var sb strings.Builder
+	sb.WriteString("文件名,路径,大小,修改时间\n")
+	for _, r := range currentEntries {
+		sb.WriteString(fmt.Sprintf("%s,%s,%s,%s\n",
+			r.Name, r.Path, formatSize(r.Size), formatModTime(r.ModTime)))
+	}
+	if err := os.WriteFile(path, []byte(sb.String()), 0644); err != nil {
+		resultsInfoLabel.SetText(fmt.Sprintf("导出失败: %v", err))
+		return
+	}
+	resultsInfoLabel.SetText(fmt.Sprintf("已导出 %d 条到 %s", len(currentEntries), path))
+}
+
+// updateSortHeader shows the current sort direction in the column titles.
+func updateSortHeader() {
+	arrow := ""
+	if sortField != "" {
+		if sortOrder == "asc" {
+			arrow = " ↑"
+		} else {
+			arrow = " ↓"
+		}
+	}
+	names := map[string]*gtk.TreeViewColumn{
+		"name": nameCol, "path": pathCol, "size": sizeCol, "time": timeCol,
+	}
+	titles := map[string]string{
+		"name": "文件名", "path": "路径", "size": "大小", "time": "修改时间",
+	}
+	for f, col := range names {
+		if f == sortField {
+			col.SetTitle(titles[f] + arrow)
+		} else {
+			col.SetTitle(titles[f])
+		}
+	}
 }
 
 func updatePaginationUI() {
@@ -655,7 +884,7 @@ func showConfigDialog(parent *gtk.ApplicationWindow, c *client.Client) {
 // showErrorDialog shows an error dialog.
 func showErrorDialog(message string) {
 	dialog := gtk.NewMessageDialog(
-		nil,
+		&mainWindow.Window,
 		gtk.DialogDestroyWithParent,
 		gtk.MessageError,
 		gtk.ButtonsOK,
@@ -671,7 +900,7 @@ func showErrorDialog(message string) {
 // showInfoDialog shows an info dialog.
 func showInfoDialog(message string) {
 	dialog := gtk.NewMessageDialog(
-		nil,
+		&mainWindow.Window,
 		gtk.DialogDestroyWithParent,
 		gtk.MessageInfo,
 		gtk.ButtonsOK,
