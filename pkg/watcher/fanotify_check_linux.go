@@ -4,7 +4,7 @@ package watcher
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"strings"
 	"syscall"
@@ -111,12 +111,12 @@ func PrintFanotifyWarning() {
 	cap := CheckFanotifySupport()
 	if !cap.Supported {
 		// 简单的 fallback 提醒
-		log.Printf("WARNING: Using fsnotify (inotify) as fallback (fanotify not available)")
+		slog.Warn("Using fsnotify (inotify) as fallback (fanotify not available)")
 		// 详细的 sudo/cap_sys_admin 提示
-		log.Printf("WARNING: Using fsnotify (inotify) instead of fanotify. Reason: %s", cap.Reason)
-		log.Printf("WARNING: To use fanotify for better performance:")
-		log.Printf("WARNING:   sudo setcap cap_sys_admin+ep ./bin/golocated")
-		log.Printf("WARNING:   or run as root: sudo ./bin/golocated --service")
+		slog.Warn("Using fsnotify (inotify) instead of fanotify", "reason", cap.Reason)
+		slog.Warn("To use fanotify for better performance")
+		slog.Warn("sudo setcap cap_sys_admin+ep ./bin/golocated")
+		slog.Warn("or run as root: sudo ./bin/golocated --service")
 	}
 }
 

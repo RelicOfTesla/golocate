@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"strings"
 )
 
@@ -60,7 +60,7 @@ func (p *jsonrpcProtocol) ParseRequestWithRemainder(reader *bufio.Reader) (*Requ
 	}
 	
 	// Log the received data for debugging
-	log.Printf("[JSON-RPC Protocol] Received: %s", string(data))
+	slog.Debug("Received", "data", string(data))
 	
 	// Handle TCP sticky packets: split concatenated JSON messages
 	messages, jsonRemainder := SplitJSONMessagesWithRemainder(data)
@@ -72,12 +72,12 @@ func (p *jsonrpcProtocol) ParseRequestWithRemainder(reader *bufio.Reader) (*Requ
 	
 	// Parse the first JSON message
 	firstMsg := messages[0]
-	log.Printf("[JSON-RPC Protocol] Parsing first message: %s", string(firstMsg))
+	slog.Debug("Parsing first message", "message", string(firstMsg))
 	
 	// Parse JSON-RPC
 	var req jsonrpcRequest
 	if err := json.Unmarshal(firstMsg, &req); err != nil {
-		log.Printf("[JSON-RPC Protocol] Parse error: %v", err)
+		slog.Error("Parse error", "error", err)
 		return nil, jsonRemainder, err
 	}
 	
@@ -91,8 +91,12 @@ func (p *jsonrpcProtocol) ParseRequestWithRemainder(reader *bufio.Reader) (*Requ
 		ignoreCase = req.Params.IgnoreCase
 		limit = req.Params.Limit
 	}
-	log.Printf("[JSON-RPC Protocol] Parsed: method=%s, content=%s, pattern_mode=%s, ignore_case=%v, limit=%d", 
-		req.Method, content, patternMode, ignoreCase, limit)
+	slog.Debug("Parsed",
+		"method", req.Method,
+		"content", content,
+		"pattern_mode", patternMode,
+		"ignore_case", ignoreCase,
+		"limit", limit)
 	
 	// Check for more data in the reader (mixed protocol sticky packet)
 	var remainder []byte
@@ -105,10 +109,10 @@ func (p *jsonrpcProtocol) ParseRequestWithRemainder(reader *bufio.Reader) (*Requ
 		remainingData := make([]byte, reader.Buffered())
 		n, err := reader.Read(remainingData)
 		if err != nil && err != io.EOF {
-			log.Printf("[JSON-RPC Protocol] Error reading remaining data: %v", err)
+			slog.Error("Error reading remaining data", "error", err)
 		} else if n > 0 {
 			remainder = remainingData[:n]
-			log.Printf("[JSON-RPC Protocol] Detected mixed protocol sticky packet, remainder: %d bytes", len(remainder))
+			slog.Debug("Detected mixed protocol sticky packet", "remainder_bytes", len(remainder))
 		}
 	}
 	
@@ -169,7 +173,7 @@ func (p *jsonrpcProtocol) ParseResponse(reader *bufio.Reader) (*Response, error)
 		return nil, err
 	}
 	
-	log.Printf("[JSON-RPC Protocol] ParseResponse received data: %s", string(data))
+	slog.Debug("ParseResponse received data", "data", string(data))
 	
 	// Parse JSON-RPC
 	var resp jsonrpcResponse
@@ -177,7 +181,7 @@ func (p *jsonrpcProtocol) ParseResponse(reader *bufio.Reader) (*Response, error)
 		return nil, err
 	}
 	
-	log.Printf("[JSON-RPC Protocol] ParseResponse parsed: ID=%v, Result=%v, Error=%v", resp.ID, resp.Result, resp.Error)
+	slog.Debug("ParseResponse parsed", "id", resp.ID, "result", resp.Result, "error", resp.Error)
 	
 	// Handle error
 	if resp.Error != nil {
@@ -191,7 +195,7 @@ func (p *jsonrpcProtocol) ParseResponse(reader *bufio.Reader) (*Response, error)
 	if resp.Result != nil {
 		// Try to parse as response with count and paths
 		if resultMap, ok := resp.Result.(map[string]any); ok {
-			log.Printf("[JSON-RPC Protocol] ParseResponse resultMap: %v", resultMap)
+			slog.Debug("ParseResponse resultMap", "resultMap", resultMap)
 			
 			count := 0
 			if c, ok := resultMap["count"].(float64); ok {
@@ -220,7 +224,7 @@ func (p *jsonrpcProtocol) ParseResponse(reader *bufio.Reader) (*Response, error)
 				Result: resultMap, // Keep original result for status, get-config, etc.
 			}
 			
-			log.Printf("[JSON-RPC Protocol] ParseResponse returning: ID=%v, Count=%d, Total=%d, Result=%v", result.ID, result.Count, result.Total, result.Result)
+			slog.Debug("ParseResponse returning", "id", result.ID, "count", result.Count, "total", result.Total, "result", result.Result)
 			
 			return result, nil
 		}
@@ -270,7 +274,7 @@ func (p *jsonrpcProtocol) WriteResponse(writer *bufio.Writer, resp *Response) er
 		return err
 	}
 	
-	log.Printf("[JSON-RPC Protocol] WriteResponse sending JSON: %s", string(data))
+	slog.Debug("WriteResponse sending JSON", "data", string(data))
 	
 	// Write to writer with newline delimiter
 	if _, err := writer.Write(data); err != nil {

@@ -6,7 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"net"
 	"sync"
 	"time"
@@ -205,12 +205,12 @@ func (p *defaultMessageParser) SetDefaultProtocol(protoType ProtocolType) {
 // createReplyFunc 创建回复函数
 func (p *defaultMessageParser) createReplyFunc(conn net.Conn, proto protocol.Protocol, req *protocol.Request) ReplyFunc {
 	return func(ctx context.Context, messageID string, response any) error {
-		log.Printf("[ReplyFunc] Called with response: %+v", response)
+		slog.Debug("called with response", "response", response)
 		
 		// 检查上下文是否已取消
 		select {
 		case <-ctx.Done():
-			log.Printf("[ReplyFunc] Context cancelled: %v", ctx.Err())
+			slog.Debug("context cancelled", "error", ctx.Err())
 			return ctx.Err()
 		default:
 		}
@@ -257,16 +257,16 @@ func (p *defaultMessageParser) createReplyFunc(conn net.Conn, proto protocol.Pro
 			resp.ID = req.ID
 		}
 
-		log.Printf("[ReplyFunc] Sending response via protocol: %+v", resp)
+		slog.Debug("sending response via protocol", "response", resp)
 
 		// 使用通用的 ResponseWriter 发送响应
 		writer := protocol.NewResponseWriter(conn, proto)
 		if err := writer.WriteResponse(ctx, resp); err != nil {
-			log.Printf("[ReplyFunc] WriteResponse failed: %v", err)
+			slog.Error("write response failed", "error", err)
 			return fmt.Errorf("write response failed: %w", err)
 		}
 
-		log.Printf("[ReplyFunc] Response sent successfully")
+		slog.Debug("response sent successfully")
 		return nil
 	}
 }

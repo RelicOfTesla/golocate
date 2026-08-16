@@ -3,7 +3,7 @@ package scheduler
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"runtime"
 	"sync"
 	"time"
@@ -78,8 +78,7 @@ func NewScheduler(cfg *config.Config, db *database.DB, scfg *SchedulerConfig) *S
 
 // Start starts the periodic index rebuilding.
 func (s *Scheduler) Start() {
-	log.Printf("starting index scheduler: interval=%v, throttle=%v, workers=%d",
-		s.interval, s.throttle, s.workerCnt)
+	slog.Info("starting index scheduler", "interval", s.interval, "throttle", s.throttle, "workers", s.workerCnt)
 
 	s.wg.Add(1)
 	go s.loop()
@@ -89,7 +88,7 @@ func (s *Scheduler) Start() {
 func (s *Scheduler) Stop() {
 	s.cancel()
 	s.wg.Wait()
-	log.Println("index scheduler stopped")
+	slog.Info("index scheduler stopped")
 }
 
 // loop runs the periodic rebuild loop.
@@ -116,7 +115,7 @@ func (s *Scheduler) loop() {
 // rebuild performs a full index rebuild.
 func (s *Scheduler) rebuild() {
 	start := time.Now()
-	log.Printf("starting index rebuild (throttle=%v)", s.throttle)
+	slog.Info("starting index rebuild", "throttle", s.throttle)
 
 	// Build new index
 	builder := index.NewBuilder(index.BuilderOptions{
@@ -131,12 +130,12 @@ func (s *Scheduler) rebuild() {
 		defer cancel()
 
 		if err := builder.BuildThrottled(ctx, s.cfg.Directories, s.throttleDelay()); err != nil {
-			log.Printf("index rebuild failed: %v", err)
+			slog.Error("index rebuild failed", "error", err)
 			return
 		}
 	} else {
 		if err := builder.Build(s.ctx, s.cfg.Directories); err != nil {
-			log.Printf("index rebuild failed: %v", err)
+			slog.Error("index rebuild failed", "error", err)
 			return
 		}
 	}
@@ -147,7 +146,7 @@ func (s *Scheduler) rebuild() {
 
 	// Atomically replace all entries in the database
 	if err := s.db.ReplaceAllEntries(newIdx.GetAllEntries()); err != nil {
-		log.Printf("failed to replace index in database: %v", err)
+		slog.Error("failed to replace index in database", "error", err)
 		return
 	}
 
@@ -156,7 +155,7 @@ func (s *Scheduler) rebuild() {
 	s.lastBuild = time.Now()
 	s.mu.Unlock()
 
-	log.Printf("index rebuild completed: %d entries in %v", count, elapsed)
+	slog.Info("index rebuild completed", "entries", count, "elapsed", elapsed)
 }
 
 // throttleDelay returns the delay between operations in throttle mode.
@@ -176,7 +175,7 @@ func (s *Scheduler) GetLastBuild() time.Time {
 
 // TriggerBuild triggers an immediate rebuild.
 func (s *Scheduler) TriggerBuild(throttle bool) {
-	log.Printf("manual index rebuild triggered (throttle=%v)", throttle)
+	slog.Info("manual index rebuild triggered", "throttle", throttle)
 
 	// Temporarily adjust throttle setting
 	originalThrottle := s.throttle

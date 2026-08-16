@@ -8,7 +8,7 @@ import (
 	"context"
 	"errors"
 	"io"
-	"log"
+	"log/slog"
 )
 
 // ========== 错误定义 ==========
@@ -316,7 +316,7 @@ func (r *defaultResponseReader) ReadResponse(ctx context.Context) (*Response, er
 	// Use SelectDecoder to determine protocol type
 	decoder, bufReader, err := SelectDecoder(r.reader)
 	if err != nil {
-		log.Printf("[ReadResponse] SelectDecoder failed: %v", err)
+		slog.Error("SelectDecoder failed", "error", err)
 		return nil, err
 	}
 
@@ -324,20 +324,20 @@ func (r *defaultResponseReader) ReadResponse(ctx context.Context) (*Response, er
 	var proto Protocol
 	switch decoder.(type) {
 	case *JSONDecoder:
-		log.Printf("[ReadResponse] Selected JSON-RPC protocol")
+		slog.Debug("Selected JSON-RPC protocol")
 		proto = NewJSONRPCProtocol()
 	default:
-		log.Printf("[ReadResponse] Selected Fast protocol")
+		slog.Debug("Selected Fast protocol")
 		proto = NewFastProtocol()
 	}
 
 	// Use protocol to read response
 	result, err := proto.ParseResponse(bufReader)
 	if err != nil {
-		log.Printf("[ReadResponse] ParseResponse failed: %v", err)
+		slog.Error("ParseResponse failed", "error", err)
 		return nil, err
 	}
-	log.Printf("[ReadResponse] ParseResponse success: ID=%v, Result=%v", result.ID, result.Result)
+	slog.Debug("ParseResponse success", "id", result.ID, "result", result.Result)
 	return result, nil
 }
 

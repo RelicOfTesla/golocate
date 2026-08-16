@@ -4,7 +4,7 @@ package main
 import (
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"os"
 
 	svc "github.com/RelicOfTesla/golocate/internal/svc"
@@ -42,8 +42,9 @@ var (
 	flagSort      string
 	
 	// Config flags
-	flagConfig  string
-	flagVerbose bool
+	flagConfig      string
+	flagVerbose     bool
+	flagVerboseType string
 	
 	// Connection flags
 	flagSocket string
@@ -89,6 +90,7 @@ With --service flag, it starts the background service that maintains file indexe
 	// Config flags
 	rootCmd.Flags().StringVarP(&flagConfig, "config", "c", "", "config file path")
 	rootCmd.Flags().BoolVarP(&flagVerbose, "verbose", "v", false, "verbose output")
+	rootCmd.Flags().StringVar(&flagVerboseType, "verbose-type", "text", "log format: text or json")
 	
 	// Connection flags
 	rootCmd.Flags().StringVarP(&flagSocket, "socket", "s", "", "socket path or named pipe name (default: system default)")
@@ -100,10 +102,12 @@ With --service flag, it starts the background service that maintains file indexe
 }
 
 func runDaemon(cmd *cobra.Command, args []string) {
+	initSlog(flagVerbose, flagVerboseType)
+
 	// Load config
 	cfg, err := config.Load(flagConfig)
 	if err != nil {
-		log.Printf("warning: failed to load config: %v", err)
+		slog.Warn("failed to load config", "error", err)
 	}
 	
 	// Handle service management
@@ -171,7 +175,8 @@ func installService(cfg *config.Config, user bool) {
 	
 	err := svc.Install()
 	if err != nil {
-		log.Fatalf("failed to install service: %v", err)
+		slog.Error("failed to install service", "error", err)
+		os.Exit(1)
 	}
 }
 
@@ -180,7 +185,8 @@ func uninstallService(cfg *config.Config) {
 	
 	err := svc.Uninstall()
 	if err != nil {
-		log.Fatalf("failed to uninstall service: %v", err)
+		slog.Error("failed to uninstall service", "error", err)
+		os.Exit(1)
 	}
 }
 
@@ -189,7 +195,8 @@ func startService(cfg *config.Config) {
 	
 	err := svc.Start()
 	if err != nil {
-		log.Fatalf("failed to start service: %v", err)
+		slog.Error("failed to start service", "error", err)
+		os.Exit(1)
 	}
 }
 
@@ -198,7 +205,8 @@ func stopService(cfg *config.Config) {
 	
 	err := svc.Stop()
 	if err != nil {
-		log.Fatalf("failed to stop service: %v", err)
+		slog.Error("failed to stop service", "error", err)
+		os.Exit(1)
 	}
 }
 
@@ -440,26 +448,21 @@ func getConfig(cfg *config.Config) {
 }
 
 func requestBuild(cfg *config.Config) {
-	if flagVerbose {
-		log.Printf("requesting index rebuild...")
-	}
-	
+	slog.Debug("requesting index rebuild")
+
 	// Use client to send build request to server
 	if err := cliclient.Build(flagSocket); err != nil {
 		errpkg.PrintFriendlyError(err)
-		log.Fatalf("failed to request index build")
+		slog.Error("failed to request index build")
+		os.Exit(1)
 	}
-	
-	if flagVerbose {
-		log.Printf("index build request sent successfully")
-	}
+
+	slog.Debug("index build request sent successfully")
 }
 
 // runAsClient runs as CLI client (same as golocate)
 func runAsClient(pattern string, cfg *config.Config) {
-	if flagVerbose {
-		log.Printf("searching for: %s", pattern)
-	}
+	slog.Debug("searching", "pattern", pattern)
 	
 	// Use client to connect to server (reuse golocate's client logic)
 	opts := cliclient.SearchOptions{
@@ -477,7 +480,8 @@ func runAsClient(pattern string, cfg *config.Config) {
 	results, err := cliclient.Search(opts)
 	if err != nil {
 		errpkg.PrintFriendlyError(err)
-		log.Fatalf("search failed")
+		slog.Error("search failed")
+		os.Exit(1)
 	}
 	
 	// Output results
@@ -497,7 +501,8 @@ func runAsServer(cfg *config.Config) {
 	// Run the service
 	err := svc.Run(cfg, configPath)
 	if err != nil {
-		log.Fatalf("failed to run daemon: %v", err)
+		slog.Error("failed to run daemon", "error", err)
+		os.Exit(1)
 	}
 }
 
@@ -748,4 +753,22 @@ func suggestConfigReload() {
 		fmt.Println("Or if running directly:")
 		fmt.Println("  kill the running process and start again with: golocated --service")
 	}
+}
+
+// initSlog configures the global slog logger.
+// Default format is text; --verbose-type=json selects JSON output.
+// -v lowers the level to Debug.
+func initSlog(verbose bool, verboseType string) {
+	level := slog.LevelInfo
+	if verbose {
+		level = slog.LevelDebug
+	}
+	opts := &slog.HandlerOptions{Level: level}
+	var handler slog.Handler
+	if verboseType == "json" {
+		handler = slog.NewJSONHandler(os.Stderr, opts)
+	} else {
+		handler = slog.NewTextHandler(os.Stderr, opts)
+	}
+	slog.SetDefault(slog.New(handler))
 }

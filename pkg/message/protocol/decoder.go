@@ -14,7 +14,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net"
 	"strconv"
 	"strings"
@@ -226,14 +226,14 @@ func SelectDecoder(reader io.Reader) (Decoder, *bufio.Reader, error) {
 		return nil, bufReader, fmt.Errorf("failed to peek first byte: %w", err)
 	}
 
-	log.Printf("[SelectDecoder] First non-whitespace byte: %c (0x%02x)", b[0], b[0])
+	slog.Debug("First non-whitespace byte", "char", string(b[0]), "hex", fmt.Sprintf("0x%02x", b[0]))
 
 	// Select decoder based on first non-whitespace byte
 	if b[0] == '{' {
-		log.Printf("[SelectDecoder] Selected JSONDecoder")
+		slog.Debug("Selected JSONDecoder")
 		return NewJSONDecoder(), bufReader, nil
 	}
-	log.Printf("[SelectDecoder] Selected FastDecoder")
+	slog.Debug("Selected FastDecoder")
 	return NewFastDecoder(), bufReader, nil
 }
 

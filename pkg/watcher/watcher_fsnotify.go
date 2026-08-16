@@ -3,7 +3,7 @@ package watcher
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
@@ -65,7 +65,7 @@ func newFsnotifyWatcher(ctx context.Context, cfg *Config) (Watcher, error) {
 				}
 			}
 		}
-		log.Printf("INFO: fsnotify directory traversal completed, watching %d directories", len(cfg.Directories))
+		slog.Info("fsnotify directory traversal completed", "count", len(cfg.Directories))
 		// 延迟 60 秒后打印详细的 fanotify WARNING（避免 log 并发问题）
 		go func() {
 			time.Sleep(60 * time.Second)
@@ -88,7 +88,7 @@ func (w *fsnotifyWatcher) Add(name string) error {
 		return fmt.Errorf("fsnotify add failed for %s: %w", name, err)
 	}
 	
-	log.Printf("fsnotify: watching %s", name)
+	slog.Info("watching", "path", name)
 	return nil
 }
 

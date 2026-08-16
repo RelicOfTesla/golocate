@@ -4,7 +4,7 @@ package main
 import (
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"os"
 
 	cliclient "github.com/RelicOfTesla/golocate/pkg/cli"
@@ -31,6 +31,7 @@ var (
 	flagSetConfig    string
 	flagSort         string
 	flagSocket       string
+	flagVerboseType  string
 )
 
 var rootCmd = &cobra.Command{
@@ -74,17 +75,21 @@ func init() {
 	rootCmd.Flags().BoolVar(&flagGetConfig, "get-config", false, "show server configuration")
 	rootCmd.Flags().StringVar(&flagSetConfig, "set-config", "", "set configuration (key=value or YAML content)")
 	rootCmd.Flags().BoolVarP(&flagVerbose, "verbose", "v", false, "verbose output")
+	rootCmd.Flags().StringVar(&flagVerboseType, "verbose-type", "text", "log format: text or json")
 	rootCmd.Flags().StringVar(&flagSort, "sort", "", "sort by: name, size, time, path (append :desc for descending)")
 	rootCmd.Flags().StringVarP(&flagSocket, "socket", "s", "", "socket path or named pipe name (default: system default)")
 }
 
 func main() {
 	if err := rootCmd.Execute(); err != nil {
-		log.Fatal(err)
+		slog.Error("command failed", "error", err)
+		os.Exit(1)
 	}
 }
 
 func runSearch(cmd *cobra.Command, args []string) {
+	initSlog(flagVerbose, flagVerboseType)
+
 	// Handle status
 	if flagStatus {
 		getStatus()
@@ -107,7 +112,8 @@ func runSearch(cmd *cobra.Command, args []string) {
 	if flagReloadConfig {
 		if err := cliclient.ReloadConfig(flagSocket); err != nil {
 			errpkg.PrintFriendlyError(err)
-			log.Fatalf("Failed to reload config")
+			slog.Error("failed to reload config")
+			os.Exit(1)
 		}
 		fmt.Println("Configuration reloaded successfully")
 		return
@@ -130,29 +136,25 @@ func runSearch(cmd *cobra.Command, args []string) {
 
 // buildIndex sends a build request to the server.
 func buildIndex() {
-	if flagVerbose {
-		log.Printf("requesting index rebuild...")
-	}
-	
+	slog.Debug("requesting index rebuild")
+
 	// Use client to send build request to server
 	if err := cliclient.Build(flagSocket); err != nil {
 		errpkg.PrintFriendlyError(err)
-		log.Fatalf("failed to request index build")
+		slog.Error("failed to request index build")
+		os.Exit(1)
 	}
-	
-	if flagVerbose {
-		log.Printf("index build request sent successfully")
-	}
+
+	slog.Debug("index build request sent successfully")
 }
 
 // searchIndex searches the file index via server.
 func searchIndex(pattern string) {
-	if flagVerbose {
-		log.Printf("searching for: %s", pattern)
-		log.Printf("options: basename=%v, ignore-case=%v, limit=%d, regex=%v", 
-			flagBasename, flagIgnoreCase, flagLimit, flagRegex||flagRegexp)
-	}
-	
+	slog.Debug("searching",
+		"pattern", pattern,
+		"basename", flagBasename, "ignore_case", flagIgnoreCase,
+		"limit", flagLimit, "regex", flagRegex||flagRegexp)
+
 	// Use client to connect to server
 	opts := cliclient.SearchOptions{
 		Pattern:    pattern,
@@ -169,7 +171,8 @@ func searchIndex(pattern string) {
 	results, err := cliclient.Search(opts)
 	if err != nil {
 		errpkg.PrintFriendlyError(err)
-		log.Fatalf("search failed")
+		slog.Error("search failed")
+		os.Exit(1)
 	}
 	
 	// Output results
@@ -178,14 +181,13 @@ func searchIndex(pattern string) {
 
 // getStatus gets and displays the server status.
 func getStatus() {
-	if flagVerbose {
-		log.Printf("getting server status...")
-	}
-	
+	slog.Debug("getting server status")
+
 	status, err := cliclient.Status(flagSocket)
 	if err != nil {
 		errpkg.PrintFriendlyError(err)
-		log.Fatalf("failed to get server status")
+		slog.Error("failed to get server status")
+		os.Exit(1)
 	}
 	
 	// Display server status
@@ -230,14 +232,13 @@ func getStatus() {
 
 // getConfig gets and displays the server configuration.
 func getConfig() {
-	if flagVerbose {
-		log.Printf("getting server configuration...")
-	}
-	
+	slog.Debug("getting server configuration")
+
 	config, err := cliclient.GetConfig(flagSocket)
 	if err != nil {
 		errpkg.PrintFriendlyError(err)
-		log.Fatalf("failed to get server configuration")
+		slog.Error("failed to get server configuration")
+		os.Exit(1)
 	}
 	
 	// Display configuration
@@ -327,10 +328,8 @@ func setConfig(arg string) {
 		os.Exit(1)
 	}
 	
-	if flagVerbose {
-		log.Printf("setting server configuration...")
-	}
-	
+	slog.Debug("setting server configuration")
+
 	// Check if it's YAML content or key=value format
 	var yamlContent string
 	if arg == "-" {
@@ -354,7 +353,8 @@ func setConfig(arg string) {
 	// Send to server
 	if err := cliclient.SetConfig(flagSocket, yamlContent); err != nil {
 		errpkg.PrintFriendlyError(err)
-		log.Fatalf("failed to set server configuration")
+		slog.Error("failed to set server configuration")
+		os.Exit(1)
 	}
 	
 	fmt.Println("Configuration updated successfully")
@@ -379,4 +379,22 @@ func findEqualSign(s string) int {
 	}
 	
 	return -1
+}
+
+// initSlog configures the global slog logger.
+// Default format is text; --verbose-type=json selects JSON output.
+// -v lowers the level to Debug so client request/response logs appear.
+func initSlog(verbose bool, verboseType string) {
+	level := slog.LevelInfo
+	if verbose {
+		level = slog.LevelDebug
+	}
+	opts := &slog.HandlerOptions{Level: level}
+	var handler slog.Handler
+	if verboseType == "json" {
+		handler = slog.NewJSONHandler(os.Stderr, opts)
+	} else {
+		handler = slog.NewTextHandler(os.Stderr, opts)
+	}
+	slog.SetDefault(slog.New(handler))
 }

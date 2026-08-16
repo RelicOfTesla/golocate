@@ -4,7 +4,7 @@ package svc
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/RelicOfTesla/golocate/internal/database"
@@ -40,7 +40,7 @@ func NewDaemonService(cfg *config.Config, configPath string) *DaemonService {
 
 // Start is called when the service starts.
 func (d *DaemonService) Start(s service.Service) error {
-	log.Println("starting golocate daemon...")
+	slog.Info("starting golocate daemon...")
 
 	// Ensure directories exist
 	if err := d.cfg.EnsureDirs(); err != nil {
@@ -85,15 +85,15 @@ func (d *DaemonService) Start(s service.Service) error {
 	d.server.SetBuildingStatus(true, buildStartTime)
 	
 	// Start Unix socket server
-	log.Printf("[DEBUG] Starting Unix socket server...")
+	slog.Debug("starting Unix socket server...")
 	if err := d.server.Start(); err != nil {
-		log.Printf("[ERROR] Failed to start server: %v", err)
+		slog.Error("failed to start server", "error", err)
 		d.watcher.Close()
 		d.db.Close()
 		return fmt.Errorf("failed to start server: %w", err)
 	}
 
-	log.Printf("Server started on %s", d.cfg.SocketPath)
+	slog.Info("Server started", "path", d.cfg.SocketPath)
 
 	// Build the index
 	if err := builder.Build(d.ctx, d.cfg.Directories); err != nil {
@@ -110,8 +110,8 @@ func (d *DaemonService) Start(s service.Service) error {
 	d.server.SetLastBuildTime(time.Now())
 	d.server.SetIndexedFileCount(builder.Index().Len())
 
-	log.Printf("indexed %d entries", builder.Index().Len())
-	log.Printf("watcher type: %s", watcher.GetWatcherType())
+	slog.Info("indexed entries", "count", builder.Index().Len())
+	slog.Info("watcher type", "type", watcher.GetWatcherType())
 
 	// Start file watching in background
 	go d.watchLoop()
@@ -121,7 +121,7 @@ func (d *DaemonService) Start(s service.Service) error {
 
 // Stop is called when the service stops.
 func (d *DaemonService) Stop(s service.Service) error {
-	log.Println("stopping golocate daemon...")
+	slog.Info("stopping golocate daemon...")
 
 	d.cancel()
 
@@ -137,7 +137,7 @@ func (d *DaemonService) Stop(s service.Service) error {
 		d.db.Close()
 	}
 
-	log.Println("daemon stopped")
+	slog.Info("daemon stopped")
 	return nil
 }
 
@@ -150,7 +150,7 @@ func (d *DaemonService) watchLoop() {
 		case event := <-d.watcher.Events():
 			d.updater.HandleEvent(event)
 		case err := <-d.watcher.Errors():
-			log.Printf("watcher error: %v", err)
+			slog.Error("watcher error", "error", err)
 		}
 	}
 }

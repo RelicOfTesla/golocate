@@ -3,7 +3,7 @@ package index
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -131,7 +131,7 @@ func (idx *Index) Merge(ctx context.Context, directories []string, ignoreMatcher
 		})
 		
 		if err != nil && err != context.Canceled {
-			log.Printf("warning: error walking %s: %v", dir, err)
+			slog.Warn("error walking directory", "path", dir, "error", err)
 		}
 	}
 	

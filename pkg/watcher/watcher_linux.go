@@ -5,7 +5,7 @@ package watcher
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
@@ -113,7 +113,7 @@ func (w *fanotifyWatcher) Add(name string) error {
 	}
 	
 	w.watched[name] = true
-	log.Printf("fanotify: watching %s", name)
+	slog.Info("watching", "path", name)
 	return nil
 }
 
@@ -134,7 +134,7 @@ func (w *fanotifyWatcher) AddRecursive(name string) error {
 	}
 	
 	w.watched[name] = true
-	log.Printf("fanotify: watching entire filesystem from %s", name)
+	slog.Info("watching entire filesystem", "path", name)
 	return nil
 }
 

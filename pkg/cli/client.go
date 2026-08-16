@@ -3,7 +3,7 @@ package cliclient
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 
 	"github.com/RelicOfTesla/golocate/internal/client"
@@ -216,6 +216,6 @@ func IsServerRunning(socketPath string) bool {
 
 // Fatal logs a fatal error and exits.
 func Fatal(format string, args ...any) {
-	log.Printf(format, args...)
+	slog.Error(fmt.Sprintf(format, args...))
 	os.Exit(1)
 }
