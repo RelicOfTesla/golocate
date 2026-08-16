@@ -125,11 +125,12 @@ func runSearch(cmd *cobra.Command, args []string) {
 		return
 	}
 	
-	// Handle search
-	pattern := ""
-	if len(args) > 0 {
-		pattern = args[0]
+	// Handle search: no pattern and no command flags means show help
+	if len(args) == 0 {
+		cmd.Help()
+		return
 	}
+	pattern := args[0]
 	
 	searchIndex(pattern)
 }
