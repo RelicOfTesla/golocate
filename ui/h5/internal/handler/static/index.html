@@ -310,6 +310,11 @@
                 <input type="number" id="debounceDelay" value="2500" min="100" max="10000" step="100" style="width: 100px;">
             </label>
             <button onclick="saveSettings()" style="margin-top: 10px;">保存设置</button>
+            <hr style="border-color:#444; margin:10px 0;">
+            <h3>服务器配置</h3>
+            <button onclick="loadServerConfig()" style="margin-bottom: 5px;">加载配置</button>
+            <textarea id="serverConfigArea" rows="10" style="width:100%; background:#1a1a1a; color:#e0e0e0; border:1px solid #333; font-family:monospace; font-size:12px; resize:vertical;" placeholder="点击「加载配置」读取当前配置，编辑后点「保存配置」"></textarea>
+            <button onclick="saveServerConfig()" style="margin-top: 5px;">保存配置</button>
         </div>
         
         <!-- Search Box -->
@@ -366,9 +371,15 @@
         
         <!-- Pagination -->
         <div class="pagination" id="paginationControls" style="display: none;">
+            <button id="firstPageBtn" onclick="goFirstPage()">首页</button>
             <button id="prevPageBtn" onclick="prevPage()">上一页</button>
             <span id="pageInfo">第 1/1 页</span>
             <button id="nextPageBtn" onclick="nextPage()">下一页</button>
+            <button id="lastPageBtn" onclick="goLastPage()">末页</button>
+            <label>
+                跳转 <input type="number" id="pageJump" min="1" style="width: 60px;">
+            </label>
+            <button onclick="jumpToPage()">GO</button>
         </div>
     </div>
     
@@ -505,6 +516,43 @@
             }
         }
         
+        // Keyboard Shortcuts
+        document.addEventListener('keydown', (e) => {
+            const target = e.target;
+            const typing = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
+            if (typing) {
+                if (e.key === 'Escape') {
+                    target.blur();
+                    searchInput.focus();
+                    e.preventDefault();
+                }
+                return;
+            }
+            switch (e.key) {
+                case '/':
+                    searchInput.focus();
+                    e.preventDefault();
+                    break;
+                case 'PageDown':
+                    if (!document.getElementById('nextPageBtn').disabled) nextPage();
+                    e.preventDefault();
+                    break;
+                case 'PageUp':
+                    if (!document.getElementById('prevPageBtn').disabled) prevPage();
+                    e.preventDefault();
+                    break;
+                case 'Home':
+                    if (!document.getElementById('firstPageBtn').disabled) goFirstPage();
+                    break;
+                case 'End':
+                    if (!document.getElementById('lastPageBtn').disabled) goLastPage();
+                    break;
+                case 'g':
+                    document.getElementById('pageJump').focus();
+                    break;
+            }
+        });
+        
         // Search Functions
         searchInput.addEventListener('input', () => {
             clearTimeout(debounceTimer);
@@ -603,8 +651,34 @@
             }
             controls.style.display = 'flex';
             document.getElementById('pageInfo').textContent = `第 ${currentPage}/${totalPages} 页`;
+            document.getElementById('firstPageBtn').disabled = currentPage <= 1;
             document.getElementById('prevPageBtn').disabled = currentPage <= 1;
             document.getElementById('nextPageBtn').disabled = currentPage >= totalPages;
+            document.getElementById('lastPageBtn').disabled = currentPage >= totalPages;
+        }
+        
+        function goFirstPage() {
+            if (currentPage <= 1) return;
+            currentPage = 1;
+            search();
+        }
+        
+        function goLastPage() {
+            const pageSize = parseInt(document.getElementById('maxResults').value) || 100;
+            const totalPages = currentTotal > 0 ? Math.ceil(currentTotal / pageSize) : 1;
+            if (currentPage >= totalPages) return;
+            currentPage = totalPages;
+            search();
+        }
+        
+        function jumpToPage() {
+            const pageSize = parseInt(document.getElementById('maxResults').value) || 100;
+            const totalPages = currentTotal > 0 ? Math.ceil(currentTotal / pageSize) : 1;
+            const n = parseInt(document.getElementById('pageJump').value);
+            if (!n || n < 1 || n > totalPages) return;
+            if (n === currentPage) return;
+            currentPage = n;
+            search();
         }
         
         function prevPage() {
@@ -742,6 +816,52 @@
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
+        }
+        
+        // Server configuration edit
+        function toSimpleYaml(obj) {
+            let out = '';
+            for (const k in obj) {
+                const v = obj[k];
+                if (Array.isArray(v)) {
+                    out += k + ':';
+                    if (v.length === 0) { out += ' []\n'; continue; }
+                    out += '\n';
+                    v.forEach(x => { out += '  - ' + x + '\n'; });
+                } else {
+                    out += k + ': ' + v + '\n';
+                }
+            }
+            return out;
+        }
+        
+        async function loadServerConfig() {
+            try {
+                const r = await fetch('/api/config');
+                const cfg = await r.json();
+                document.getElementById('serverConfigArea').value = toSimpleYaml(cfg);
+            } catch (err) {
+                alert('加载配置失败: ' + err.message);
+            }
+        }
+        
+        async function saveServerConfig() {
+            const yaml = document.getElementById('serverConfigArea').value;
+            if (!yaml.trim()) { alert('配置为空'); return; }
+            try {
+                const r = await fetch('/api/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ yaml: yaml })
+                });
+                if (!r.ok) {
+                    alert('保存失败: ' + (await r.text()));
+                    return;
+                }
+                alert('配置已保存');
+            } catch (err) {
+                alert('保存失败: ' + err.message);
+            }
         }
     </script>
 </body>
