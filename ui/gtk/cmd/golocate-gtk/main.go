@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"time"
 
 	"github.com/RelicOfTesla/golocate/internal/client"
 	"github.com/RelicOfTesla/golocate/pkg/errors"
 	"github.com/RelicOfTesla/golocate/pkg/index"
+	coreglib "github.com/diamondburned/gotk4/pkg/core/glib"
 	"github.com/diamondburned/gotk4/pkg/gdk/v4"
 	"github.com/diamondburned/gotk4/pkg/glib/v2"
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
@@ -48,6 +50,12 @@ var (
 	pageEntry        *gtk.Entry
 	resultsInfoLabel *gtk.Label
 	loadingSpinner   *gtk.Spinner
+)
+
+// Results table (name / path / size / modtime)
+var (
+	resultsStore *gtk.ListStore
+	resultsTree  *gtk.TreeView
 )
 
 func main() {
@@ -121,13 +129,46 @@ func createMainWindow(app *gtk.Application) {
 	scrolled := gtk.NewScrolledWindow()
 	scrolled.SetVExpand(true)
 	
-	// Create results view
-	resultsView := gtk.NewTextView()
-	resultsView.SetEditable(false)
-	resultsView.SetMonospace(true)
-	buffer := resultsView.Buffer()
-	buffer.SetText("Search results will appear here...")
-	scrolled.SetChild(resultsView)
+	// Create results table (name / path / size / modtime)
+	resultsStore = gtk.NewListStore([]coreglib.Type{
+		coreglib.TypeString, coreglib.TypeString, coreglib.TypeString, coreglib.TypeString,
+	})
+	resultsTree = gtk.NewTreeViewWithModel(resultsStore)
+	resultsTree.SetHeadersVisible(true)
+	
+	nameCol := gtk.NewTreeViewColumn()
+	nameCol.SetTitle("文件名")
+	nameCol.SetExpand(true)
+	nameRenderer := gtk.NewCellRendererText()
+	nameCol.PackStart(nameRenderer, false)
+	nameCol.AddAttribute(nameRenderer, "text", 0)
+	resultsTree.AppendColumn(nameCol)
+	
+	pathCol := gtk.NewTreeViewColumn()
+	pathCol.SetTitle("路径")
+	pathCol.SetExpand(true)
+	pathRenderer := gtk.NewCellRendererText()
+	pathCol.PackStart(pathRenderer, false)
+	pathCol.AddAttribute(pathRenderer, "text", 1)
+	resultsTree.AppendColumn(pathCol)
+	
+	sizeCol := gtk.NewTreeViewColumn()
+	sizeCol.SetTitle("大小")
+	sizeCol.SetResizable(true)
+	sizeRenderer := gtk.NewCellRendererText()
+	sizeCol.PackStart(sizeRenderer, false)
+	sizeCol.AddAttribute(sizeRenderer, "text", 2)
+	resultsTree.AppendColumn(sizeCol)
+	
+	timeCol := gtk.NewTreeViewColumn()
+	timeCol.SetTitle("修改时间")
+	timeCol.SetResizable(true)
+	timeRenderer := gtk.NewCellRendererText()
+	timeCol.PackStart(timeRenderer, false)
+	timeCol.AddAttribute(timeRenderer, "text", 3)
+	resultsTree.AppendColumn(timeCol)
+	
+	scrolled.SetChild(resultsTree)
 	
 	mainBox.Append(scrolled)
 	
@@ -152,7 +193,8 @@ func createMainWindow(app *gtk.Application) {
 	doSearch := func() {
 		query := entry.Text()
 		if query == "" {
-			buffer.SetText("Please enter a search query")
+			resultsInfoLabel.SetText("请输入搜索关键词")
+			resultsStore.Clear()
 			return
 		}
 		
@@ -162,7 +204,7 @@ func createMainWindow(app *gtk.Application) {
 			pagination.currentQuery = query
 		}
 		
-		performSearch(c, buffer, query)
+		performSearch(c, query)
 	}
 	
 	// Connect search button
@@ -177,10 +219,10 @@ func createMainWindow(app *gtk.Application) {
 		if err != nil {
 			// Check if it's a server not running error
 			if errors.IsServerNotRunningError(err) {
-				buffer.SetText(errors.GetFriendlyErrorMessage(err))
+				showErrorDialog(errors.GetFriendlyErrorMessage(err))
 				return
 			}
-			buffer.SetText(fmt.Sprintf("Error: %v", err))
+			showErrorDialog(fmt.Sprintf("Error: %v", err))
 			return
 		}
 		
@@ -197,11 +239,11 @@ func createMainWindow(app *gtk.Application) {
 		
 		var statusText string
 		if running {
-			statusText = fmt.Sprintf("Server Status: Running\n\nPID: %.0f\nIndex Size: %d files\nUptime: %s", pid, indexSize, uptime)
+			statusText = fmt.Sprintf("Server 状态: 运行中\n\nPID: %.0f\n索引文件数: %d\n运行时间: %s", pid, indexSize, uptime)
 		} else {
-			statusText = "Server Status: Not Running\n\nStart the server with: golocated --service"
+			statusText = "Server 状态: 未运行\n\n启动: golocated --service"
 		}
-		buffer.SetText(statusText)
+		showInfoDialog(statusText)
 	})
 	
 	// Connect config button
@@ -351,7 +393,7 @@ func focusPageEntry() {
 	}
 }
 
-func performSearch(c *client.Client, buffer *gtk.TextBuffer, query string) {
+func performSearch(c *client.Client, query string) {
 	pagination.isLoading = true
 	
 	// Calculate offset
@@ -365,31 +407,34 @@ func performSearch(c *client.Client, buffer *gtk.TextBuffer, query string) {
 	
 	pagination.isLoading = false
 	
+	resultsStore.Clear()
+	
 	if err != nil {
 		// Check if it's a server not running error
 		if errors.IsServerNotRunningError(err) {
-			buffer.SetText(errors.GetFriendlyErrorMessage(err))
+			resultsInfoLabel.SetText(errors.GetFriendlyErrorMessage(err))
 			updatePaginationUI()
 			return
 		}
-		buffer.SetText(fmt.Sprintf("Error: %v", err))
+		resultsInfoLabel.SetText(fmt.Sprintf("Error: %v", err))
 		updatePaginationUI()
 		return
 	}
 	
-	// Display results
+	// Display results in the table
 	if len(result.Entries) == 0 {
-		buffer.SetText("No results found")
+		resultsInfoLabel.SetText("未找到结果")
 		updatePaginationUI()
 		return
 	}
 	
-	text := ""
 	for _, r := range result.Entries {
-		text += r.Path + "\n"
+		iter := resultsStore.Append()
+		resultsStore.SetValue(iter, 0, coreglib.NewValue(r.Name))
+		resultsStore.SetValue(iter, 1, coreglib.NewValue(r.Path))
+		resultsStore.SetValue(iter, 2, coreglib.NewValue(formatSize(r.Size)))
+		resultsStore.SetValue(iter, 3, coreglib.NewValue(formatModTime(r.ModTime)))
 	}
-	
-	buffer.SetText(fmt.Sprintf("Found %d results:\n\n%s", result.Count, text))
 	
 	// Update pagination state
 	pagination.totalResults = result.Total
@@ -399,9 +444,31 @@ func performSearch(c *client.Client, buffer *gtk.TextBuffer, query string) {
 	}
 	
 	// Update UI
-	resultsInfoLabel.SetText(fmt.Sprintf("Found %d results (showing %d, page %d/%d)", 
+	resultsInfoLabel.SetText(fmt.Sprintf("共 %d 条（当前页 %d 条，第 %d/%d 页）",
 		pagination.totalResults, result.Count, pagination.currentPage, pagination.totalPages))
 	updatePaginationUI()
+}
+
+// formatSize formats file size for display.
+func formatSize(size int64) string {
+	if size < 1024 {
+		return fmt.Sprintf("%d B", size)
+	}
+	if size < 1024*1024 {
+		return fmt.Sprintf("%.1f KB", float64(size)/1024)
+	}
+	if size < 1024*1024*1024 {
+		return fmt.Sprintf("%.1f MB", float64(size)/(1024*1024))
+	}
+	return fmt.Sprintf("%.1f GB", float64(size)/(1024*1024*1024))
+}
+
+// formatModTime formats modification time as "YYYY-MM-DD HH:MM".
+func formatModTime(t time.Time) string {
+	if t.IsZero() {
+		return "-"
+	}
+	return t.Format("2006-01-02 15:04")
 }
 
 func updatePaginationUI() {

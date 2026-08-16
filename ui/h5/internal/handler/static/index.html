@@ -185,6 +185,18 @@
         td.col-size { color: #888; font-size: 13px; text-align: right; }
         td.col-modtime { color: #888; font-size: 13px; }
         
+        /* Pagination */
+        .pagination {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            margin: 15px 0;
+        }
+        .pagination button { padding: 6px 16px; }
+        .pagination button:disabled { opacity: 0.4; cursor: not-allowed; }
+        .pagination span { color: #888; font-size: 14px; }
+        
         /* Empty State */
         .empty-state {
             padding: 40px;
@@ -293,6 +305,10 @@
                     <option value="light">亮色</option>
                 </select>
             </label>
+            <label>
+                <span>搜索防抖延迟(ms):</span>
+                <input type="number" id="debounceDelay" value="2500" min="100" max="10000" step="100" style="width: 100px;">
+            </label>
             <button onclick="saveSettings()" style="margin-top: 10px;">保存设置</button>
         </div>
         
@@ -347,6 +363,13 @@
                 </tbody>
             </table>
         </div>
+        
+        <!-- Pagination -->
+        <div class="pagination" id="paginationControls" style="display: none;">
+            <button id="prevPageBtn" onclick="prevPage()">上一页</button>
+            <span id="pageInfo">第 1/1 页</span>
+            <button id="nextPageBtn" onclick="nextPage()">下一页</button>
+        </div>
     </div>
     
     <script>
@@ -358,9 +381,12 @@
         const searchHistoryItems = document.getElementById('searchHistoryItems');
         
         let debounceTimer = null;
-        const DEBOUNCE_DELAY = 300;
+        let debounceDelay = 2500; // 按键防抖延迟(ms)，可在设置中调整
         let currentResults = [];
         let currentSort = { field: null, direction: 'asc' };
+        let currentPage = 1;
+        let lastQuery = '';
+        let currentTotal = 0;
         
         // Initialize
         document.addEventListener('DOMContentLoaded', () => {
@@ -379,7 +405,8 @@
             const settings = {
                 defaultLimit: document.getElementById('defaultLimit').value,
                 defaultIgnoreCase: document.getElementById('defaultIgnoreCase').checked,
-                theme: document.getElementById('themeSelect').value
+                theme: document.getElementById('themeSelect').value,
+                debounceDelay: document.getElementById('debounceDelay').value
             };
             localStorage.setItem('golocateSettings', JSON.stringify(settings));
             alert('设置已保存');
@@ -399,6 +426,10 @@
             if (settings.theme) {
                 document.getElementById('themeSelect').value = settings.theme;
                 applySettings(settings);
+            }
+            if (settings.debounceDelay) {
+                document.getElementById('debounceDelay').value = settings.debounceDelay;
+                debounceDelay = parseInt(settings.debounceDelay) || 2500;
             }
         }
         
@@ -479,7 +510,7 @@
             clearTimeout(debounceTimer);
             debounceTimer = setTimeout(() => {
                 search();
-            }, DEBOUNCE_DELAY);
+            }, debounceDelay);
         });
         
         searchInput.addEventListener('keypress', (e) => {
@@ -495,8 +526,16 @@
                 resultsBody.innerHTML = '<tr><td colspan="4" class="empty-state">开始输入以搜索...</td></tr>';
                 resultsCount.textContent = '';
                 exportButtons.style.display = 'none';
+                document.getElementById('paginationControls').style.display = 'none';
                 currentResults = [];
+                currentPage = 1;
                 return;
+            }
+            
+            // New query resets to page 1
+            if (query !== lastQuery) {
+                lastQuery = query;
+                currentPage = 1;
             }
             
             resultsBody.innerHTML = '<tr><td colspan="4" class="status">搜索中...</td></tr>';
@@ -504,10 +543,12 @@
             const ignoreCase = document.getElementById('ignoreCase').checked;
             const regexMode = document.getElementById('regexMode').checked;
             const maxResults = document.getElementById('maxResults').value;
+            const pageSize = parseInt(maxResults) || 100;
+            const offset = (currentPage - 1) * pageSize;
             
             try {
                 const response = await fetch('/api/search?q=' + encodeURIComponent(query) + 
-                    '&ignore_case=' + ignoreCase + '&regex=' + regexMode + '&limit=' + maxResults);
+                    '&ignore_case=' + ignoreCase + '&regex=' + regexMode + '&limit=' + pageSize + '&offset=' + offset);
                 const data = await response.json();
                 
                 if (data.error) {
@@ -522,6 +563,7 @@
                     resultsBody.innerHTML = '<tr><td colspan="4" class="empty-state">未找到结果</td></tr>';
                     resultsCount.textContent = '无结果';
                     exportButtons.style.display = 'none';
+                    document.getElementById('paginationControls').style.display = 'none';
                     currentResults = [];
                     return;
                 }
@@ -531,6 +573,7 @@
                 
                 // Store results for export and sorting
                 currentResults = data.results;
+                currentTotal = data.total || data.results.length;
                 
                 // Reset sort
                 currentSort = { field: null, direction: 'asc' };
@@ -538,14 +581,41 @@
                 
                 // Render results
                 renderResults();
-                resultsCount.textContent = `找到 ${data.results.length} 个结果`;
+                resultsCount.textContent = `找到 ${data.results.length} 个结果（共 ${currentTotal} 个）`;
                 exportButtons.style.display = 'flex';
+                updatePagination();
             } catch (err) {
                 resultsBody.innerHTML = '<tr><td colspan="4" class="error">错误: ' + escapeHtml(err.message) + '</td></tr>';
                 resultsCount.textContent = '';
                 exportButtons.style.display = 'none';
                 currentResults = [];
             }
+        }
+        
+        // Pagination Functions
+        function updatePagination() {
+            const pageSize = parseInt(document.getElementById('maxResults').value) || 100;
+            const totalPages = currentTotal > 0 ? Math.ceil(currentTotal / pageSize) : 1;
+            const controls = document.getElementById('paginationControls');
+            if (currentTotal === 0) {
+                controls.style.display = 'none';
+                return;
+            }
+            controls.style.display = 'flex';
+            document.getElementById('pageInfo').textContent = `第 ${currentPage}/${totalPages} 页`;
+            document.getElementById('prevPageBtn').disabled = currentPage <= 1;
+            document.getElementById('nextPageBtn').disabled = currentPage >= totalPages;
+        }
+        
+        function prevPage() {
+            if (currentPage <= 1) return;
+            currentPage--;
+            search();
+        }
+        
+        function nextPage() {
+            currentPage++;
+            search();
         }
         
         function renderResults() {
@@ -652,6 +722,8 @@
             try {
                 const date = new Date(dateStr);
                 if (isNaN(date.getTime())) return '-';
+                // 零值时间（文件不存在或 stat 失败时 ModTime 为 0001 年）显示为 -
+                if (date.getFullYear() < 1000) return '-';
                 
                 const year = date.getFullYear();
                 const month = String(date.getMonth() + 1).padStart(2, '0');
