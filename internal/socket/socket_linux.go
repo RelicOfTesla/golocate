@@ -33,7 +33,8 @@ func createListener(socketPath string) (net.Listener, error) {
 		return nil, fmt.Errorf("failed to create Unix socket: %w", err)
 	}
 
-	// Set socket permissions (secure: only owner can read/write)
+	// Set socket permissions so any local user can connect
+	// (daemon typically runs as root, CLI as a regular user).
 	if err := os.Chmod(socketPath, config.SocketPermission); err != nil {
 		listener.Close()
 		return nil, fmt.Errorf("failed to set socket permissions: %w", err)

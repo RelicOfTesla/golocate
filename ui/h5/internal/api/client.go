@@ -41,12 +41,15 @@ type StatusResponse struct {
 }
 
 // Search performs a search query using the fast protocol.
-func (c *Client) Search(pattern string, ignoreCase bool, limit int, offset int64) (*SearchResponse, error) {
+func (c *Client) Search(pattern string, ignoreCase bool, regex bool, limit int, offset int64) (*SearchResponse, error) {
 	opts := index.SearchOptions{
 		IgnoreCase: ignoreCase,
 		Basename:   false,
 		Limit:      limit,
 		Offset:     offset,
+	}
+	if regex {
+		opts.PatternMode = index.PatternModeExtendedRegex
 	}
 
 	// Use SearchFast for better performance

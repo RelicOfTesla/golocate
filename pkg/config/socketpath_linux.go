@@ -4,7 +4,12 @@ package config
 
 // Socket configuration.
 const (
-	SocketPermission  = 0600 // Socket file permission (more secure)
+	// SocketPermission allows any local user to connect to the socket.
+	// The daemon usually runs as root (fanotify needs root to watch the
+	// whole filesystem) while the CLI runs as the regular user; 0600 would
+	// lock that user out. The socket lives under /tmp and stays local-only,
+	// so 0666 is the accepted trade-off (same as syslog/docker conventions).
+	SocketPermission = 0666
 )
 
 

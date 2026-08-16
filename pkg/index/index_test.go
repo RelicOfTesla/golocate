@@ -359,3 +359,84 @@ func TestSearchOptionsDefaults(t *testing.T) {
 		t.Error("Expected Limit to default to 0")
 	}
 }
+
+func TestIndexCountWildcard(t *testing.T) {
+	idx := NewIndex()
+	entries := []*Entry{
+		{Name: "test1.txt", Path: "/home/user/test1.txt", ModTime: time.Now()},
+		{Name: "test2.txt", Path: "/home/user/test2.txt", ModTime: time.Now()},
+		{Name: "other.log", Path: "/home/user/other.log", ModTime: time.Now()},
+	}
+	for _, e := range entries {
+		idx.Add(e)
+	}
+
+	// wildcard 模式：test*.txt 应匹配 2 个
+	count := idx.Count("test*.txt", SearchOptions{PatternMode: PatternModeWildcard, Basename: true})
+	if count != 2 {
+		t.Errorf("wildcard count: expected 2, got %d", count)
+	}
+}
+
+func TestIndexCountRegex(t *testing.T) {
+	idx := NewIndex()
+	entries := []*Entry{
+		{Name: "test1.txt", Path: "/home/user/test1.txt", ModTime: time.Now()},
+		{Name: "test2.txt", Path: "/home/user/test2.txt", ModTime: time.Now()},
+		{Name: "other.log", Path: "/home/user/other.log", ModTime: time.Now()},
+	}
+	for _, e := range entries {
+		idx.Add(e)
+	}
+
+	// regex 模式：test[0-9]+ 应匹配 2 个
+	count := idx.Count("test[0-9]+", SearchOptions{PatternMode: PatternModeRegex, Basename: true})
+	if count != 2 {
+		t.Errorf("regex count: expected 2, got %d", count)
+	}
+}
+
+func TestIndexSearchSortBySizeDesc(t *testing.T) {
+	idx := NewIndex()
+	entries := []*Entry{
+		{Name: "small.txt", Path: "/home/user/small.txt", Size: 10, ModTime: time.Now()},
+		{Name: "large.txt", Path: "/home/user/large.txt", Size: 100, ModTime: time.Now()},
+		{Name: "medium.txt", Path: "/home/user/medium.txt", Size: 50, ModTime: time.Now()},
+	}
+	for _, e := range entries {
+		idx.Add(e)
+	}
+
+	results := idx.Search(SearchOptions{Pattern: ".txt", SortField: "size", SortOrder: "desc"})
+	if len(results) != 3 {
+		t.Fatalf("expected 3 results, got %d", len(results))
+	}
+	if results[0].Size != 100 || results[1].Size != 50 || results[2].Size != 10 {
+		t.Errorf("expected size desc order 100,50,10; got %d,%d,%d",
+			results[0].Size, results[1].Size, results[2].Size)
+	}
+}
+
+func TestIndexSearchSortOffsetLimitOrder(t *testing.T) {
+	idx := NewIndex()
+	entries := []*Entry{
+		{Name: "a.txt", Path: "/home/user/a.txt", Size: 10, ModTime: time.Now()},
+		{Name: "b.txt", Path: "/home/user/b.txt", Size: 30, ModTime: time.Now()},
+		{Name: "c.txt", Path: "/home/user/c.txt", Size: 20, ModTime: time.Now()},
+	}
+	for _, e := range entries {
+		idx.Add(e)
+	}
+
+	// 先按 size 降序（30,20,10），再 offset=1，再 limit=1 → 应得 size=20
+	results := idx.Search(SearchOptions{
+		Pattern:   ".txt",
+		SortField: "size",
+		SortOrder: "desc",
+		Offset:    1,
+		Limit:     1,
+	})
+	if len(results) != 1 || results[0].Size != 20 {
+		t.Errorf("expected single result with size 20, got %v", results)
+	}
+}

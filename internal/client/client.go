@@ -4,8 +4,9 @@ package client
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"net"
+	"os"
 	"path/filepath"
 	"sync/atomic"
 	"time"
@@ -97,7 +98,7 @@ func (c *Client) doRequest(req any) (*protocol.Response, error) {
 	// 设置请求 ID
 	protoReq.ID = requestID
 
-	log.Printf("[Client] Sending request: id=%d, method=%s", requestID, protoReq.Method)
+	slog.Debug("sending request", "id", requestID, "method", protoReq.Method)
 
 	// 根据请求方法选择协议
 	// status、get-config、set-config 等命令需要 JSON-RPC 协议（支持 Result 字段）
@@ -116,7 +117,7 @@ func (c *Client) doRequest(req any) (*protocol.Response, error) {
 		return nil, fmt.Errorf("failed to send request: %w", err)
 	}
 
-	log.Printf("[Client] Request sent, receiving response...")
+	slog.Debug("request sent, waiting for response")
 
 	// 使用对应的协议读取响应（与请求协议匹配）
 	// 不依赖自动检测，避免协议选择错误
@@ -126,7 +127,8 @@ func (c *Client) doRequest(req any) (*protocol.Response, error) {
 		return nil, fmt.Errorf("failed to read response: %w", err)
 	}
 
-	log.Printf("[Client] ReadResponse returned: ID=%v, Error=%s, Result type=%T, Result=%v", resp.ID, resp.Error, resp.Result, resp.Result)
+	slog.Debug("response received",
+		"id", resp.ID, "error", resp.Error, "result", resp.Result)
 
 	// 验证响应 ID
 	c.verifyResponseID(resp, requestID)
@@ -136,11 +138,11 @@ func (c *Client) doRequest(req any) (*protocol.Response, error) {
 		return nil, fmt.Errorf("server error: %s", resp.Error)
 	}
 
-	// 只在有意义时打印 count/total（仅对 search 命令）
+	// 只在有意义时记录 count/total（仅对 search 命令）
 	if resp.Count > 0 || resp.Total > 0 {
-		log.Printf("[Client] Response received: id=%v, count=%d, total=%d", resp.ID, resp.Count, resp.Total)
+		slog.Debug("response received", "id", resp.ID, "count", resp.Count, "total", resp.Total)
 	} else {
-		log.Printf("[Client] Response received: id=%v", resp.ID)
+		slog.Debug("response received", "id", resp.ID)
 	}
 
 	return resp, nil
@@ -160,16 +162,16 @@ func (c *Client) verifyResponseID(resp *protocol.Response, requestID int) {
 		respID = int(v)
 	case string:
 		if _, err := fmt.Sscanf(v, "%d", &respID); err != nil {
-			log.Printf("[Client] Warning: response ID is not a number: %v", resp.ID)
+			slog.Warn("response ID is not a number", "id", resp.ID)
 			return
 		}
 	default:
-		log.Printf("[Client] Warning: unexpected response ID type: %T", resp.ID)
+		slog.Warn("unexpected response ID type", "type", fmt.Sprintf("%T", resp.ID))
 		return
 	}
 
 	if respID != requestID {
-		log.Printf("[Client] Warning: response ID (%d) does not match request ID (%d)", respID, requestID)
+		slog.Warn("response ID does not match request ID", "response_id", respID, "request_id", requestID)
 	}
 }
 
@@ -347,10 +349,17 @@ func (c *Client) connect() (net.Conn, error) {
 func (c *Client) responseToSearchResult(resp *protocol.Response) *SearchResult {
 	results := make([]*index.Entry, len(resp.Paths))
 	for i, path := range resp.Paths {
-		results[i] = &index.Entry{
+		entry := &index.Entry{
 			Path: path,
 			Name: filepath.Base(path), // Extract filename from path
 		}
+		// 协议层只回传路径；这里补回元数据，供 H5/GTK 显示大小/时间与排序
+		if info, err := os.Stat(path); err == nil {
+			entry.Size = info.Size()
+			entry.ModTime = info.ModTime()
+			entry.IsDir = info.IsDir()
+		}
+		results[i] = entry
 	}
 
 	return &SearchResult{
@@ -388,8 +397,13 @@ func mapToProtocolRequest(m map[string]any) *protocol.Request {
 		req.Limit = limit
 	}
 
-	if offset, ok := m[protocol.FieldOffset].(int64); ok {
-		req.Offset = offset
+	switch v := m[protocol.FieldOffset].(type) {
+	case int64:
+		req.Offset = v
+	case int:
+		req.Offset = int64(v)
+	case float64:
+		req.Offset = int64(v)
 	}
 
 	if basename, ok := m["basename"].(bool); ok {
@@ -417,12 +431,7 @@ func mapToProtocolRequest(m map[string]any) *protocol.Request {
 
 // IsServerRunning checks if the server is running.
 func (c *Client) IsServerRunning() bool {
-	conn, err := net.DialTimeout("unix", c.socketPath, 1*time.Second)
-	if err != nil {
-		return false
-	}
-	conn.Close()
-	return true
+	return socket.IsRunning(c.socketPath)
 }
 
 // ========== 类型定义 ==========

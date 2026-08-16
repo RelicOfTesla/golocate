@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"strconv"
 	"strings"
 
@@ -59,16 +59,16 @@ func (p *fastProtocol) ParseRequestWithRemainder(reader *bufio.Reader) (*Request
 		lineBuffer.WriteString("\n")
 	}
 
-	// Check for sticky packets: read all remaining buffered data
+	// Check for sticky packets: read only what is already buffered,
+	// without blocking on a live connection waiting for more data.
 	var remainder []byte
-	if reader.Buffered() > 0 {
-		// Read all remaining data from the buffer
-		remainingBytes, err := io.ReadAll(reader)
-		if err != nil {
-			log.Printf("[Fast Protocol] Error reading remainder: %v", err)
-		} else if len(remainingBytes) > 0 {
+	if n := reader.Buffered(); n > 0 {
+		remainingBytes := make([]byte, n)
+		if _, err := io.ReadFull(reader, remainingBytes); err != nil {
+			slog.Error("Error reading remainder", "error", err)
+		} else {
 			remainder = remainingBytes
-			log.Printf("[Fast Protocol] Detected sticky packet, remainder: %d bytes", len(remainder))
+			slog.Debug("Detected sticky packet", "remainder_bytes", len(remainder))
 		}
 	}
 
@@ -104,7 +104,7 @@ func (p *fastProtocol) ParseRequestWithRemainder(reader *bufio.Reader) (*Request
 			req.AcceptResponseFormat = value
 		case FieldIgnoreCase:
 			req.IgnoreCase = value == "true"
-			log.Printf("[Fast Protocol] Parsed ignore_case: value=%q, result=%v", value, req.IgnoreCase)
+			slog.Debug("Parsed ignore_case", "value", value, "result", req.IgnoreCase)
 		case FieldLimit:
 			if n, err := strconv.Atoi(value); err == nil {
 				req.Limit = n

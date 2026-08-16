@@ -227,6 +227,42 @@
             table.results-table th, table.results-table td { padding: 8px 5px; font-size: 12px; }
             .advanced-options { flex-direction: column; align-items: flex-start; }
         }
+        
+        /* Light theme */
+        body.light-theme {
+            background: #f5f5f5;
+            color: #333;
+        }
+        body.light-theme input[type="text"],
+        body.light-theme input[type="number"],
+        body.light-theme select {
+            background: #fff;
+            color: #333;
+            border-color: #ccc;
+        }
+        body.light-theme .results-table-container,
+        body.light-theme .settings-panel {
+            background: #fff;
+            border-color: #ccc;
+        }
+        body.light-theme table.results-table thead {
+            background: #eee;
+        }
+        body.light-theme table.results-table th,
+        body.light-theme table.results-table td {
+            color: #333;
+            border-color: #ddd;
+        }
+        body.light-theme table.results-table tbody tr:hover {
+            background: #f0f0f0;
+        }
+        body.light-theme .search-history-item {
+            background: #e0e0e0;
+            color: #333;
+        }
+        body.light-theme .search-history-item:hover {
+            background: #d0d0d0;
+        }
     </style>
 </head>
 <body>
@@ -367,7 +403,11 @@
         }
         
         function applySettings(settings) {
-            // Theme would be applied here
+            if (settings.theme === 'light') {
+                document.body.classList.add('light-theme');
+            } else {
+                document.body.classList.remove('light-theme');
+            }
         }
         
         // Sort Functions
@@ -462,11 +502,12 @@
             resultsBody.innerHTML = '<tr><td colspan="4" class="status">搜索中...</td></tr>';
             
             const ignoreCase = document.getElementById('ignoreCase').checked;
+            const regexMode = document.getElementById('regexMode').checked;
             const maxResults = document.getElementById('maxResults').value;
             
             try {
                 const response = await fetch('/api/search?q=' + encodeURIComponent(query) + 
-                    '&ignore_case=' + ignoreCase + '&limit=' + maxResults);
+                    '&ignore_case=' + ignoreCase + '&regex=' + regexMode + '&limit=' + maxResults);
                 const data = await response.json();
                 
                 if (data.error) {

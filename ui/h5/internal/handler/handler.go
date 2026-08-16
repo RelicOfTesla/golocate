@@ -5,7 +5,7 @@ import (
 	"embed"
 	"encoding/json"
 	"html/template"
-	"log"
+	"log/slog"
 	"net/http"
 	"strconv"
 
@@ -44,7 +44,7 @@ func (h *Handler) Index(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.tmpl.Execute(w, data); err != nil {
-		log.Printf("Template error: %v", err)
+		slog.Error("template error", "error", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
 }
@@ -78,10 +78,20 @@ func (h *Handler) Search(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Parse ignore_case and regex from URL query parameters (frontend sends these)
+	ignoreCase := params.IgnoreCase
+	if ic := r.URL.Query().Get("ignore_case"); ic != "" {
+		ignoreCase = ic == "true"
+	}
+	regexMode := params.Regex
+	if rg := r.URL.Query().Get("regex"); rg != "" {
+		regexMode = rg == "true"
+	}
+
 	// Call API client with parsed parameters
-	resp, err := h.client.Search(params.Content, params.IgnoreCase, limit, offset)
+	resp, err := h.client.Search(params.Content, ignoreCase, regexMode, limit, offset)
 	if err != nil {
-		log.Printf("Search error: %v", err)
+		slog.Error("search error", "error", err)
 		json.NewEncoder(w).Encode(&api.SearchResponse{
 			Error: err.Error(),
 		})
@@ -97,7 +107,7 @@ func (h *Handler) Search(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Status(w http.ResponseWriter, r *http.Request) {
 	resp, err := h.client.Status()
 	if err != nil {
-		log.Printf("Status error: %v", err)
+		slog.Error("status error", "error", err)
 		json.NewEncoder(w).Encode(&api.StatusResponse{
 			Error: err.Error(),
 		})
@@ -117,7 +127,7 @@ func (h *Handler) Build(w http.ResponseWriter, r *http.Request) {
 
 	// Trigger index build
 	if err := h.client.Build(); err != nil {
-		log.Printf("Build error: %v", err)
+		slog.Error("build error", "error", err)
 		json.NewEncoder(w).Encode(map[string]any{
 			"status": "error",
 			"error": err.Error(),
@@ -135,7 +145,7 @@ func (h *Handler) Build(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetConfig(w http.ResponseWriter, r *http.Request) {
 	config, err := h.client.GetConfig()
 	if err != nil {
-		log.Printf("GetConfig error: %v", err)
+		slog.Error("get config error", "error", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -151,14 +161,14 @@ func (h *Handler) SetConfig(w http.ResponseWriter, r *http.Request) {
 		YAML string `json:"yaml"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		log.Printf("SetConfig decode error: %v", err)
+		slog.Error("set config decode error", "error", err)
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
 	// Set config via client
 	if err := h.client.SetConfig(body.YAML); err != nil {
-		log.Printf("SetConfig error: %v", err)
+		slog.Error("set config error", "error", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

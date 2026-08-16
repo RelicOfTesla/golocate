@@ -6,7 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"net"
 	"os"
 	"regexp"
@@ -42,6 +42,7 @@ type Server struct {
 	indexedFileCount int      // 已索引文件数
 	databasePath    string    // 数据库路径
 	configPath      string    // 配置文件路径
+	startTime       time.Time // 服务启动时间
 	
 	// Config (for get-config command)
 	config *config.Config
@@ -98,8 +99,9 @@ func (s *Server) Start() error {
 	
 	s.listener = listener
 	s.running = true
+	s.startTime = time.Now()
 	
-	log.Printf("Server listening on %s", s.socketPath)
+	slog.Info("server listening", "path", s.socketPath)
 	
 	// Start accepting connections
 	go s.acceptLoop()
@@ -142,7 +144,7 @@ func (s *Server) Stop() error {
 	// 停止 MessageWorker
 	if s.worker != nil {
 		if err := s.worker.Stop(); err != nil {
-			log.Printf("warning: failed to stop message worker: %v", err)
+			slog.Warn("failed to stop message worker", "error", err)
 		}
 	}
 	
@@ -157,15 +159,15 @@ func (s *Server) Stop() error {
 	if conn, err := net.DialTimeout("unix", s.socketPath, 5*time.Second); err == nil {
 		// Connection succeeded, another server is using this socket
 		conn.Close()
-		log.Printf("Socket file %s is still in use by another server, not removing", s.socketPath)
+		slog.Info("socket file still in use by another server, not removing", "path", s.socketPath)
 	} else {
 		// Connection failed, no server is using this socket, safe to remove
 		if err := os.Remove(s.socketPath); err != nil && !os.IsNotExist(err) {
-			log.Printf("warning: failed to remove socket file: %v", err)
+			slog.Warn("failed to remove socket file", "error", err)
 		}
 	}
 	
-	log.Println("Server stopped")
+	slog.Info("server stopped")
 	return nil
 }
 
@@ -175,7 +177,7 @@ func (s *Server) acceptLoop() {
 		conn, err := s.listener.Accept()
 		if err != nil {
 			if s.running {
-				log.Printf("accept error: %v", err)
+				slog.Error("accept error", "error", err)
 			}
 			return
 		}
@@ -184,7 +186,7 @@ func (s *Server) acceptLoop() {
 		s.mu.Lock()
 		if s.maxConns > 0 && s.currentConns >= s.maxConns {
 			s.mu.Unlock()
-			log.Printf("max connections reached (%d), rejecting new connection", s.maxConns)
+			slog.Info("max connections reached, rejecting new connection", "max_conns", s.maxConns)
 			conn.Close()
 			continue
 		}
@@ -210,7 +212,7 @@ func (s *Server) handleConnection(conn net.Conn) {
 		s.mu.Unlock()
 	}()
 	
-	log.Printf("[Server] Handling new connection from %s", conn.RemoteAddr())
+	slog.Debug("handling new connection", "remote_addr", conn.RemoteAddr())
 	
 	// Update deadline before reading
 	if s.connTimeout > 0 {
@@ -220,22 +222,22 @@ func (s *Server) handleConnection(conn net.Conn) {
 	// Read request using MessageParser
 	reader := bufio.NewReader(conn)
 	
-	log.Printf("[Server] Parsing request using MessageParser...")
+	slog.Debug("parsing request using MessageParser")
 	
 	// 使用 MessageParser 解析消息
 	msg, remainder, err := s.parser.ParseMessage(conn, reader)
 	if err != nil {
-		log.Printf("[Server] Failed to parse message: %v", err)
+		slog.Error("failed to parse message", "error", err)
 		// 尝试使用旧方式发送错误响应（向后兼容）
 		s.sendLegacyError(conn, fmt.Sprintf("failed to parse message: %v", err))
 		return
 	}
 	
-	log.Printf("[Server] Message parsed: id=%s, method=%s", msg.ID(), msg.Method())
+	slog.Debug("message parsed", "id", msg.ID(), "method", msg.Method())
 	
 	// 处理粘包：如果有剩余数据，记录日志
 	if len(remainder) > 0 {
-		log.Printf("[Server] Detected sticky packet, remainder: %d bytes", len(remainder))
+		slog.Debug("detected sticky packet", "remainder_bytes", len(remainder))
 		// 注意：当前实现不处理粘包的后续部分
 		// 未来可以在这里实现粘包的递归处理
 	}
@@ -248,7 +250,7 @@ func (s *Server) handleConnection(conn net.Conn) {
 	
 	// 使用 MessageWorker 异步处理消息
 	if err := s.worker.Handle(msg); err != nil {
-		log.Printf("[Server] Failed to handle message: %v", err)
+		slog.Error("failed to handle message", "error", err)
 		connWg.Done() // 处理失败，也要 Done，避免死锁
 		return
 	}
@@ -267,7 +269,7 @@ func (s *Server) sendLegacyError(conn net.Conn, errMsg string) {
 	}
 	
 	if err := proto.WriteResponse(writer, resp); err != nil {
-		log.Printf("[Server] Failed to send error response: %v", err)
+		slog.Error("failed to send error response", "error", err)
 		return
 	}
 	
@@ -293,11 +295,6 @@ func (s *Server) handleSearchHandler(ctx context.Context, msg message.Message) (
 	// 验证 Pattern 不能只包含空白字符
 	if strings.TrimSpace(pattern) == "" && pattern != "" {
 		return nil, fmt.Errorf("invalid parameter: pattern cannot be only whitespace")
-	}
-	
-	// 如果 Pattern 为空，使用默认值 "*"（搜索所有目录）
-	if pattern == "" {
-		pattern = "*"
 	}
 	
 	// Content 是文件内容搜索（可选项）
@@ -327,9 +324,15 @@ func (s *Server) handleSearchHandler(ctx context.Context, msg message.Message) (
 		SortOrder:      req.SortOrder,
 	}
 	
-	// 3.1 设置默认 PatternMode 为通配符模式
+	// 3.1 未显式指定模式时，按 pattern 是否含通配符元字符自动选择：
+	// - 含 * ? [ → wildcard（glob 匹配，如 "test*" 匹配 "test.txt"）
+	// - 否则 → normal（子串匹配，locate 核心语义，如 "main" 匹配 "main.go"）
 	if opts.PatternMode == "" {
-		opts.PatternMode = index.PatternModeWildcard
+		if strings.ContainsAny(pattern, "*?[") {
+			opts.PatternMode = index.PatternModeWildcard
+		} else {
+			opts.PatternMode = index.PatternModeNormal
+		}
 	}
 	
 	// 3.2 自动判断 Basename
@@ -371,13 +374,13 @@ func (s *Server) handleSearchHandler(ctx context.Context, msg message.Message) (
 	
 	// 4. 执行路径搜索（Pattern 用于文件路径匹配）
 	opts.Pattern = pattern
-	log.Printf("[handleSearchHandler] Searching for pattern=%q, opts.PatternMode=%s, opts.IgnoreCase=%v, opts.Basename=%v", opts.Pattern, opts.PatternMode, opts.IgnoreCase, opts.Basename)
+	slog.Debug("searching for pattern", "pattern", opts.Pattern, "pattern_mode", opts.PatternMode, "ignore_case", opts.IgnoreCase, "basename", opts.Basename)
 	results := s.index.Search(opts)
-	log.Printf("[handleSearchHandler] Found %d results from path search", len(results))
+	slog.Debug("found results from path search", "count", len(results))
 	
 	// 5. 如果有 Content 参数，进行文件内容搜索
 	if content != "" {
-		log.Printf("[handleSearchHandler] Performing content search for %q", content)
+		slog.Debug("performing content search", "content", content)
 		
 		// 获取 MaxFileSize，如果 config 为 nil 则使用默认值
 		maxFileSize := int64(10 * 1024 * 1024) // 默认 10MB
@@ -410,7 +413,7 @@ func (s *Server) handleSearchHandler(ctx context.Context, msg message.Message) (
 			return nil, fmt.Errorf("content search failed: %w", err)
 		}
 		
-		log.Printf("[handleSearchHandler] Found %d content results", len(contentResults))
+		slog.Debug("found content results", "count", len(contentResults))
 		
 		// 转换内容搜索结果为响应格式
 		resultMap := make(map[string]interface{})
@@ -460,6 +463,10 @@ func (s *Server) handleStatusHandler(ctx context.Context, msg message.Message) (
 	result := map[string]any{
 		"running":    s.running,
 		"index_size": s.index.Len(),
+		"pid":        os.Getpid(),
+	}
+	if !s.startTime.IsZero() {
+		result["uptime"] = time.Since(s.startTime).String()
 	}
 	
 	// Add config file path (special value for status command)
@@ -595,7 +602,7 @@ func (s *Server) handleBuildHandler(ctx context.Context, msg message.Message) (a
 		} else {
 			// 使用默认目录
 			directories = []string{"/"}
-			log.Printf("warning: no directories configured, using default: %v", directories)
+			slog.Warn("no directories configured, using default", "directories", directories)
 		}
 		
 		// 创建 Builder
@@ -609,9 +616,9 @@ func (s *Server) handleBuildHandler(ctx context.Context, msg message.Message) (a
 		builder := index.NewBuilder(opts)
 		
 		// 构建索引
-		log.Printf("starting index build for directories: %v", directories)
+		slog.Info("starting index build", "directories", directories)
 		if err := builder.Build(context.Background(), directories); err != nil {
-			log.Printf("index build failed: %v", err)
+			slog.Error("index build failed", "error", err)
 			return
 		}
 		
@@ -625,7 +632,7 @@ func (s *Server) handleBuildHandler(ctx context.Context, msg message.Message) (a
 		s.indexedFileCount = newIndex.Len()
 		s.mu.Unlock()
 		
-		log.Printf("index build completed: %d files indexed", newIndex.Len())
+		slog.Info("index build completed", "count", newIndex.Len())
 		
 		// 旧索引会被垃圾回收
 		_ = oldIndex

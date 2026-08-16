@@ -3,10 +3,11 @@ package index
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -155,79 +156,126 @@ func (idx *Index) Get(path string) (*Entry, bool) {
 func (idx *Index) Search(opts SearchOptions) []*Entry {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
-	
-	// Handle regex search
-	if opts.PatternMode == PatternModeRegex || opts.PatternMode == PatternModeExtendedRegex {
-		return idx.searchRegex(opts.Pattern, opts)
-	}
-	
-	// Handle wildcard search
-	if opts.PatternMode == PatternModeWildcard {
-		return idx.searchWildcard(opts.Pattern, opts)
-	}
-	
-	// Normal substring search
-	query := opts.Pattern
+
 	var results []*Entry
-	
-	// Precompute lowercase query for case-insensitive search
-	queryLower := strings.ToLower(query)
-	
-	// Decide search target based on Basename
-	if opts.Basename {
-		// Search only in file names
-		for name, entries := range idx.byName {
-			if opts.IgnoreCase {
-				// Use first entry's nameLower (all entries with same name have same nameLower)
-				if len(entries) > 0 && strings.Contains(entries[0].nameLower, queryLower) {
-					results = append(results, entries...)
-				}
-			} else {
-				if strings.Contains(name, query) {
-					results = append(results, entries...)
-				}
-			}
-		}
-	} else {
-		// Search in full paths
-		for path, entry := range idx.entries {
-			if opts.IgnoreCase {
-				// Use precomputed lowercase path
-				if strings.Contains(entry.pathLower, queryLower) {
-					results = append(results, entry)
-				}
-			} else {
-				if strings.Contains(path, query) {
-					results = append(results, entry)
-				}
-			}
+
+	switch {
+	case opts.PatternMode == PatternModeRegex || opts.PatternMode == PatternModeExtendedRegex:
+		results = idx.searchRegex(opts.Pattern, opts)
+	case opts.PatternMode == PatternModeWildcard:
+		results = idx.searchWildcard(opts.Pattern, opts)
+	default:
+		results = idx.searchNormal(opts.Pattern, opts)
+	}
+
+	// 统一后处理：先排序，再 offset，最后 limit。
+	if opts.SortField != "" {
+		sortEntries(results, opts.SortField, opts.SortOrder)
+	}
+
+	if opts.Offset > 0 {
+		offset := int(opts.Offset)
+		if offset >= len(results) {
+			results = []*Entry{}
+		} else {
+			results = results[offset:]
 		}
 	}
-	
-	// Apply offset (skip first N results)
-	offset := int(opts.Offset) // Convert int64 to int for slice operations
-	if offset > 0 && offset < len(results) {
-		results = results[offset:]
-	} else if offset > 0 && offset >= len(results) {
-		results = []*Entry{} // Offset exceeds result count, return empty
-	}
-	
-	// Apply limit
+
 	if opts.Limit > 0 && len(results) > opts.Limit {
 		results = results[:opts.Limit]
 	}
-	
+
 	return results
+}
+
+// searchNormal performs a normal substring search.
+func (idx *Index) searchNormal(query string, opts SearchOptions) []*Entry {
+	var results []*Entry
+	queryLower := strings.ToLower(query)
+
+	if opts.Basename {
+		for name, entries := range idx.byName {
+			if opts.IgnoreCase {
+				if len(entries) > 0 && strings.Contains(entries[0].nameLower, queryLower) {
+					results = append(results, entries...)
+				}
+			} else if strings.Contains(name, query) {
+				results = append(results, entries...)
+			}
+		}
+	} else {
+		for path, entry := range idx.entries {
+			if opts.IgnoreCase {
+				if strings.Contains(entry.pathLower, queryLower) {
+					results = append(results, entry)
+				}
+			} else if strings.Contains(path, query) {
+				results = append(results, entry)
+			}
+		}
+	}
+
+	return results
+}
+
+// sortEntries sorts entries in place by field and order.
+func sortEntries(entries []*Entry, field, order string) {
+	if len(entries) == 0 || field == "" {
+		return
+	}
+
+	desc := strings.EqualFold(order, "desc")
+	switch strings.ToLower(field) {
+	case "name":
+		sort.Slice(entries, func(i, j int) bool {
+			cmp := strings.Compare(strings.ToLower(entries[i].Name), strings.ToLower(entries[j].Name))
+			if desc {
+				return cmp > 0
+			}
+			return cmp < 0
+		})
+	case "name-case":
+		sort.Slice(entries, func(i, j int) bool {
+			cmp := strings.Compare(entries[i].Name, entries[j].Name)
+			if desc {
+				return cmp > 0
+			}
+			return cmp < 0
+		})
+	case "size":
+		sort.Slice(entries, func(i, j int) bool {
+			if desc {
+				return entries[i].Size > entries[j].Size
+			}
+			return entries[i].Size < entries[j].Size
+		})
+	case "time":
+		sort.Slice(entries, func(i, j int) bool {
+			if desc {
+				return entries[i].ModTime.After(entries[j].ModTime)
+			}
+			return entries[i].ModTime.Before(entries[j].ModTime)
+		})
+	case "path":
+		sort.Slice(entries, func(i, j int) bool {
+			cmp := strings.Compare(strings.ToLower(entries[i].Path), strings.ToLower(entries[j].Path))
+			if desc {
+				return cmp > 0
+			}
+			return cmp < 0
+		})
+	}
 }
 
 // searchRegex performs a regex search.
 func (idx *Index) searchRegex(query string, opts SearchOptions) []*Entry {
 	var results []*Entry
-	
+
 	// Compile regex
 	var re *regexp.Regexp
 	var err error
-	
+
 	if opts.PatternMode == PatternModeExtendedRegex {
 		// Extended regex (POSIX ERE)
 		if opts.IgnoreCase {
@@ -245,141 +293,143 @@ func (idx *Index) searchRegex(query string, opts SearchOptions) []*Entry {
 			re, err = regexp.CompilePOSIX(query)
 		}
 	}
-	
+
 	if err != nil {
 		// Invalid regex, return empty results
 		return results
 	}
-	
+
 	// Decide search target based on Basename
 	if opts.Basename {
-		// Search only in file names
 		for name, entries := range idx.byName {
 			if re.MatchString(name) {
 				results = append(results, entries...)
-				if opts.Limit > 0 && len(results) >= opts.Limit {
-					return results
-				}
 			}
 		}
 	} else {
-		// Search in full paths
 		for path, entry := range idx.entries {
 			if re.MatchString(path) {
 				results = append(results, entry)
-				if opts.Limit > 0 && len(results) >= opts.Limit {
-					return results
-				}
 			}
 		}
 	}
-	
+
 	return results
 }
 
 // searchWildcard performs a wildcard pattern search.
 func (idx *Index) searchWildcard(pattern string, opts SearchOptions) []*Entry {
 	var results []*Entry
-	
+
 	// Special case: "*" matches everything
 	if pattern == "*" {
-		for _, entry := range idx.entries {
-			results = append(results, entry)
-			if opts.Limit > 0 && len(results) >= opts.Limit {
-				return results
+		if opts.Basename {
+			for _, entries := range idx.byName {
+				results = append(results, entries...)
+			}
+		} else {
+			for _, entry := range idx.entries {
+				results = append(results, entry)
 			}
 		}
 		return results
 	}
-	
+
 	// Decide search target based on Basename
 	if opts.Basename {
-		// Search only in file names
 		for name, entries := range idx.byName {
-			// Handle IgnoreCase
 			comparePattern := pattern
 			compareName := name
 			if opts.IgnoreCase {
 				comparePattern = strings.ToLower(pattern)
 				compareName = strings.ToLower(name)
 			}
-			
+
 			matched, err := filepath.Match(comparePattern, compareName)
-			if err != nil {
-				// Invalid pattern, skip
-				continue
-			}
-			if matched {
+			if err == nil && matched {
 				results = append(results, entries...)
-				if opts.Limit > 0 && len(results) >= opts.Limit {
-					return results
-				}
 			}
 		}
 	} else {
-		// Search in full paths
 		for path, entry := range idx.entries {
-			// Handle IgnoreCase
 			comparePattern := pattern
 			comparePath := path
 			if opts.IgnoreCase {
 				comparePattern = strings.ToLower(pattern)
 				comparePath = strings.ToLower(path)
 			}
-			
-			// For full path matching, use filepath.Match on the full path
+
 			matched, err := filepath.Match(comparePattern, comparePath)
-			if err != nil {
-				// Invalid pattern, skip
-				continue
-			}
-			if matched {
+			if err == nil && matched {
 				results = append(results, entry)
-				if opts.Limit > 0 && len(results) >= opts.Limit {
-					return results
-				}
 			}
 		}
 	}
-	
+
 	return results
 }
 
 // Count returns the number of entries matching the query.
+// It honors PatternMode the same way Search does, so total counts stay
+// consistent with the actual search results.
 func (idx *Index) Count(query string, opts SearchOptions) int {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
-	
+
+	// Precompile regex for regex modes.
+	var re *regexp.Regexp
+	if opts.PatternMode == PatternModeRegex || opts.PatternMode == PatternModeExtendedRegex {
+		var err error
+		if opts.IgnoreCase {
+			re, err = regexp.Compile("(?i)" + query)
+		} else if opts.PatternMode == PatternModeExtendedRegex {
+			re, err = regexp.Compile(query)
+		} else {
+			re, err = regexp.CompilePOSIX(query)
+		}
+		if err != nil {
+			return 0
+		}
+	}
+
+	match := func(s string) bool {
+		switch opts.PatternMode {
+		case PatternModeRegex, PatternModeExtendedRegex:
+			return re.MatchString(s)
+		case PatternModeWildcard:
+			if query == "*" {
+				return true
+			}
+			pattern, target := query, s
+			if opts.IgnoreCase {
+				pattern = strings.ToLower(query)
+				target = strings.ToLower(s)
+			}
+			matched, err := filepath.Match(pattern, target)
+			return err == nil && matched
+		default:
+			if opts.IgnoreCase {
+				return strings.Contains(strings.ToLower(s), strings.ToLower(query))
+			}
+			return strings.Contains(s, query)
+		}
+	}
+
 	count := 0
-	
-	// Decide search target based on Basename
 	if opts.Basename {
 		for name, entries := range idx.byName {
-			if opts.IgnoreCase {
-				if strings.Contains(strings.ToLower(name), strings.ToLower(query)) {
-					count += len(entries)
-				}
-			} else {
-				if strings.Contains(name, query) {
-					count += len(entries)
-				}
+			if match(name) {
+				count += len(entries)
 			}
 		}
-		
 	} else {
 		for path := range idx.entries {
-			if opts.IgnoreCase {
-				if strings.Contains(strings.ToLower(path), strings.ToLower(query)) {
-					count++
-				}
-			} else {
-				if strings.Contains(path, query) {
-					count++
-				}
+			if match(path) {
+				count++
 			}
 		}
 	}
-	
+
 	return count
 }
 
@@ -513,12 +563,12 @@ func (b *Builder) BuildThrottled(ctx context.Context, directories []string, thro
 		})
 		
 		if err != nil && err != context.Canceled {
-			log.Printf("warning: error walking %s: %v", dir, err)
+			slog.Warn("error walking directory", "path", dir, "error", err)
 		}
 	}
 	
 	elapsed := time.Since(start)
-	log.Printf("indexed %d files and %d directories in %v", fileCount, dirCount, elapsed)
+	slog.Info("indexed files and directories", "files", fileCount, "directories", dirCount, "elapsed", elapsed)
 	
 	return nil
 }
@@ -568,11 +618,11 @@ func (u *Updater) handleCreate(path string) {
 	}
 	
 	u.idx.Add(entry)
-	log.Printf("indexed: %s", path)
+	slog.Info("indexed", "path", path)
 }
 
 // handleRemove handles a file removal event.
 func (u *Updater) handleRemove(path string) {
 	u.idx.Remove(path)
-	log.Printf("removed: %s", path)
+	slog.Info("removed", "path", path)
 }

@@ -3,7 +3,14 @@
 /golocated
 /golocate-gtk
 /golocate-h5
+/memory-analyze
 bin/
+ui/gtk/golocate-gtk
+ui/h5/golocate-h5
+
+# Test artifacts & logs
+*.test
+*.log
 
 # Test scripts
 test_*.sh
@@ -35,3 +42,5 @@ Thumbs.db
 
 *.backup
 *.bak
+
+cmd/memory-analyze

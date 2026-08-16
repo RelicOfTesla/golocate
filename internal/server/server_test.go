@@ -1,11 +1,13 @@
 package server
 
 import (
+	"context"
 	"testing"
 	"time"
 
 	"github.com/RelicOfTesla/golocate/internal/testutil"
 	"github.com/RelicOfTesla/golocate/pkg/index"
+	"github.com/RelicOfTesla/golocate/pkg/message"
 	"github.com/RelicOfTesla/golocate/pkg/message/protocol"
 )
 
@@ -172,4 +174,62 @@ func TestServerStartCreatesSocketFile(t *testing.T) {
 
 	// Stop server
 	server.Stop()
+}
+
+func TestHandleSearchHandlerDefaultPatternModeIsSubstring(t *testing.T) {
+	idx := index.NewIndex()
+	idx.Add(&index.Entry{Name: "main.go", Path: "/home/user/main.go", ModTime: time.Now()})
+
+	srv := New(idx)
+
+	// 空 PatternMode（payload 不含 pattern_mode）+ pattern="main" 应默认子串匹配
+	msg := message.NewMessage("1", "search", []byte(`{"pattern":"main"}`), context.Background(), nil, nil)
+
+	result, err := srv.handleSearchHandler(context.Background(), msg)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	resultMap, ok := result.(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected map result, got %T", result)
+	}
+
+	paths, ok := resultMap["paths"].([]string)
+	if !ok {
+		t.Fatalf("expected paths field, got %#v", resultMap)
+	}
+
+	if len(paths) != 1 || paths[0] != "/home/user/main.go" {
+		t.Errorf("expected substring search to match main.go, got %v", paths)
+	}
+}
+
+func TestHandleSearchHandlerWildcardPattern(t *testing.T) {
+	idx := index.NewIndex()
+	idx.Add(&index.Entry{Name: "test.txt", Path: "/home/user/test.txt", ModTime: time.Now()})
+
+	srv := New(idx)
+
+	// pattern 含通配符元字符应自动走 wildcard 模式
+	msg := message.NewMessage("1", "search", []byte(`{"pattern":"test*"}`), context.Background(), nil, nil)
+
+	result, err := srv.handleSearchHandler(context.Background(), msg)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	resultMap, ok := result.(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected map result, got %T", result)
+	}
+
+	paths, ok := resultMap["paths"].([]string)
+	if !ok {
+		t.Fatalf("expected paths field, got %#v", resultMap)
+	}
+
+	if len(paths) != 1 || paths[0] != "/home/user/test.txt" {
+		t.Errorf("expected wildcard search to match test.txt, got %v", paths)
+	}
 }

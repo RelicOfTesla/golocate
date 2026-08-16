@@ -3,7 +3,7 @@ package main
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 
 	"github.com/RelicOfTesla/golocate/internal/client"
@@ -71,7 +71,8 @@ func main() {
 	// Run application
 	status := app.Run(os.Args)
 	if status > 0 {
-		log.Fatal("Application exited with status:", status)
+		slog.Error("Application exited with status", "status", status)
+		os.Exit(1)
 	}
 }
 
@@ -185,7 +186,12 @@ func createMainWindow(app *gtk.Application) {
 		
 		// Display status
 		running, _ := status["running"].(bool)
-		indexSize, _ := status["index_size"].(int)
+		var indexSize int
+		if v, ok := status["index_size"].(float64); ok {
+			indexSize = int(v)
+		} else if v, ok := status["index_size"].(int); ok {
+			indexSize = v
+		}
 		uptime, _ := status["uptime"].(string)
 		pid, _ := status["pid"].(float64)
 		

@@ -2,10 +2,11 @@ package main
 
 import (
 	"flag"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 
+	"github.com/RelicOfTesla/golocate/internal/socket"
 	"github.com/RelicOfTesla/golocate/pkg/config"
 	"github.com/RelicOfTesla/golocate/ui/h5/internal/api"
 	"github.com/RelicOfTesla/golocate/ui/h5/internal/handler"
@@ -31,7 +32,7 @@ func main() {
 
 	// Check if golocated is running
 	if !isGolocatedRunning() {
-		log.Println("Warning: golocated is not running. Start it with: golocated --service")
+		slog.Warn("golocated is not running. Start it with: golocated --service")
 	}
 
 	// Create handlers
@@ -57,11 +58,12 @@ func main() {
 	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
 
 	// Start server
-	log.Printf("Starting golocate-h5 on %s", flagAddr)
-	log.Printf("Open http://localhost%s in your browser", flagAddr)
+	slog.Info("starting golocate-h5", "addr", flagAddr)
+	slog.Info("open browser", "url", "http://localhost"+flagAddr)
 	
 	if err := http.ListenAndServe(flagAddr, mux); err != nil {
-		log.Fatalf("Server error: %v", err)
+		slog.Error("server error", "error", err)
+		os.Exit(1)
 	}
 }
 
@@ -71,10 +73,7 @@ func isGolocatedRunning() bool {
 	if socketPath == "" {
 		socketPath = config.GetDefaultSocketPath()
 	}
-	
-	// Check if socket exists
-	if _, err := os.Stat(socketPath); err == nil {
-		return true
-	}
-	return false
+
+	// 使用平台抽象的 socket 检测（Windows 上 named pipe 不是文件路径）
+	return socket.IsRunning(socketPath)
 }
