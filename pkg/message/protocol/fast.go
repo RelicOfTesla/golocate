@@ -253,11 +253,11 @@ func (p *fastProtocol) WriteResponse(writer *bufio.Writer, resp *Response) error
 		fmt.Fprintf(writer, "result=%s\n", string(resultJSON))
 	}
 	
-	// Only write count/total for search results (when Result is nil)
-	if resp.Result == nil {
-		fmt.Fprintf(writer, "count=%d\n", resp.Count)
-		fmt.Fprintf(writer, "total=%d\n", resp.Total)
-	}
+	// Always write count/total so clients can paginate.
+	// Search responses carry the Result map AND these fields; status-like
+	// commands go over JSON-RPC and never reach this code path.
+	fmt.Fprintf(writer, "count=%d\n", resp.Count)
+	fmt.Fprintf(writer, "total=%d\n", resp.Total)
 	
 	fmt.Fprint(writer, "\n") // empty line marks end of headers
 	
