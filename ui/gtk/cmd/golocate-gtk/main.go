@@ -246,7 +246,9 @@ func createMainWindow(app *gtk.Application) {
 	
 	nameCol = gtk.NewTreeViewColumn()
 	nameCol.SetTitle("文件名")
-	nameCol.SetExpand(true)
+	nameCol.SetResizable(true)
+	nameCol.SetSizing(gtk.TreeViewColumnFixed)
+	nameCol.SetFixedWidth(180)
 	nameRenderer := gtk.NewCellRendererText()
 	nameCol.PackStart(nameRenderer, false)
 	nameCol.AddAttribute(nameRenderer, "text", 0)
@@ -255,7 +257,9 @@ func createMainWindow(app *gtk.Application) {
 	
 	pathCol = gtk.NewTreeViewColumn()
 	pathCol.SetTitle("路径")
-	pathCol.SetExpand(true)
+	pathCol.SetResizable(true)
+	pathCol.SetSizing(gtk.TreeViewColumnFixed)
+	pathCol.SetFixedWidth(400)
 	pathRenderer := gtk.NewCellRendererText()
 	pathCol.PackStart(pathRenderer, false)
 	pathCol.AddAttribute(pathRenderer, "text", 1)
