@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -14,8 +15,18 @@ import (
 	"github.com/RelicOfTesla/golocate/ui/h5/internal/api"
 )
 
-//go:embed static/index.html
+//go:embed static
 var staticFS embed.FS
+
+// Static serves embedded static assets (style.css, i18n.js, core.js,
+// favorites.js, settings.js) under /static/.
+var Static = func() fs.FS {
+	sub, err := fs.Sub(staticFS, "static")
+	if err != nil {
+		panic(err)
+	}
+	return sub
+}()
 
 // Handler represents the HTTP handler.
 type Handler struct {

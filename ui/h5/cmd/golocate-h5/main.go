@@ -69,7 +69,7 @@ func main() {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		}
 	})
-	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
+	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.FS(handler.Static))))
 
 	// Start server
 	slog.Info("starting golocate-h5", "addr", flagAddr)
