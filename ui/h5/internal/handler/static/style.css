@@ -197,9 +197,9 @@ table.results-table th.sort-desc::after { content: ' ↓'; color: var(--accent);
 
 /* Column widths */
 table.results-table th.col-name { width: 17%; }
-table.results-table th.col-path { width: 31%; }
+table.results-table th.col-path { width: 30%; }
 table.results-table th.col-size { width: 9%; }
-table.results-table th.col-modtime { width: 12%; }
+table.results-table th.col-modtime { width: 11%; }
 table.results-table th.col-match { width: 20%; }
 table.results-table th.col-actions { width: 13%; }
 

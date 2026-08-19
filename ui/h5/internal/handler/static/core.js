@@ -328,7 +328,7 @@
             const ignoreCase = document.getElementById('ignoreCase').checked;
             const basename = document.getElementById('basenameMode').checked;
             const patternMode = document.getElementById('patternMode').value;
-            const regexMode = document.getElementById('regexMode').checked || patternMode === 'regex';
+            const regexMode = patternMode === 'regex';
             const contentMode = document.getElementById('contentMode').checked;
             const dedupe = document.getElementById('dedupeMode').checked;
             const scope = document.getElementById('scopeInput').value.trim();
@@ -352,7 +352,9 @@
                     '&min_size=' + minSize + '&max_size=' + maxSize +
                     '&limit=' + pageSize + '&offset=' + offset;
                 if (contentMode) {
-                    url += '&content=' + encodeURIComponent(query);
+                    const el = document.getElementById('contentInput');
+                    const kw = el ? el.value.trim() : '';
+                    url += '&content=' + encodeURIComponent(kw);
                 }
                 if (currentSort.field && !contentMode) {
                     url += '&sort_field=' + currentSort.field + '&sort_order=' + currentSort.direction;
@@ -621,7 +623,7 @@
             const ignoreCase = document.getElementById('ignoreCase').checked;
             const basename = document.getElementById('basenameMode').checked;
             const patternMode = document.getElementById('patternMode').value;
-            const regexMode = document.getElementById('regexMode').checked || patternMode === 'regex';
+            const regexMode = patternMode === 'regex';
             const contentMode = document.getElementById('contentMode').checked;
             const dedupe = document.getElementById('dedupeMode').checked;
             const scope = document.getElementById('scopeInput').value.trim();
@@ -640,7 +642,9 @@
                     '&min_size=' + minSize + '&max_size=' + maxSize +
                     '&limit=100000&offset=0';
             if (contentMode) {
-                url += '&content=' + encodeURIComponent(query);
+                const el = document.getElementById('contentInput');
+                const kw = el ? el.value.trim() : '';
+                url += '&content=' + encodeURIComponent(kw);
             }
             let data;
             try {

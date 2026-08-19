@@ -108,11 +108,7 @@
                     <option value="wildcard" data-i18n="modeWildcard">通配符</option>
                     <option value="terms" data-i18n="modeTerms">多词(terms)</option>
                 </select>
-            </label>
-    <label>
-                <input type="checkbox" id="regexMode"> <span data-i18n="labelRegex">正则表达式</span>
-            </label>
-            </div>
+            </label>            </div>
             <span class="opt-group" data-i18n="grpFilter">过滤</span>
             <div class="opt-row">
     <label>
@@ -140,6 +136,10 @@
             <div class="opt-row">
     <label>
                 <input type="checkbox" id="contentMode"> <span data-i18n="labelContent">内容搜索</span>
+            </label>
+            <label>
+                <span data-i18n="labelContentInput">搜索内容:</span>
+                <input type="text" id="contentInput" placeholder="keyword" style="width:140px;">
             </label>
     <label>
                 <input type="checkbox" id="dedupeMode"> <span data-i18n="labelDedupe">去重（硬链接）</span>
