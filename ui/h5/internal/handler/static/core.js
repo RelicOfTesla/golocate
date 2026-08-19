@@ -379,7 +379,7 @@
                 const result = currentResults[i] || {};
                 const match = contentMode ? (currentMatches[i] || {}) : null;
                 const modTime = result.ModTime ? formatDate(result.ModTime) : '-';
-                const size = result.Size ? formatSize(result.Size) : '-';
+                const size = (result.Size !== undefined && result.Size !== null) ? formatSize(result.Size) : '-';
                 
                 let matchCell = '-';
                 let matchTitle = '';

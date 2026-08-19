@@ -201,7 +201,7 @@ table.results-table th.col-path { width: 31%; }
 table.results-table th.col-size { width: 9%; }
 table.results-table th.col-modtime { width: 12%; }
 table.results-table th.col-match { width: 20%; }
-table.results-table th.col-actions { width: 11%; }
+table.results-table th.col-actions { width: 13%; }
 
 table.results-table td {
     padding: 11px 12px;
@@ -237,13 +237,15 @@ td.col-match mark {
 }
 
 /* Row action buttons */
-td.col-actions button {
-    padding: 4px 9px; font-size: 0.75em; margin: 1px 2px;
-    color: var(--text-2);
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid var(--border-soft);
-    box-shadow: none;
-}
+td.col-actions { white-space: normal; } /* let buttons wrap inside the fixed column */
+    td.col-actions button {
+        display: inline-block;
+        padding: 3px 7px; font-size: 0.72em; margin: 1px;
+        color: var(--text-2);
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid var(--border-soft);
+        box-shadow: none;
+    }
 td.col-actions button:hover {
     color: var(--accent);
     border-color: var(--accent-border);
@@ -474,7 +476,11 @@ body.light-theme .results-table-container .results-header { background: rgba(15,
     .header h1 { font-size: 20px; }
     .search-card, .results-table-container, .status-bar, .settings-panel { border-radius: 12px; }
     table.results-table th.col-match, table.results-table td.col-match { display: none; }
-    table.results-table th.col-path { width: 38%; }
+    table.results-table th.col-name { width: 22%; }
+    table.results-table th.col-path { width: 40%; }
+    table.results-table th.col-size { width: 10%; }
+    table.results-table th.col-modtime { width: 15%; }
+    table.results-table th.col-actions { width: 13%; }
 }
 
 /* ≤640px: phone — single column, stacked controls, horizontal-scroll table */
@@ -505,9 +511,10 @@ body.light-theme .results-table-container .results-header { background: rgba(15,
     .results-table-container { overflow-x: auto; -webkit-overflow-scrolling: touch; }
     table.results-table { min-width: 420px; }
     table.results-table th.col-modtime, table.results-table td.col-modtime { display: none; }
-    table.results-table th.col-name { width: 22%; }
-    table.results-table th.col-path { width: 48%; }
-    table.results-table th.col-actions { width: 30%; }
+    table.results-table th.col-name { width: 26%; }
+    table.results-table th.col-path { width: 46%; }
+    table.results-table th.col-size { width: 10%; }
+    table.results-table th.col-actions { width: 18%; }
     td.col-path { font-size: 12px; word-break: break-all; }
     td.col-actions button { padding: 5px 7px; } /* bigger touch targets */
 
