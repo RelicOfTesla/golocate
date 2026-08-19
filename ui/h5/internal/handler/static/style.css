@@ -173,7 +173,7 @@ select { cursor: pointer; }
     background: rgba(26, 30, 40, 0.8);
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    overflow: hidden;
+    overflow-x: auto;          /* column resizing may exceed the viewport */
     box-shadow: var(--shadow-sm);
 }
 table.results-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
@@ -470,9 +470,7 @@ body.light-theme .results-table-container .results-header { background: rgba(15,
 /* ============ Responsive: adapt to screen width ============ */
 
 /* ≤900px: tablet — compact chrome, hide the match column */
-    /* A dragged pixel width on one column would otherwise squeeze the
-       remaining % columns to nothing on small windows; reclaim them. */
-    table.results-table th { width: auto !important; }
+
 @media (max-width: 900px) {
     .container { padding: 14px; }
     .header { padding: 12px 14px; }
