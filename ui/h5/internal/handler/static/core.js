@@ -307,10 +307,15 @@
                 return;
             }
             
-            // New query resets to page 1
+            // New query resets to page 1 and clears the server sort; the same
+            // query (paging, re-run) keeps its server-side sort + indicators.
             if (query !== lastQuery) {
                 lastQuery = query;
                 currentPage = 1;
+                if (currentSort.field) {
+                    currentSort = { field: null, display: null, direction: 'asc' };
+                    updateSortIndicators();
+                }
             }
             
             resultsBody.innerHTML = '<tr><td colspan="6" class="status">' + t('searching') + '</td></tr>';
@@ -377,8 +382,8 @@
                 currentMatches = data.matches || [];
                 currentTotal = data.total || currentResults.length || currentMatches.length;
                 
-                // Reset sort
-                currentSort = { field: null, direction: 'asc' };
+                // Sort is server-side and already reflected in `currentSort`;
+                // keep it across pages. Just refresh the arrow indicators.
                 updateSortIndicators();
                 
                 // Render results
