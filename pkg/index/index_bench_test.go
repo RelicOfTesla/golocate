@@ -347,3 +347,37 @@ func getRandomPaths(idx *index.Index, count int) []string {
 
 	return paths
 }
+
+// TestSearchEarlyStopLimit verifies that a limited search with no filters/sort
+// stops collecting once Limit entries are gathered (returns exactly Limit rows
+// that are a subset of the full result set).
+func TestSearchEarlyStopLimit(t *testing.T) {
+	idx := createMockIndex(50000)
+	full := idx.Search(index.SearchOptions{Pattern: "file_1", IgnoreCase: true})
+	if len(full) < 1000 {
+		t.Fatalf("mock index too small: %d", len(full))
+	}
+
+	limited := idx.Search(index.SearchOptions{Pattern: "file_1", IgnoreCase: true, Limit: 100})
+	if len(limited) != 100 {
+		t.Fatalf("expected exactly 100 rows with early stop, got %d", len(limited))
+	}
+	// Every limited row must be part of the full set (subset semantics).
+	seen := map[string]bool{}
+	for _, e := range full {
+		seen[e.Path] = true
+	}
+	for _, e := range limited {
+		if !seen[e.Path] {
+			t.Errorf("limited result %q not in full set", e.Path)
+		}
+	}
+}
+
+// BenchmarkSearchLimited measures the speedup of early-stopping a limited search.
+func BenchmarkSearchLimited(b *testing.B) {
+	idx := createMockIndex(200000)
+	for i := 0; i < b.N; i++ {
+		_ = idx.Search(index.SearchOptions{Pattern: "file_1", IgnoreCase: true, Limit: 50})
+	}
+}

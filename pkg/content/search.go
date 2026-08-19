@@ -2,6 +2,7 @@
 package content
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"io"
@@ -160,16 +161,19 @@ func (s *Searcher) searchFile(path string) []*SearchResult {
 		return results
 	}
 
-	// Read the file and decode to UTF-8 text (UTF-8 as-is, UTF-16 by BOM,
-	// otherwise GBK fallback).
-	text, err := readTextFile(path, s.opts.MaxFileSize)
+	// Stream lines through an encoding-aware reader (UTF-8 / UTF-16 / GBK
+	// decoded lazily), so at most one line is in memory per file instead of a
+	// whole file read (see docs/PERFORMANCE.md S4).
+	file, err := os.Open(path)
 	if err != nil {
 		return results
 	}
+	defer file.Close()
+	reader := bufio.NewReader(io.LimitReader(file, s.opts.MaxFileSize))
+	sc := newLineScanner(reader, s.opts.MaxFileSize)
 
 	// Scan line by line, keeping one line of context on each side
 	// of every match (grep -C1 style).
-	lines := strings.Split(text, "\n")
 	lineNum := 0
 	prevLine := ""               // previous line, becomes Before of the next match
 	var lastResult *SearchResult // most recent match awaiting its After line
@@ -180,8 +184,8 @@ func (s *Searcher) searchFile(path string) []*SearchResult {
 		}
 	}
 
-	for _, raw := range lines {
-		line := strings.TrimSuffix(raw, "\r") // normalize CRLF
+	for sc.Scan() {
+		line := sc.Text()
 		lineNum++
 		fillAfter(line)
 

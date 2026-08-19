@@ -166,6 +166,12 @@ func (idx *Index) Search(opts SearchOptions) []*Entry {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
 
+	// Early termination is only valid when nothing after collection can
+	// remove or reorder entries (scope/exclude/metadata filters, dedupe,
+	// sort, or a page offset).
+	opts.earlyStop = opts.Limit > 0 && opts.Offset == 0 && opts.SortField == "" &&
+		opts.Scope == "" && len(opts.Exclude) == 0 && !opts.Dedupe && !hasMetadataFilters(opts)
+
 	var results []*Entry
 
 	switch {
@@ -222,6 +228,9 @@ func (idx *Index) searchNormal(query string, opts SearchOptions) []*Entry {
 			} else if strings.Contains(name, query) {
 				results = append(results, entries...)
 			}
+			if opts.earlyStop && len(results) >= opts.Limit {
+				break
+			}
 		}
 	} else {
 		for path, entry := range idx.entries {
@@ -231,6 +240,9 @@ func (idx *Index) searchNormal(query string, opts SearchOptions) []*Entry {
 				}
 			} else if strings.Contains(path, query) {
 				results = append(results, entry)
+			}
+			if opts.earlyStop && len(results) >= opts.Limit {
+				break
 			}
 		}
 	}
@@ -330,6 +342,9 @@ func (idx *Index) searchRegex(query string, opts SearchOptions) []*Entry {
 			if re.MatchString(path) {
 				results = append(results, entry)
 			}
+			if opts.earlyStop && len(results) >= opts.Limit {
+				break
+			}
 		}
 	}
 
@@ -368,6 +383,9 @@ func (idx *Index) searchWildcard(pattern string, opts SearchOptions) []*Entry {
 			if err == nil && matched {
 				results = append(results, entries...)
 			}
+			if opts.earlyStop && len(results) >= opts.Limit {
+				break
+			}
 		}
 	} else {
 		for path, entry := range idx.entries {
@@ -381,6 +399,9 @@ func (idx *Index) searchWildcard(pattern string, opts SearchOptions) []*Entry {
 			matched, err := filepath.Match(comparePattern, comparePath)
 			if err == nil && matched {
 				results = append(results, entry)
+			}
+			if opts.earlyStop && len(results) >= opts.Limit {
+				break
 			}
 		}
 	}
@@ -459,6 +480,9 @@ func (idx *Index) searchTerms(query string, opts SearchOptions) []*Entry {
 		for path, entry := range idx.entries {
 			if matchesAll(path) {
 				results = append(results, entry)
+			}
+			if opts.earlyStop && len(results) >= opts.Limit {
+				break
 			}
 		}
 	}
@@ -758,6 +782,12 @@ type SearchOptions struct {
 	// (hard links), keeping only the first path for each identity. On
 	// platforms without device/inode ids it falls back to (size, modtime).
 	Dedupe bool
+
+	// earlyStop is an internal optimisation flag: when it is safe (no sorting,
+	// paging or post-filters that could change the result size), collection
+	// stops once Limit entries have been gathered instead of scanning the
+	// whole index. (docs/PERFORMANCE.md S2)
+	earlyStop bool
 }
 
 // Builder builds the file index.
