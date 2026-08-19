@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -16,13 +17,23 @@ var (
 	flagAddr    string
 	flagVerbose bool
 	flagSocket  string
+	flagVersion bool
 )
 
+// version is overridable at build time via -ldflags "-X main.version=...".
+var version = "dev"
+
 func main() {
-	flag.StringVar(&flagAddr, "addr", ":8080", "server address")
+	flag.StringVar(&flagAddr, "addr", "127.0.0.1:8080", "server address (default binds to loopback for security)")
 	flag.BoolVar(&flagVerbose, "verbose", false, "verbose output")
 	flag.StringVar(&flagSocket, "socket", "", "socket path or named pipe name (default: system default)")
+	flag.BoolVar(&flagVersion, "version", false, "print version and exit")
 	flag.Parse()
+
+	if flagVersion {
+		fmt.Println("golocate-h5", version)
+		return
+	}
 
 	// Create API client
 	client := api.NewClient()
@@ -43,7 +54,10 @@ func main() {
 	mux.HandleFunc("/", h.Index)
 	mux.HandleFunc("/api/search", h.Search)
 	mux.HandleFunc("/api/status", h.Status)
+	mux.HandleFunc("/healthz", h.Healthz)
+	mux.HandleFunc("/metrics", h.Metrics)
 	mux.HandleFunc("/api/build", h.Build)
+	mux.HandleFunc("/api/open", h.Open)
 	mux.HandleFunc("/api/config", func(w http.ResponseWriter, r *http.Request) {
 		// Route based on HTTP method
 		switch r.Method {
@@ -59,8 +73,8 @@ func main() {
 
 	// Start server
 	slog.Info("starting golocate-h5", "addr", flagAddr)
-	slog.Info("open browser", "url", "http://localhost"+flagAddr)
-	
+	slog.Info("open browser", "url", "http://"+flagAddr)
+
 	if err := http.ListenAndServe(flagAddr, mux); err != nil {
 		slog.Error("server error", "error", err)
 		os.Exit(1)

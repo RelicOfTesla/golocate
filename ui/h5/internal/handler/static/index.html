@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>golocate - 快速文件搜索</title>
+    <title data-i18n="appTitle">golocate - 快速文件搜索</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { 
@@ -154,10 +154,21 @@
         }
         
         /* Column widths */
-        table.results-table th.col-name { width: 25%; }
-        table.results-table th.col-path { width: 45%; }
-        table.results-table th.col-size { width: 15%; }
-        table.results-table th.col-modtime { width: 15%; }
+        table.results-table th.col-name { width: 18%; }
+        table.results-table th.col-path { width: 32%; }
+        table.results-table th.col-size { width: 9%; }
+        table.results-table th.col-modtime { width: 13%; }
+        table.results-table th.col-match { width: 18%; }
+        table.results-table th.col-actions { width: 80px; }
+        
+        td.col-actions button {
+            padding: 2px 8px;
+            font-size: 0.75em;
+            background: #555;
+            margin-right: 4px;
+        }
+        td.col-actions button:hover { background: #666; }
+        body.light-theme td.col-actions button { background: #e0e0e0; color: #333; }
         
         table.results-table td {
             padding: 10px;
@@ -184,6 +195,8 @@
         td.col-path { color: #4CAF50; font-family: monospace; font-size: 13px; }
         td.col-size { color: #888; font-size: 13px; text-align: right; }
         td.col-modtime { color: #888; font-size: 13px; }
+        td.col-match mark { background: #4CAF50; color: #fff; border-radius: 2px; padding: 0 2px; }
+        body.light-theme td.col-match mark { background: #ffeb3b; color: #333; }
         
         /* Pagination */
         .pagination {
@@ -207,6 +220,26 @@
         /* Status & Error */
         .status { color: #888; font-size: 0.9em; padding: 20px; text-align: center; }
         .error { color: #f44336; padding: 20px; text-align: center; }
+        .status-bar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: #2a2a2a;
+            border: 1px solid #333;
+            border-radius: 4px;
+            padding: 10px 14px;
+            margin-bottom: 15px;
+            font-size: 13px;
+            color: #bbb;
+            flex-wrap: wrap;
+        }
+        .status-bar .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+        .status-bar .dot.on { background: #4CAF50; }
+        .status-bar .dot.off { background: #f44336; }
+        .status-bar .dot.building { background: #ff9800; animation: pulse 1s infinite; }
+        @keyframes pulse { 50% { opacity: 0.3; } }
+        .status-bar .stat { margin-right: 14px; }
+        .status-bar .stat b { color: #e0e0e0; }
         
         /* Settings Panel */
         .settings-panel { 
@@ -281,58 +314,122 @@
     <div class="container">
         <!-- Header -->
         <div class="header">
-            <h1>🔍 golocate - 快速文件搜索</h1>
+            <h1>🔍 <span data-i18n="appTitle">golocate - 快速文件搜索</span></h1>
             <div class="header-buttons">
-                <button class="secondary" onclick="toggleSettings()">⚙️ 设置</button>
+                <button class="secondary" onclick="toggleLang()" id="langBtn">🌐 EN</button>
+                <button class="secondary" onclick="toggleFavPanel()" id="favBtn">⭐ <span data-i18n="favorites">收藏</span></button>
+                <button class="secondary" onclick="refreshStatus()" data-i18n="btnStatus">📊 状态</button>
+                <button class="secondary" onclick="rebuildIndex()" data-i18n="btnRebuild">🔄 重建索引</button>
+                <button class="secondary" onclick="toggleSettings()" data-i18n="btnSettings">⚙️ 设置</button>
             </div>
+        </div>
+        
+        <!-- Server Status -->
+        <div class="status-bar" id="statusBar" style="display: none;">
+            <span id="statusText"></span>
         </div>
         
         <!-- Settings Panel -->
         <div class="settings-panel" id="settingsPanel">
-            <h3>设置</h3>
+            <h3 data-i18n="settingsTitle">设置</h3>
             <label>
-                <span>默认最大结果数:</span>
+                <span data-i18n="labelDefaultLimit">默认最大结果数:</span>
                 <input type="number" id="defaultLimit" value="100" min="1" max="10000" style="width: 100px;">
             </label>
             <label>
-                <span>默认忽略大小写:</span>
+                <span data-i18n="labelDefaultIgnoreCase">默认忽略大小写:</span>
                 <input type="checkbox" id="defaultIgnoreCase" checked>
             </label>
             <label>
-                <span>主题:</span>
+                <span data-i18n="labelTheme">主题:</span>
                 <select id="themeSelect" style="width: 100px;">
                     <option value="dark">暗色</option>
                     <option value="light">亮色</option>
                 </select>
             </label>
             <label>
-                <span>搜索防抖延迟(ms):</span>
-                <input type="number" id="debounceDelay" value="2500" min="100" max="10000" step="100" style="width: 100px;">
+                <span data-i18n="labelDebounce">搜索防抖延迟(ms):</span>
+                <input type="number" id="debounceDelay" value="300" min="100" max="10000" step="100" style="width: 100px;">
             </label>
-            <button onclick="saveSettings()" style="margin-top: 10px;">保存设置</button>
+            <button onclick="saveSettings()" style="margin-top: 10px;" data-i18n="btnSaveSettings">保存设置</button>
             <hr style="border-color:#444; margin:10px 0;">
-            <h3>服务器配置</h3>
-            <button onclick="loadServerConfig()" style="margin-bottom: 5px;">加载配置</button>
-            <textarea id="serverConfigArea" rows="10" style="width:100%; background:#1a1a1a; color:#e0e0e0; border:1px solid #333; font-family:monospace; font-size:12px; resize:vertical;" placeholder="点击「加载配置」读取当前配置，编辑后点「保存配置」"></textarea>
-            <button onclick="saveServerConfig()" style="margin-top: 5px;">保存配置</button>
+            <h3 data-i18n="dirMgmtTitle">索引目录管理</h3>
+            <div id="dirList" style="margin-bottom:8px;"></div>
+            <div style="display:flex; gap:6px;">
+                <input type="text" id="newDirInput" placeholder="/home/user/projects" style="flex:1;" data-i18n-placeholder="dirInputPlaceholder">
+                <button onclick="addDir()" style="padding:6px 12px;" data-i18n="btnAddDir">添加</button>
+                <button onclick="applyDirsToConfig()" class="secondary" style="padding:6px 12px;" data-i18n="btnApplyDirs">应用到配置</button>
+            </div>
+            <div style="color:#888; font-size:0.8em; margin-top:4px;" data-i18n="dirMgmtHint">「应用到配置」会把上面的目录列表写进下方配置的 directories，再点「保存配置」生效。</div>
+            <hr style="border-color:#444; margin:10px 0;">
+            <h3 data-i18n="serverConfigTitle">服务器配置</h3>
+            <button onclick="loadServerConfig()" style="margin-bottom: 5px;" data-i18n="btnLoadConfig">加载配置</button>
+            <textarea id="serverConfigArea" rows="10" style="width:100%; background:#1a1a1a; color:#e0e0e0; border:1px solid #333; font-family:monospace; font-size:12px; resize:vertical;" placeholder="点击「加载配置」读取当前配置，编辑后点「保存配置」" data-i18n-placeholder="cfgAreaPlaceholder"></textarea>
+            <button onclick="saveServerConfig()" style="margin-top: 5px;" data-i18n="btnSaveConfig">保存配置</button>
+        </div>
+        
+        <!-- Favorites Panel -->
+        <div class="settings-panel" id="favPanel" style="display:none;">
+            <h3 data-i18n="favorites">收藏</h3>
+            <div id="favList"></div>
+            <h3 style="margin-top:12px;" data-i18n="recent">最近打开</h3>
+            <div id="recentList"></div>
         </div>
         
         <!-- Search Box -->
         <div class="search-box">
-            <input type="text" id="searchInput" placeholder="搜索文件..." autofocus>
-            <button onclick="search()">搜索</button>
+            <input type="text" id="searchInput" placeholder="搜索文件..." autofocus data-i18n-placeholder="searchPlaceholder">
+            <button onclick="search()" data-i18n="btnSearch">搜索</button>
         </div>
         
         <!-- Advanced Options -->
         <div class="advanced-options">
             <label>
-                <input type="checkbox" id="ignoreCase" checked> 忽略大小写
+                <input type="checkbox" id="ignoreCase" checked> <span data-i18n="labelIgnoreCase">忽略大小写</span>
             </label>
             <label>
-                <input type="checkbox" id="regexMode"> 正则表达式
+                <input type="checkbox" id="basenameMode"> <span data-i18n="labelBasename">仅文件名</span>
             </label>
             <label>
-                最大结果数: <input type="number" id="maxResults" value="100" min="1" max="10000">
+                <span data-i18n="labelMode">模式:</span>
+                <select id="patternMode" style="width: 100px; background:#2a2a2a; color:#e0e0e0; border:1px solid #333; border-radius:4px; padding:5px;">
+                    <option value="" data-i18n="modeNormal">普通</option>
+                    <option value="regex" data-i18n="modeRegex">正则</option>
+                    <option value="wildcard" data-i18n="modeWildcard">通配符</option>
+                    <option value="terms" data-i18n="modeTerms">多词(terms)</option>
+                </select>
+            </label>
+            <label>
+                <input type="checkbox" id="regexMode"> <span data-i18n="labelRegex">正则表达式</span>
+            </label>
+            <label>
+                <input type="checkbox" id="contentMode"> <span data-i18n="labelContent">内容搜索</span>
+            </label>
+            <label>
+                <input type="checkbox" id="dedupeMode"> <span data-i18n="labelDedupe">去重（硬链接）</span>
+            </label>
+            <label>
+                <span data-i18n="labelScope">目录范围:</span>
+                <input type="text" id="scopeInput" placeholder="/home/user/proj" style="width:140px;">
+            </label>
+            <label>
+                <span data-i18n="labelTypes">类型:</span>
+                <input type="text" id="typeInput" placeholder="go,md" style="width:80px;">
+            </label>
+            <label>
+                <span data-i18n="labelExclude">排除:</span>
+                <input type="text" id="excludeInput" placeholder="*_test.go" style="width:100px;">
+            </label>
+            <label>
+                <span data-i18n="labelMinSize">最小大小(B):</span>
+                <input type="number" id="minSizeInput" min="0" style="width:70px;">
+            </label>
+            <label>
+                <span data-i18n="labelMaxSize">最大大小(B):</span>
+                <input type="number" id="maxSizeInput" min="0" style="width:70px;">
+            </label>
+            <label>
+                <span data-i18n="labelMaxResults">最大结果数:</span> <input type="number" id="maxResults" value="100" min="1" max="10000">
             </label>
         </div>
         
@@ -346,9 +443,9 @@
         <div class="results-header">
             <div class="results-count" id="resultsCount"></div>
             <div class="export-buttons" id="exportButtons" style="display: none;">
-                <button onclick="exportResults('json')">导出 JSON</button>
-                <button onclick="exportResults('csv')">导出 CSV</button>
-                <button onclick="exportResults('txt')">导出 TXT</button>
+                <button onclick="exportResults('json')" data-i18n="exportJson">导出 JSON</button>
+                <button onclick="exportResults('csv')" data-i18n="exportCsv">导出 CSV</button>
+                <button onclick="exportResults('txt')" data-i18n="exportTxt">导出 TXT</button>
             </div>
         </div>
         
@@ -357,33 +454,110 @@
             <table class="results-table" id="resultsTable">
                 <thead>
                     <tr>
-                        <th class="col-name sortable" data-sort="Name">文件名</th>
-                        <th class="col-path sortable" data-sort="Path">路径</th>
-                        <th class="col-size sortable" data-sort="Size">大小</th>
-                        <th class="col-modtime sortable" data-sort="ModTime">修改时间</th>
+                        <th class="col-name sortable" data-sort="Name" data-i18n="thName">文件名</th>
+                        <th class="col-path sortable" data-sort="Path" data-i18n="thPath">路径</th>
+                        <th class="col-size sortable" data-sort="Size" data-i18n="thSize">大小</th>
+                        <th class="col-modtime sortable" data-sort="ModTime" data-i18n="thMtime">修改时间</th>
+                        <th class="col-match" data-i18n="thMatch">匹配内容</th>
+                        <th class="col-actions" data-i18n="thActions">操作</th>
                     </tr>
                 </thead>
                 <tbody id="resultsBody">
-                    <tr><td colspan="4" class="empty-state">开始输入以搜索...</td></tr>
+                    <tr><td colspan="6" class="empty-state" data-i18n="emptyStart">开始输入以搜索...</td></tr>
                 </tbody>
             </table>
         </div>
         
         <!-- Pagination -->
         <div class="pagination" id="paginationControls" style="display: none;">
-            <button id="firstPageBtn" onclick="goFirstPage()">首页</button>
-            <button id="prevPageBtn" onclick="prevPage()">上一页</button>
+            <button id="firstPageBtn" onclick="goFirstPage()" data-i18n="firstPage">首页</button>
+            <button id="prevPageBtn" onclick="prevPage()" data-i18n="prevPage">上一页</button>
             <span id="pageInfo">第 1/1 页</span>
-            <button id="nextPageBtn" onclick="nextPage()">下一页</button>
-            <button id="lastPageBtn" onclick="goLastPage()">末页</button>
+            <button id="nextPageBtn" onclick="nextPage()" data-i18n="nextPage">下一页</button>
+            <button id="lastPageBtn" onclick="goLastPage()" data-i18n="lastPage">末页</button>
             <label>
                 跳转 <input type="number" id="pageJump" min="1" style="width: 60px;">
             </label>
-            <button onclick="jumpToPage()">GO</button>
+            <button onclick="jumpToPage()" data-i18n="goBtn">GO</button>
         </div>
     </div>
     
     <script>
+
+        // ================= i18n (zh/en) =================
+        const I18N_ZH = {
+            appTitle: 'golocate - 快速文件搜索', btnSearch: '搜索', btnStatus: '📊 状态',
+            btnRebuild: '🔄 重建索引', btnSettings: '⚙️ 设置',
+            settingsTitle: '设置', labelDefaultLimit: '默认最大结果数:', labelDefaultIgnoreCase: '默认忽略大小写:',
+            labelTheme: '主题:', labelDebounce: '搜索防抖延迟(ms):', btnSaveSettings: '保存设置',
+            dirMgmtTitle: '索引目录管理', btnAddDir: '添加', btnApplyDirs: '应用到配置',
+            dirInputPlaceholder: '/home/user/projects', dirMgmtHint: '「应用到配置」会把上面的目录列表写进下方配置的 directories，再点「保存配置」生效。',
+            serverConfigTitle: '服务器配置', btnLoadConfig: '加载配置', btnSaveConfig: '保存配置',
+            cfgAreaPlaceholder: '点击「加载配置」读取当前配置，编辑后点「保存配置」',
+            searchPlaceholder: '搜索文件...', labelIgnoreCase: '忽略大小写', labelBasename: '仅文件名',
+            labelMode: '模式:', modeNormal: '普通', modeRegex: '正则', modeWildcard: '通配符',
+            labelRegex: '正则表达式', labelContent: '内容搜索', labelDedupe: '去重（硬链接）', labelScope: '目录范围:', labelTypes: '类型:', labelExclude: '排除:', labelMinSize: '最小大小(B):', labelMaxSize: '最大大小(B):', modeTerms: '多词(terms)', labelMaxResults: '最大结果数:',
+            exportJson: '导出 JSON', exportCsv: '导出 CSV', exportTxt: '导出 TXT',
+            thName: '文件名', thPath: '路径', thSize: '大小', thMtime: '修改时间', thMatch: '匹配内容', thActions: '操作',
+            emptyStart: '开始输入以搜索...', firstPage: '首页', prevPage: '上一页', nextPage: '下一页',
+            lastPage: '末页', goBtn: 'GO', pageJump: '跳转',
+            offline: '服务器离线', statusFail: '获取状态失败', statusBuilding: '（构建中', statusScanned: '，已扫描',
+            statusRunning: '运行', statusIndexFiles: '索引文件', statusIndexed: '已索引',
+            statusLastBuild: '上次构建', statusUptime: '运行时长', yes: '是', no: '否',
+            searching: '搜索中...', noResults: '未找到结果', errPrefix: '错误',
+            resultsFound: '找到', resultsTotal: '个结果（共', linePrefix: '行',
+            noDirs: '暂无索引目录', pageInfo: '第', open: '打开', openDir: '打开目录', noDirToOpen: '无目录可打开', openFail: '打开失败', opened: '已打开', copy: '复制', delete: '删除', favorites: '收藏', favorite: '收藏', noFavorites: '暂无收藏', recent: '最近打开', noRecent: '暂无最近打开',
+        };
+        const I18N_EN = {
+            appTitle: 'golocate - Fast File Search', btnSearch: 'Search', btnStatus: '📊 Status',
+            btnRebuild: '🔄 Rebuild', btnSettings: '⚙️ Settings',
+            settingsTitle: 'Settings', labelDefaultLimit: 'Default max results:', labelDefaultIgnoreCase: 'Ignore case by default:',
+            labelTheme: 'Theme:', labelDebounce: 'Debounce delay (ms):', btnSaveSettings: 'Save settings',
+            dirMgmtTitle: 'Index directories', btnAddDir: 'Add', btnApplyDirs: 'Apply to config',
+            dirInputPlaceholder: '/home/user/projects', dirMgmtHint: '"Apply to config" writes the directory list into the directories: section below; then click "Save config" to apply it.',
+            serverConfigTitle: 'Server config', btnLoadConfig: 'Load config', btnSaveConfig: 'Save config',
+            cfgAreaPlaceholder: 'Click "Load config" to read the current config, edit, then "Save config"',
+            searchPlaceholder: 'Search files...', labelIgnoreCase: 'Ignore case', labelBasename: 'File name only',
+            labelMode: 'Mode:', modeNormal: 'Normal', modeRegex: 'Regex', modeWildcard: 'Wildcard',
+            labelRegex: 'Regex', labelContent: 'Content search', labelDedupe: 'Dedupe (hard links)', labelScope: 'Scope:', labelTypes: 'Types:', labelExclude: 'Exclude:', labelMinSize: 'Min size (B):', labelMaxSize: 'Max size (B):', modeTerms: 'Terms', labelMaxResults: 'Max results:',
+            exportJson: 'Export JSON', exportCsv: 'Export CSV', exportTxt: 'Export TXT',
+            thName: 'Name', thPath: 'Path', thSize: 'Size', thMtime: 'Modified', thMatch: 'Match', thActions: 'Actions',
+            emptyStart: 'Type to search...', firstPage: 'First', prevPage: 'Prev', nextPage: 'Next',
+            lastPage: 'Last', goBtn: 'GO', pageJump: 'Jump',
+            offline: 'Server offline', statusFail: 'Failed to fetch status', statusBuilding: ' (building', statusScanned: ', scanned',
+            statusRunning: 'Running', statusIndexFiles: 'Index files', statusIndexed: 'Indexed',
+            statusLastBuild: 'Last build', statusUptime: 'Uptime', yes: 'yes', no: 'no',
+            searching: 'Searching...', noResults: 'No results', errPrefix: 'Error',
+            resultsFound: 'Found', resultsTotal: 'results (of', linePrefix: 'L',
+            noDirs: 'No index directories', pageInfo: 'Page', open: 'Open', openDir: 'Open dir', noDirToOpen: 'No directory to open', openFail: 'Open failed', opened: 'Opened', copy: 'Copy', delete: 'Delete', favorites: 'Favorites', favorite: 'Favorite', noFavorites: 'No favorites yet', recent: 'Recently opened', noRecent: 'No recent files',
+        };
+        let currentLang = localStorage.getItem('golocateLang') || 'zh';
+        function t(key) {
+            const dict = currentLang === 'zh' ? I18N_ZH : I18N_EN;
+            return dict[key] !== undefined ? dict[key] : (I18N_ZH[key] !== undefined ? I18N_ZH[key] : key);
+        }
+        function applyLang() {
+            const dict = currentLang === 'zh' ? I18N_ZH : I18N_EN;
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                const k = el.dataset.i18n;
+                if (dict[k] !== undefined) el.textContent = dict[k];
+            });
+            document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+                const k = el.dataset.i18nPlaceholder;
+                if (dict[k] !== undefined) el.placeholder = dict[k];
+            });
+            const langBtn = document.getElementById('langBtn');
+            if (langBtn) langBtn.textContent = currentLang === 'zh' ? '🌐 EN' : '🌐 中文';
+            document.documentElement.lang = currentLang === 'zh' ? 'zh-CN' : 'en';
+        }
+        function toggleLang() {
+            currentLang = currentLang === 'zh' ? 'en' : 'zh';
+            localStorage.setItem('golocateLang', currentLang);
+            applyLang();
+            refreshStatus(); // status bar strings are translated dynamically
+        }
+        // ================= end i18n =================
+        
         const searchInput = document.getElementById('searchInput');
         const resultsBody = document.getElementById('resultsBody');
         const resultsCount = document.getElementById('resultsCount');
@@ -392,19 +566,69 @@
         const searchHistoryItems = document.getElementById('searchHistoryItems');
         
         let debounceTimer = null;
-        let debounceDelay = 2500; // 按键防抖延迟(ms)，可在设置中调整
+        let debounceDelay = 300; // 按键防抖延迟(ms)，可在设置中调整
         let currentResults = [];
-        let currentSort = { field: null, direction: 'asc' };
+        let currentMatches = [];
+        let currentSort = { field: null, display: null, direction: 'asc' };
         let currentPage = 1;
         let lastQuery = '';
         let currentTotal = 0;
         
         // Initialize
         document.addEventListener('DOMContentLoaded', () => {
+            applyLang();
+            loadFavorites();
+            saveFavorites();
             loadSearchHistory();
             loadSettings();
             initSortHandlers();
+            refreshStatus();
         });
+        
+        // Server Status & Index Rebuild
+        async function refreshStatus() {
+            const bar = document.getElementById('statusBar');
+            const text = document.getElementById('statusText');
+            try {
+                const r = await fetch('/api/status');
+                const data = await r.json();
+                bar.style.display = 'flex';
+                if (data.error) {
+                    bar.innerHTML = '<span class="dot off"></span><span>' + t('offline') + ': ' + escapeHtml(data.error) + '</span>';
+                    return;
+                }
+                const dotClass = data.is_building ? 'building' : (data.running ? 'on' : 'off');
+                let building = data.is_building ? t('statusBuilding') : '';
+                if (data.is_building) {
+                    if (data.build_scanned) building += t('statusScanned') + ' ' + data.build_scanned;
+                    building += '...';
+                }
+                text.innerHTML = '<span class="dot ' + dotClass + '"></span>' +
+                    '<span class="stat">' + t('statusRunning') + ': <b>' + (data.running ? t('yes') : t('no')) + '</b></span>' +
+                    '<span class="stat">' + t('statusIndexFiles') + ': <b>' + (data.index_size || 0) + '</b></span>' +
+                    '<span class="stat">' + t('statusIndexed') + ': <b>' + (data.indexed_file_count || 0) + '</b></span>' +
+                    '<span class="stat">' + t('statusLastBuild') + ': <b>' + escapeHtml(data.last_build_time ? data.last_build_time.replace('T', ' ').slice(0, 19) : '-') + '</b></span>' +
+                    '<span class="stat">' + t('statusUptime') + ': <b>' + escapeHtml(data.uptime || '-') + '</b></span>' + building;
+            } catch (err) {
+                bar.style.display = 'flex';
+                bar.innerHTML = '<span class="dot off"></span><span>' + t('statusFail') + ': ' + escapeHtml(err.message) + '</span>';
+            }
+        }
+        
+        async function rebuildIndex() {
+            try {
+                const r = await fetch('/api/build', { method: 'POST' });
+                const data = await r.json();
+                if (data.status === 'build started') {
+                    alert('索引重建已开始');
+                    setTimeout(refreshStatus, 1000);
+                } else {
+                    alert('重建失败: ' + (data.error || r.statusText));
+                }
+            } catch (err) {
+                alert('重建失败: ' + err.message);
+            }
+        }
         
         // Settings Functions
         function toggleSettings() {
@@ -453,6 +677,10 @@
         }
         
         // Sort Functions
+        // Header clicks re-run the search with server-side sort parameters,
+        // so sorting applies across the full result set, not just the page.
+        const SORT_FIELD_MAP = { Name: 'name', Path: 'path', Size: 'size', ModTime: 'time' };
+
         function initSortHandlers() {
             const headers = document.querySelectorAll('th.sortable');
             headers.forEach(th => {
@@ -463,42 +691,20 @@
             });
         }
         
-        function sortResults(field) {
-            if (!currentResults || currentResults.length === 0) return;
-            
-            // Toggle direction
-            if (currentSort.field === field) {
+        function sortResults(displayField) {
+            const serverField = SORT_FIELD_MAP[displayField] || displayField.toLowerCase();
+            if (currentSort.field === serverField) {
                 currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
             } else {
-                currentSort.field = field;
+                currentSort.field = serverField;
                 currentSort.direction = 'asc';
             }
-            
-            // Sort results
-            currentResults.sort((a, b) => {
-                let aVal = a[field];
-                let bVal = b[field];
-                
-                // Handle different types
-                if (field === 'Size') {
-                    aVal = aVal || 0;
-                    bVal = bVal || 0;
-                } else if (field === 'ModTime') {
-                    aVal = new Date(aVal || 0).getTime();
-                    bVal = new Date(bVal || 0).getTime();
-                } else {
-                    aVal = (aVal || '').toString().toLowerCase();
-                    bVal = (bVal || '').toString().toLowerCase();
-                }
-                
-                if (aVal < bVal) return currentSort.direction === 'asc' ? -1 : 1;
-                if (aVal > bVal) return currentSort.direction === 'asc' ? 1 : -1;
-                return 0;
-            });
-            
-            // Update UI
+            currentSort.display = displayField;
+            // Content-search matches keep file order; only path searches sort.
             updateSortIndicators();
-            renderResults();
+            if (!document.getElementById('contentMode').checked) {
+                search(); // re-run with server-side sort (applies across all pages)
+            }
         }
         
         function updateSortIndicators() {
@@ -509,7 +715,7 @@
             
             // Add current sort class
             if (currentSort.field) {
-                const th = document.querySelector(`th[data-sort="${currentSort.field}"]`);
+                const th = document.querySelector(`th[data-sort="${currentSort.display}"]`);
                 if (th) {
                     th.classList.add(`sort-${currentSort.direction}`);
                 }
@@ -571,11 +777,12 @@
         async function search() {
             const query = searchInput.value.trim();
             if (!query) {
-                resultsBody.innerHTML = '<tr><td colspan="4" class="empty-state">开始输入以搜索...</td></tr>';
+                resultsBody.innerHTML = '<tr><td colspan="6" class="empty-state">' + t('emptyStart') + '</td></tr>';
                 resultsCount.textContent = '';
                 exportButtons.style.display = 'none';
                 document.getElementById('paginationControls').style.display = 'none';
                 currentResults = [];
+                currentMatches = [];
                 currentPage = 1;
                 return;
             }
@@ -586,33 +793,59 @@
                 currentPage = 1;
             }
             
-            resultsBody.innerHTML = '<tr><td colspan="4" class="status">搜索中...</td></tr>';
+            resultsBody.innerHTML = '<tr><td colspan="6" class="status">' + t('searching') + '</td></tr>';
             
             const ignoreCase = document.getElementById('ignoreCase').checked;
-            const regexMode = document.getElementById('regexMode').checked;
+            const basename = document.getElementById('basenameMode').checked;
+            const patternMode = document.getElementById('patternMode').value;
+            const regexMode = document.getElementById('regexMode').checked || patternMode === 'regex';
+            const contentMode = document.getElementById('contentMode').checked;
+            const dedupe = document.getElementById('dedupeMode').checked;
+            const scope = document.getElementById('scopeInput').value.trim();
+            const types = document.getElementById('typeInput').value.trim();
+            const exclude = document.getElementById('excludeInput').value.trim();
+            const minSize = document.getElementById('minSizeInput').value;
+            const maxSize = document.getElementById('maxSizeInput').value;
             const maxResults = document.getElementById('maxResults').value;
             const pageSize = parseInt(maxResults) || 100;
             const offset = (currentPage - 1) * pageSize;
             
             try {
-                const response = await fetch('/api/search?q=' + encodeURIComponent(query) + 
-                    '&ignore_case=' + ignoreCase + '&regex=' + regexMode + '&limit=' + pageSize + '&offset=' + offset);
+                let url = '/api/search?q=' + encodeURIComponent(query) + 
+                    '&ignore_case=' + ignoreCase + '&regex=' + regexMode +
+                    '&pattern_mode=' + encodeURIComponent(patternMode) +
+                    '&basename=' + basename +
+                    '&dedupe=' + dedupe +
+                    '&scope=' + encodeURIComponent(scope) +
+                    '&type=' + encodeURIComponent(types) +
+                    '&exclude=' + encodeURIComponent(exclude) +
+                    '&min_size=' + minSize + '&max_size=' + maxSize +
+                    '&limit=' + pageSize + '&offset=' + offset;
+                if (contentMode) {
+                    url += '&content=' + encodeURIComponent(query);
+                }
+                if (currentSort.field && !contentMode) {
+                    url += '&sort_field=' + currentSort.field + '&sort_order=' + currentSort.direction;
+                }
+                const response = await fetch(url);
                 const data = await response.json();
                 
                 if (data.error) {
-                    resultsBody.innerHTML = '<tr><td colspan="4" class="error">错误: ' + escapeHtml(data.error) + '</td></tr>';
+                    resultsBody.innerHTML = '<tr><td colspan="6" class="error">' + t('errPrefix') + ': ' + escapeHtml(data.error) + '</td></tr>';
                     resultsCount.textContent = '';
                     exportButtons.style.display = 'none';
                     currentResults = [];
+                    currentMatches = [];
                     return;
                 }
                 
-                if (!data.results || data.results.length === 0) {
-                    resultsBody.innerHTML = '<tr><td colspan="4" class="empty-state">未找到结果</td></tr>';
+                if ((!data.results || data.results.length === 0) && (!data.matches || data.matches.length === 0)) {
+                    resultsBody.innerHTML = '<tr><td colspan="6" class="empty-state">' + t('noResults') + '</td></tr>';
                     resultsCount.textContent = '无结果';
                     exportButtons.style.display = 'none';
                     document.getElementById('paginationControls').style.display = 'none';
                     currentResults = [];
+                    currentMatches = [];
                     return;
                 }
                 
@@ -620,8 +853,9 @@
                 saveSearchHistory(query);
                 
                 // Store results for export and sorting
-                currentResults = data.results;
-                currentTotal = data.total || data.results.length;
+                currentResults = data.results || [];
+                currentMatches = data.matches || [];
+                currentTotal = data.total || currentResults.length || currentMatches.length;
                 
                 // Reset sort
                 currentSort = { field: null, direction: 'asc' };
@@ -629,14 +863,16 @@
                 
                 // Render results
                 renderResults();
-                resultsCount.textContent = `找到 ${data.results.length} 个结果（共 ${currentTotal} 个）`;
+                const shown = Math.max(currentResults.length, currentMatches.length);
+                resultsCount.textContent = t('resultsFound') + ' ' + shown + ' (' + t('resultsTotal') + ' ' + currentTotal + ')';
                 exportButtons.style.display = 'flex';
                 updatePagination();
             } catch (err) {
-                resultsBody.innerHTML = '<tr><td colspan="4" class="error">错误: ' + escapeHtml(err.message) + '</td></tr>';
+                resultsBody.innerHTML = '<tr><td colspan="6" class="error">' + t('errPrefix') + ': ' + escapeHtml(err.message) + '</td></tr>';
                 resultsCount.textContent = '';
                 exportButtons.style.display = 'none';
                 currentResults = [];
+                currentMatches = [];
             }
         }
         
@@ -650,7 +886,7 @@
                 return;
             }
             controls.style.display = 'flex';
-            document.getElementById('pageInfo').textContent = `第 ${currentPage}/${totalPages} 页`;
+            document.getElementById('pageInfo').textContent = t('pageInfo') + ' ' + currentPage + '/' + totalPages;
             document.getElementById('firstPageBtn').disabled = currentPage <= 1;
             document.getElementById('prevPageBtn').disabled = currentPage <= 1;
             document.getElementById('nextPageBtn').disabled = currentPage >= totalPages;
@@ -693,22 +929,233 @@
         }
         
         function renderResults() {
-            if (!currentResults || currentResults.length === 0) return;
+            if ((!currentResults || currentResults.length === 0) && (!currentMatches || currentMatches.length === 0)) return;
+            
+            const contentMode = currentMatches && currentMatches.length > 0;
+            const count = Math.max(currentResults.length, currentMatches.length);
             
             let html = '';
-            currentResults.forEach(result => {
+            for (let i = 0; i < count; i++) {
+                const result = currentResults[i] || {};
+                const match = contentMode ? (currentMatches[i] || {}) : null;
                 const modTime = result.ModTime ? formatDate(result.ModTime) : '-';
                 const size = result.Size ? formatSize(result.Size) : '-';
                 
+                let matchCell = '-';
+                let matchTitle = '';
+                if (match) {
+                    const lineNo = t('linePrefix') + (match.LineNum || '') + ': ';
+                    matchCell = lineNo + highlightMatch(match.Line || '', match.Match);
+                    const ctx = [];
+                    (match.Before || []).forEach(l => ctx.push('↑ ' + l));
+                    ctx.push(match.Line || '');
+                    (match.After || []).forEach(l => ctx.push('↓ ' + l));
+                    matchTitle = ctx.join('\n');
+                }
+                
                 html += '<tr>';
                 html += '<td class="col-name" title="' + escapeHtml(result.Name || '') + '">' + escapeHtml(result.Name || '-') + '</td>';
-                html += '<td class="col-path" title="' + escapeHtml(result.Path || '') + '">' + escapeHtml(result.Path || '-') + '</td>';
+                html += '<td class="col-path" title="' + escapeHtml(result.Path || '') + '">' + highlightMatch(result.Path || '-', searchInput.value.trim()) + '</td>';
                 html += '<td class="col-size">' + size + '</td>';
                 html += '<td class="col-modtime">' + modTime + '</td>';
+                html += '<td class="col-match" title="' + escapeHtml(matchTitle || matchCell) + '">' + matchCell + '</td>';
+                html += '<td class="col-actions">' +
+                    '<button onclick="openResult(' + i + ')">' + t('open') + '</button>' +
+                    '<button onclick="openDirResult(' + i + ')">' + t('openDir') + '</button>' +
+                    '<button onclick="copyResult(' + i + ')">' + t('copy') + '</button>' +
+                    '<button onclick="toggleFavorite(' + i + ')" id="fav-' + i + '" title="' + t('favorite') + '">☆</button>' +
+                    '</td>';
                 html += '</tr>';
-            });
+            }
             
             resultsBody.innerHTML = html;
+        }
+        
+        // Path actions: open via the daemon, or copy to clipboard (browser).
+        function resultPathAt(i) {
+            const result = currentResults[i] || {};
+            const match = currentMatches && currentMatches[i] || {};
+            return result.Path || match.Path || '';
+        }
+
+        function dirnameOf(path) {
+            const i = path.lastIndexOf('/');
+            return i > 0 ? path.slice(0, i) : '';
+        }
+
+        async function openDirResult(i) {
+            const dir = dirnameOf(resultPathAt(i));
+            if (!dir) { alert(t('noDirToOpen')); return; }
+            try {
+                const r = await fetch('/api/open', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ path: dir })
+                });
+                if (!r.ok) { alert(t('openFail') + ': ' + (await r.text())); return; }
+                const data = await r.json();
+                alert(t('opened') + ': ' + data.path);
+            } catch (err) {
+                alert(t('openFail') + ': ' + err.message);
+            }
+        }
+
+        async function openResult(i) {
+            const path = resultPathAt(i);
+            if (!path) { alert('无路径可打开'); return; }
+            try {
+                const r = await fetch('/api/open', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ path: path })
+                });
+                if (!r.ok) {
+                    alert('打开失败: ' + (await r.text()));
+                    return;
+                }
+                const data = await r.json();
+                recordRecent(data.path);
+                alert(t('opened') + ': ' + data.path);
+            } catch (err) {
+                alert('打开失败: ' + err.message);
+            }
+        }
+
+        async function copyResult(i) {
+            const path = resultPathAt(i);
+            if (!path) { alert('无路径可复制'); return; }
+            try {
+                await navigator.clipboard.writeText(path);
+                alert('已复制路径: ' + path);
+            } catch (err) {
+                // Clipboard API unavailable (e.g. non-secure context): fall back
+                // to a temporary textarea + execCommand.
+                try {
+                    const ta = document.createElement('textarea');
+                    ta.value = path;
+                    document.body.appendChild(ta);
+                    ta.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(ta);
+                    alert('已复制路径: ' + path);
+                } catch (err2) {
+                    alert('复制失败: ' + err2.message);
+                }
+            }
+        }
+        
+        // ---- Favorites (localStorage bookmarks) ----
+        let favoritePaths = [];
+        function loadFavorites() {
+            try { favoritePaths = JSON.parse(localStorage.getItem('golocateFavorites') || '[]'); }
+            catch (e) { favoritePaths = []; }
+        }
+        function saveFavorites() {
+            localStorage.setItem('golocateFavorites', JSON.stringify(favoritePaths));
+            const favBtn = document.getElementById('favBtn');
+            if (favBtn) favBtn.textContent = '⭐ ' + t('favorites') + (favoritePaths.length ? ' (' + favoritePaths.length + ')' : '');
+        }
+        function isFavorite(path) { return favoritePaths.some(f => f.path === path); }
+        function toggleFavorite(i) {
+            const path = resultPathAt(i);
+            if (!path) return;
+            loadFavorites();
+            const idx = favoritePaths.findIndex(f => f.path === path);
+            if (idx >= 0) { favoritePaths.splice(idx, 1); } else {
+                favoritePaths.unshift({ path: path, name: (currentResults[i] || {}).Name || path.split('/').pop(), time: Date.now() });
+            }
+            saveFavorites();
+            const btn = document.getElementById('fav-' + i);
+            if (btn) btn.textContent = idx >= 0 ? '☆' : '★';
+        }
+        function renderFavorites() {
+            loadFavorites();
+            const list = document.getElementById('favList');
+            list.innerHTML = '';
+            if (favoritePaths.length === 0) {
+                list.innerHTML = '<div style="color:#888; font-size:0.85em;">' + t('noFavorites') + '</div>';
+                return;
+            }
+            favoritePaths.forEach((f, i) => {
+                const row = document.createElement('div');
+                row.style.cssText = 'display:flex; justify-content:space-between; align-items:center; gap:8px; background:#1a1a1a; border:1px solid #333; border-radius:4px; padding:6px 10px; margin-bottom:4px;';
+                const span = document.createElement('span');
+                span.textContent = f.name + ' — ' + f.path;
+                span.style.cssText = 'font-family:monospace; font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; cursor:pointer;';
+                span.title = f.path;
+                span.onclick = () => openPath(f.path);
+                const del = document.createElement('button');
+                del.textContent = t('delete');
+                del.style.cssText = 'padding:2px 8px; font-size:0.8em; background:#c0392b;';
+                del.onclick = () => { favoritePaths.splice(i, 1); saveFavorites(); renderFavorites(); };
+                row.appendChild(span);
+                row.appendChild(del);
+                list.appendChild(row);
+            });
+        }
+        function toggleFavPanel() {
+            const panel = document.getElementById('favPanel');
+            panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+            if (panel.style.display === 'block') { renderFavorites(); renderRecents(); }
+        }
+        // ---- Recent files (last opened) ----
+        function recordRecent(path) {
+            if (!path) return;
+            let recents = [];
+            try { recents = JSON.parse(localStorage.getItem('golocateRecent') || '[]'); } catch (e) { recents = []; }
+            recents = recents.filter(r => r.path !== path);
+            recents.unshift({ path: path, name: path.split('/').pop(), time: Date.now() });
+            recents = recents.slice(0, 10);
+            localStorage.setItem('golocateRecent', JSON.stringify(recents));
+        }
+        function renderRecents() {
+            const list = document.getElementById('recentList');
+            list.innerHTML = '';
+            let recents = [];
+            try { recents = JSON.parse(localStorage.getItem('golocateRecent') || '[]'); } catch (e) { recents = []; }
+            if (recents.length === 0) {
+                list.innerHTML = '<div style="color:#888; font-size:0.85em;">' + t('noRecent') + '</div>';
+                return;
+            }
+            recents.forEach((f, i) => {
+                const row = document.createElement('div');
+                row.style.cssText = 'display:flex; justify-content:space-between; align-items:center; gap:8px; background:#1a1a1a; border:1px solid #333; border-radius:4px; padding:6px 10px; margin-bottom:4px;';
+                const span = document.createElement('span');
+                span.textContent = f.name + ' — ' + f.path;
+                span.style.cssText = 'font-family:monospace; font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; cursor:pointer;';
+                span.title = f.path;
+                span.onclick = () => openPath(f.path);
+                const del = document.createElement('button');
+                del.textContent = '×';
+                del.style.cssText = 'padding:2px 8px; font-size:0.8em; background:#555;';
+                del.onclick = () => { recents.splice(i, 1); localStorage.setItem('golocateRecent', JSON.stringify(recents)); renderRecents(); };
+                row.appendChild(span);
+                row.appendChild(del);
+                list.appendChild(row);
+            });
+        }
+        async function openPath(path) {
+            if (!path) { alert(t('noDirToOpen')); return; }
+            try {
+                const r = await fetch('/api/open', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ path: path })
+                });
+                if (!r.ok) { alert(t('openFail') + ': ' + (await r.text())); return; }
+            } catch (err) {
+                alert(t('openFail') + ': ' + err.message);
+            }
+        }
+        
+        // highlightMatch escapes text and wraps each occurrence of `match` in <mark>.
+        function highlightMatch(text, match) {
+            if (!match) return escapeHtml(text);
+            const parts = String(text).split(match);
+            if (parts.length === 1) return escapeHtml(text);
+            return parts.map((p, i) =>
+                i < parts.length - 1 ? escapeHtml(p) + '<mark>' + escapeHtml(match) + '</mark>' : escapeHtml(p)
+            ).join('');
         }
         
         // Search History Functions
@@ -745,41 +1192,111 @@
         }
         
         // Export Functions
-        function exportResults(format) {
-            if (!currentResults || currentResults.length === 0) {
+        // Exports fetch the FULL result set (up to 100000) so the file is not
+        // limited to the currently displayed page.
+        async function exportResults(format) {
+            const query = lastQuery;
+            if (!query && currentResults.length === 0 && currentMatches.length === 0) {
+                alert('无结果可导出');
+                return;
+            }
+            // Re-run the search without pagination to get everything.
+            const ignoreCase = document.getElementById('ignoreCase').checked;
+            const basename = document.getElementById('basenameMode').checked;
+            const patternMode = document.getElementById('patternMode').value;
+            const regexMode = document.getElementById('regexMode').checked || patternMode === 'regex';
+            const contentMode = document.getElementById('contentMode').checked;
+            const dedupe = document.getElementById('dedupeMode').checked;
+            const scope = document.getElementById('scopeInput').value.trim();
+            const types = document.getElementById('typeInput').value.trim();
+            const exclude = document.getElementById('excludeInput').value.trim();
+            const minSize = document.getElementById('minSizeInput').value;
+            const maxSize = document.getElementById('maxSizeInput').value;
+
+            let url = '/api/search?q=' + encodeURIComponent(query) +
+                '&ignore_case=' + ignoreCase + '&regex=' + regexMode +
+                '&pattern_mode=' + encodeURIComponent(patternMode) +
+                '&basename=' + basename + '&dedupe=' + dedupe +
+                    '&scope=' + encodeURIComponent(scope) +
+                    '&type=' + encodeURIComponent(types) +
+                    '&exclude=' + encodeURIComponent(exclude) +
+                    '&min_size=' + minSize + '&max_size=' + maxSize +
+                    '&limit=100000&offset=0';
+            if (contentMode) {
+                url += '&content=' + encodeURIComponent(query);
+            }
+            let data;
+            try {
+                const r = await fetch(url);
+                data = await r.json();
+            } catch (err) {
+                alert('导出失败: ' + err.message);
+                return;
+            }
+            if (data.error) {
+                alert('导出失败: ' + data.error);
+                return;
+            }
+
+            const allResults = data.results || [];
+            const allMatches = data.matches || [];
+            const useMatches = allMatches.length > 0;
+            if (allResults.length === 0 && !useMatches) {
                 alert('无结果可导出');
                 return;
             }
             
             let content, filename, mimeType;
             
-            switch (format) {
-                case 'json':
-                    content = JSON.stringify(currentResults, null, 2);
-                    filename = 'search_results.json';
-                    mimeType = 'application/json';
-                    break;
-                case 'csv':
-                    content = '文件名,路径,大小,修改时间\n' + currentResults.map(r => 
-                        `"${r.Name || ''}","${r.Path || ''}","${formatSize(r.Size)}","${formatDate(r.ModTime)}"`
-                    ).join('\n');
-                    filename = 'search_results.csv';
-                    mimeType = 'text/csv';
-                    break;
-                case 'txt':
-                    content = currentResults.map(r => r.Path).join('\n');
-                    filename = 'search_results.txt';
-                    mimeType = 'text/plain';
-                    break;
+            if (useMatches) {
+                switch (format) {
+                    case 'json':
+                        content = JSON.stringify(allMatches, null, 2);
+                        filename = 'search_results.json';
+                        mimeType = 'application/json';
+                        break;
+                    case 'csv':
+                        content = '文件名,路径,行号,匹配内容\n' + allMatches.map(m => 
+                            `"${(m.Path || '').split('/').pop()}","${m.Path || ''}","${m.LineNum || ''}","${(m.Line || '').replace(/"/g, '""')}"`
+                        ).join('\n');
+                        filename = 'search_results.csv';
+                        mimeType = 'text/csv';
+                        break;
+                    case 'txt':
+                        content = allMatches.map(m => `${m.Path}:${m.LineNum}:${m.Line}`).join('\n');
+                        filename = 'search_results.txt';
+                        mimeType = 'text/plain';
+                        break;
+                }
+            } else {
+                switch (format) {
+                    case 'json':
+                        content = JSON.stringify(allResults, null, 2);
+                        filename = 'search_results.json';
+                        mimeType = 'application/json';
+                        break;
+                    case 'csv':
+                        content = '文件名,路径,大小,修改时间\n' + allResults.map(r => 
+                            `"${r.Name || ''}","${r.Path || ''}","${formatSize(r.Size)}","${formatDate(r.ModTime)}"`
+                        ).join('\n');
+                        filename = 'search_results.csv';
+                        mimeType = 'text/csv';
+                        break;
+                    case 'txt':
+                        content = allResults.map(r => r.Path).join('\n');
+                        filename = 'search_results.txt';
+                        mimeType = 'text/plain';
+                        break;
+                }
             }
             
             const blob = new Blob([content], { type: mimeType });
-            const url = URL.createObjectURL(blob);
+            const urlObj = URL.createObjectURL(blob);
             const a = document.createElement('a');
-            a.href = url;
+            a.href = urlObj;
             a.download = filename;
             a.click();
-            URL.revokeObjectURL(url);
+            URL.revokeObjectURL(urlObj);
         }
         
         // Utility Functions
@@ -840,9 +1357,66 @@
                 const r = await fetch('/api/config');
                 const cfg = await r.json();
                 document.getElementById('serverConfigArea').value = toSimpleYaml(cfg);
+                renderDirList(cfg.directories || []);
             } catch (err) {
                 alert('加载配置失败: ' + err.message);
             }
+        }
+
+        // ---- Index directory management ----
+        let currentDirs = [];
+
+        function renderDirList(dirs) {
+            currentDirs = dirs.slice();
+            const box = document.getElementById('dirList');
+            box.innerHTML = '';
+            if (dirs.length === 0) {
+                box.innerHTML = '<div style="color:#888; font-size:0.85em;">' + t('noDirs') + '</div>';
+                return;
+            }
+            dirs.forEach((d, i) => {
+                const row = document.createElement('div');
+                row.style.cssText = 'display:flex; justify-content:space-between; align-items:center; gap:8px; background:#1a1a1a; border:1px solid #333; border-radius:4px; padding:6px 10px; margin-bottom:4px;';
+                const span = document.createElement('span');
+                span.textContent = d;
+                span.style.cssText = 'font-family:monospace; font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1;';
+                const del = document.createElement('button');
+                del.textContent = t('delete');
+                del.style.cssText = 'padding:2px 8px; font-size:0.8em; background:#c0392b;';
+                del.onclick = () => { currentDirs.splice(i, 1); renderDirList(currentDirs); };
+                row.appendChild(span);
+                row.appendChild(del);
+                box.appendChild(row);
+            });
+        }
+
+        function addDir() {
+            const input = document.getElementById('newDirInput');
+            const dir = input.value.trim();
+            if (!dir) { alert('请输入目录路径'); return; }
+            if (currentDirs.includes(dir)) { alert('目录已存在'); return; }
+            currentDirs.push(dir);
+            input.value = '';
+            renderDirList(currentDirs);
+        }
+
+        // applyDirsToConfig rewrites the `directories:` block of the YAML in
+        // the config textarea with the current directory list, then refreshes
+        // the textarea so "保存配置" applies it server-side.
+        function applyDirsToConfig() {
+            let yaml = document.getElementById('serverConfigArea').value.trim();
+            if (!yaml) { alert('请先「加载配置」'); return; }
+            const block = 'directories:\n' + currentDirs.map(d => '  - ' + d).join('\n');
+            // Match the whole `directories:` block (header + all `- item`
+            // lines, including their trailing newline) and replace it.
+            const re = /^directories:\n((?:[ \t]+- .*\n?)*)/m;
+            if (re.test(yaml)) {
+                yaml = yaml.replace(re, block + '\n');
+            } else {
+                yaml = block + '\n' + yaml;
+            }
+            document.getElementById('serverConfigArea').value = yaml;
+            alert('已写入配置(directories)，点「保存配置」生效');
         }
         
         async function saveServerConfig() {

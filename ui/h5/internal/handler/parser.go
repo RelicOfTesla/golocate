@@ -8,18 +8,21 @@ import (
 
 // SearchParams represents parsed search parameters
 type SearchParams struct {
-	Content    string
+	Pattern    string // path pattern (base query after stripping flags)
+	Content    string // file content keyword (--content:xxx)
 	IgnoreCase bool
 	Limit      int
 	Regex      bool
+	Basename   bool // search only the file name portion of paths
 }
 
 // ParseSearchQuery parses a search query with optional command-line style parameters
 // Examples:
-//   "test123" -> {Content: "test123"}
-//   "test123 --content:xxxx" -> {Content: "xxxx"}
-//   "test123 --path:/home/user" -> {Content: "test123", Path: "/home/user"}
-//   "test123 --ignore-case --limit:50" -> {Content: "test123", IgnoreCase: true, Limit: 50}
+//
+//	"test123" -> {Pattern: "test123"}
+//	"test123 --content:xxxx" -> {Pattern: "test123", Content: "xxxx"}
+//	"test123 --path:/home/user" -> {Pattern: "test123"}
+//	"test123 --ignore-case --limit:50" -> {Pattern: "test123", IgnoreCase: true, Limit: 50}
 func ParseSearchQuery(input string) *SearchParams {
 	params := &SearchParams{
 		Limit: 100, // default limit
@@ -30,11 +33,12 @@ func ParseSearchQuery(input string) *SearchParams {
 	//   --key:value (long form, double dash)
 	//   --key:"value with spaces"
 	//   --flag (boolean flag, double dash)
-	re := regexp.MustCompile(`(--\w+:\"[^\"]*\"|--\w+:\S+|--\w+)`)
-	
+	// Note: flag names may contain hyphens (e.g. --ignore-case).
+	re := regexp.MustCompile(`(--[a-zA-Z0-9_-]+:"[^"]*"|--[a-zA-Z0-9_-]+:\S+|--[a-zA-Z0-9_-]+)`)
+
 	// Find all parameter matches
 	matches := re.FindAllString(input, -1)
-	
+
 	// Remove parameters from input to get the base query
 	content := input
 	for _, match := range matches {
@@ -46,18 +50,18 @@ func ParseSearchQuery(input string) *SearchParams {
 	for _, match := range matches {
 		// Remove the leading dash(es)
 		param := strings.TrimLeft(match, "-")
-		
+
 		if strings.Contains(param, ":") {
 			// Parameter with value
 			parts := strings.SplitN(param, ":", 2)
 			key := parts[0]
 			value := parts[1]
-			
+
 			// Remove quotes if present
 			if strings.HasPrefix(value, "\"") && strings.HasSuffix(value, "\"") {
 				value = strings.Trim(value, "\"")
 			}
-			
+
 			switch key {
 			case "content":
 				params.Content = value
@@ -73,14 +77,14 @@ func ParseSearchQuery(input string) *SearchParams {
 				params.IgnoreCase = true
 			case "regex":
 				params.Regex = true
+			case "basename":
+				params.Basename = true
 			}
 		}
 	}
 
-	// If content not specified via parameter, use the base query
-	if params.Content == "" {
-		params.Content = content
-	}
+	// The base query (after stripping flags) is the path pattern
+	params.Pattern = content
 
 	return params
 }
