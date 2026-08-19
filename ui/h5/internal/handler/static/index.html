@@ -15,10 +15,10 @@
                 <button class="secondary" onclick="toggleLang()" id="langBtn">🌐 EN</button>
                 <button class="secondary" onclick="toggleFavPanel()" id="favBtn">⭐ <span data-i18n="favorites">收藏</span></button>
                 <button class="secondary" onclick="refreshStatus()" data-i18n="btnStatus">📊 状态</button>
-                <button class="secondary" onclick="rebuildIndex()" data-i18n="btnRebuild">🔄 重建索引</button>
                 <button class="secondary" onclick="toggleSettings()" data-i18n="btnSettings">⚙️ 设置</button>
             </div>
         </div>
+
         
         <!-- Server Status -->
         <div class="status-bar" id="statusBar" style="display: none;">
@@ -57,6 +57,10 @@
                 <button onclick="applyDirsToConfig()" class="secondary" style="padding:6px 12px;" data-i18n="btnApplyDirs">应用到配置</button>
             </div>
             <div style="color:#888; font-size:0.8em; margin-top:4px;" data-i18n="dirMgmtHint">「应用到配置」会把上面的目录列表写进下方配置的 directories，再点「保存配置」生效。</div>
+            <hr style="border-color:#444; margin:10px 0;">
+            <h3 data-i18n="indexOps">索引操作</h3>
+            <button onclick="rebuildIndex()" style="margin-top: 2px;" data-i18n="btnRebuild">🔄 重建索引</button>
+            <div style="color:#888; font-size:0.8em; margin-top:6px;" data-i18n="indexOpsHint">重新扫描全部索引目录并热替换索引（后台执行，可在状态栏查看进度）。</div>
             <hr style="border-color:#444; margin:10px 0;">
             <h3 data-i18n="serverConfigTitle">服务器配置</h3>
             <button onclick="loadServerConfig()" style="margin-bottom: 5px;" data-i18n="btnLoadConfig">加载配置</button>
