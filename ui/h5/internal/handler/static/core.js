@@ -22,8 +22,88 @@
             loadSearchHistory();
             loadSettings();
             initSortHandlers();
+            initColResizers();
             refreshStatus();
         });
+
+        // ---- Resizable table columns ----
+        // Each header cell gets a drag handle on its right edge; dragging it
+        // resizes that column (px), and the fixed-layout table re-flows the
+        // remaining percentage columns automatically. Widths persist in
+        // localStorage so the user's layout survives reloads.
+        let colResizing = null;
+        function initColResizers() {
+            const ths = document.querySelectorAll('#resultsTable th');
+            ths.forEach((th, idx) => {
+                const grip = document.createElement('span');
+                grip.className = 'col-resizer';
+                grip.dataset.col = idx;
+                grip.addEventListener('mousedown', colResizeStart);
+                grip.addEventListener('click', e => e.stopPropagation()); // don't trigger sort
+                grip.addEventListener('touchstart', colResizeStartTouch);
+                th.appendChild(grip);
+            });
+            try {
+                const saved = JSON.parse(localStorage.getItem('golocateColWidths') || '{}');
+                ths.forEach((th, idx) => {
+                    if (saved[idx]) th.style.width = saved[idx] + 'px';
+                });
+            } catch (e) { /* ignore corrupt storage */ }
+        }
+        function colResizeStart(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            const th = e.target.parentElement;
+            colResizing = {
+                idx: +e.target.dataset.col,
+                startX: e.clientX,
+                startW: th.getBoundingClientRect().width,
+                th: th
+            };
+            document.body.classList.add('col-resizing');
+        }
+        function colResizeStartTouch(e) {
+            const t = e.touches && e.touches[0];
+            if (!t) return;
+            e.preventDefault();
+            e.stopPropagation();
+            const th = e.target.parentElement;
+            colResizing = {
+                idx: +e.target.dataset.col,
+                startX: t.clientX,
+                startW: th.getBoundingClientRect().width,
+                th: th,
+                touchId: t.identifier
+            };
+            document.body.classList.add('col-resizing');
+            document.addEventListener('touchmove', colResizeMove, { passive: false });
+            document.addEventListener('touchend', colResizeEnd);
+        }
+        function colResizeMove(e) {
+            if (!colResizing) return;
+            const pt = (e.touches && e.touches[0]) || null;
+            const x = pt ? pt.clientX : e.clientX;
+            const delta = x - colResizing.startX;
+            const w = Math.max(70, colResizing.startW + delta);
+            colResizing.th.style.width = w + 'px';
+        }
+        function colResizeEnd() {
+            if (!colResizing) return;
+            document.body.classList.remove('col-resizing');
+            document.removeEventListener('touchmove', colResizeMove);
+            document.removeEventListener('touchend', colResizeEnd);
+            const finalW = colResizing.th.getBoundingClientRect().width;
+            try {
+                const saved = JSON.parse(localStorage.getItem('golocateColWidths') || '{}');
+                saved[colResizing.idx] = finalW;
+                localStorage.setItem('golocateColWidths', JSON.stringify(saved));
+            } catch (e) { /* ignore */ }
+            colResizing = null;
+        }
+        // mouse drag: global move/up
+        document.addEventListener('mousemove', colResizeMove);
+        document.addEventListener('mouseup', colResizeEnd);
+
         
         // Server Status & Index Rebuild
         async function refreshStatus() {
