@@ -212,15 +212,13 @@ table.results-table td {
 table.results-table tbody tr {
     transition: background 0.14s ease;
     cursor: default;
-    position: relative;
+    /*
+     * NOTE: do NOT add tr::before emphasis bars here — on CSS table rows the
+     * pseudo-element participates in the table layout and adds width to every
+     * row, misaligning the columns. Row hover uses a plain background tint.
+     */
 }
 table.results-table tbody tr:hover { background: rgba(52, 211, 153, 0.05); }
-table.results-table tbody tr::before {
-    content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
-    background: linear-gradient(var(--accent), transparent);
-    opacity: 0; transition: opacity 0.15s ease;
-}
-table.results-table tbody tr:hover::before { opacity: 1; }
 table.results-table tbody tr:last-child td { border-bottom: none; }
 
 td.col-name { color: var(--text); font-weight: 550; }
