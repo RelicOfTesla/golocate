@@ -91,7 +91,8 @@
             <button class="secondary small" onclick="toggleAdvanced()" id="advToggleBtn" data-i18n="btnAdvanced">高级选项</button>
         </div>
         <div class="search-box">
-            <input type="text" id="searchInput" placeholder="搜索文件..." autofocus data-i18n-placeholder="searchPlaceholder">
+            <input type="text" id="searchInput" placeholder="搜索文件名/路径" autofocus data-i18n-placeholder="searchPlaceholder">
+            <input type="text" id="contentInput" placeholder="搜索内容(可选)" data-i18n-placeholder="contentPlaceholder" style="max-width:260px;">
             <button onclick="search()" data-i18n="btnSearch">搜索</button>
         </div>
         
@@ -138,12 +139,7 @@
             </div>
             <span class="opt-group" data-i18n="grpResult">结果</span>
             <div class="opt-row">
-    <label>
-                <input type="checkbox" id="contentMode"> <span data-i18n="labelContent">内容搜索</span>
-            
-                                <input type="text" id="contentInput" placeholder="keyword" style="width:150px;">
-            </label>
-    <label>
+        <label>
                 <input type="checkbox" id="dedupeMode"> <span data-i18n="labelDedupe">去重（硬链接）</span>
             </label>
     <label>

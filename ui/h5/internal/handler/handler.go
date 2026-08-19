@@ -65,9 +65,11 @@ func (h *Handler) Index(w http.ResponseWriter, r *http.Request) {
 // Search handles search API requests.
 func (h *Handler) Search(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query().Get("q")
-	if query == "" {
+	// Optional, AND-combined name/path + content search: at least one must be
+	// present, but a pure content search (no name/path term) is allowed.
+	if query == "" && r.URL.Query().Get("content") == "" {
 		json.NewEncoder(w).Encode(&api.SearchResponse{
-			Error: "missing query parameter 'q'",
+			Error: "missing query parameter 'q' or 'content'",
 		})
 		return
 	}

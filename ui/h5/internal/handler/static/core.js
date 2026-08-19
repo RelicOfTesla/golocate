@@ -1,4 +1,8 @@
         const searchInput = document.getElementById('searchInput');
+        function hasContentKeyword() {
+            const el = document.getElementById('contentInput');
+            return !!(el && el.value.trim());
+        }
         const resultsBody = document.getElementById('resultsBody');
         const resultsCount = document.getElementById('resultsCount');
         const exportButtons = document.getElementById('exportButtons');
@@ -252,7 +256,7 @@
             currentSort.display = displayField;
             // Content-search matches keep file order; only path searches sort.
             updateSortIndicators();
-            if (!document.getElementById('contentMode').checked) {
+            if (!hasContentKeyword()) {
                 search(); // re-run with server-side sort (applies across all pages)
             }
         }
@@ -326,7 +330,7 @@
         
         async function search() {
             const query = searchInput.value.trim();
-            if (!query) {
+            if (!query && !hasContentKeyword()) {
                 resultsBody.innerHTML = '<tr><td colspan="6" class="empty-state">' + t('emptyStart') + '</td></tr>';
                 resultsCount.textContent = '';
                 exportButtons.style.display = 'none';
@@ -354,7 +358,8 @@
             const basename = document.getElementById('basenameMode').checked;
             const patternMode = document.getElementById('patternMode').value;
             const regexMode = patternMode === 'regex';
-            const contentMode = document.getElementById('contentMode').checked;
+            const content = (() => { const el = document.getElementById('contentInput'); return el ? el.value.trim() : ''; })();
+            const contentMode = content !== '';
             const dedupe = document.getElementById('dedupeMode').checked;
             const scope = document.getElementById('scopeInput').value.trim();
             const types = document.getElementById('typeInput').value.trim();
@@ -377,11 +382,9 @@
                     '&min_size=' + minSize + '&max_size=' + maxSize +
                     '&limit=' + pageSize + '&offset=' + offset;
                 if (contentMode) {
-                    const el = document.getElementById('contentInput');
-                    const kw = el ? el.value.trim() : '';
-                    url += '&content=' + encodeURIComponent(kw);
+                    url += '&content=' + encodeURIComponent(content);
                 }
-                if (currentSort.field && !contentMode) {
+                if (currentSort.field && !content) {
                     url += '&sort_field=' + currentSort.field + '&sort_order=' + currentSort.direction;
                 }
                 const response = await fetch(url);
@@ -651,7 +654,8 @@
             const basename = document.getElementById('basenameMode').checked;
             const patternMode = document.getElementById('patternMode').value;
             const regexMode = patternMode === 'regex';
-            const contentMode = document.getElementById('contentMode').checked;
+            const contentKw = (() => { const el = document.getElementById('contentInput'); return el ? el.value.trim() : ''; })();
+            const contentMode = contentKw !== '';
             const dedupe = document.getElementById('dedupeMode').checked;
             const scope = document.getElementById('scopeInput').value.trim();
             const types = document.getElementById('typeInput').value.trim();
@@ -669,9 +673,7 @@
                     '&min_size=' + minSize + '&max_size=' + maxSize +
                     '&limit=100000&offset=0';
             if (contentMode) {
-                const el = document.getElementById('contentInput');
-                const kw = el ? el.value.trim() : '';
-                url += '&content=' + encodeURIComponent(kw);
+                url += '&content=' + encodeURIComponent(contentKw);
             }
             let data;
             try {
