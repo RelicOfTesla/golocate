@@ -151,6 +151,11 @@
         }
         
         // Settings Functions
+        function toggleServerPanel() {
+            const panel = document.getElementById('serverPanel');
+            if (!panel) return;
+            panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+        }
         function toggleSettings() {
             const panel = document.getElementById('settingsPanel');
             panel.style.display = panel.style.display === 'none' ? 'block' : 'none';

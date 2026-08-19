@@ -16,6 +16,7 @@
                 <button class="secondary" onclick="toggleFavPanel()" id="favBtn">⭐ <span data-i18n="favorites">收藏</span></button>
                 <button class="secondary" onclick="refreshStatus()" data-i18n="btnStatus">📊 状态</button>
                 <button class="secondary" onclick="toggleSettings()" data-i18n="btnSettings">⚙️ 设置</button>
+                <button class="secondary" onclick="toggleServerPanel()" data-i18n="btnServer">🛠️ 服务器</button>
             </div>
         </div>
 
@@ -25,8 +26,8 @@
             <span id="statusText"></span>
         </div>
         
-        <!-- Settings Panel -->
-        <div class="settings-panel" id="settingsPanel">
+        <!-- Settings Panel (client preferences) -->
+        <div class="settings-panel" id="settingsPanel" style="display:none;">
             <h3 data-i18n="settingsTitle">设置</h3>
             <label>
                 <span data-i18n="labelDefaultLimit">默认最大结果数:</span>
@@ -48,7 +49,10 @@
                 <input type="number" id="debounceDelay" value="300" min="100" max="10000" step="100" style="width: 100px;">
             </label>
             <button onclick="saveSettings()" style="margin-top: 10px;" data-i18n="btnSaveSettings">保存设置</button>
-            <hr style="border-color:#444; margin:10px 0;">
+        </div>
+        
+        <!-- Server Panel (operations: dirs, rebuild, config) -->
+        <div class="settings-panel" id="serverPanel" style="display:none;">
             <h3 data-i18n="dirMgmtTitle">索引目录管理</h3>
             <div id="dirList" style="margin-bottom:8px;"></div>
             <div style="display:flex; gap:6px;">
@@ -79,7 +83,7 @@
         <!-- Search Card: box + advanced options + history -->
         <div class="search-card">
         <div class="search-card-header">
-            <span class="search-card-title">🔍 <span data-i18n="appTitle">golocate - 快速文件搜索</span></span>
+            <span class="search-card-title">🔍 <span data-i18n="searchTitle">搜索</span></span>
             <button class="secondary small" onclick="toggleAdvanced()" id="advToggleBtn" data-i18n="btnAdvanced">高级选项</button>
         </div>
         <div class="search-box">
@@ -88,16 +92,15 @@
         </div>
         
         <!-- Advanced Options (collapsed; toggle with the header button) -->
-        <div class="advanced-options" id="advancedOptions" style="display:none;">
-            <span class="opt-group" data-i18n="grpMatch">匹配</span>
+        <div class="advanced-options" id="advancedOptions" style="display:none;">            <span class="opt-group" data-i18n="grpMatch">匹配</span>
             <div class="opt-row">
-            <label>
+    <label>
                 <input type="checkbox" id="ignoreCase" checked> <span data-i18n="labelIgnoreCase">忽略大小写</span>
             </label>
-            <label>
+    <label>
                 <input type="checkbox" id="basenameMode"> <span data-i18n="labelBasename">仅文件名</span>
             </label>
-            <label>
+    <label>
                 <span data-i18n="labelMode">模式:</span>
                 <select id="patternMode" style="width: 100px; background:#2a2a2a; color:#e0e0e0; border:1px solid #333; border-radius:4px; padding:5px;">
                     <option value="" data-i18n="modeNormal">普通</option>
@@ -106,43 +109,46 @@
                     <option value="terms" data-i18n="modeTerms">多词(terms)</option>
                 </select>
             </label>
-            <label>
+    <label>
                 <input type="checkbox" id="regexMode"> <span data-i18n="labelRegex">正则表达式</span>
             </label>
             </div>
             <span class="opt-group" data-i18n="grpFilter">过滤</span>
             <div class="opt-row">
-            <label>
-                <input type="checkbox" id="contentMode"> <span data-i18n="labelContent">内容搜索</span>
-            </label>
-            <label>
-                <input type="checkbox" id="dedupeMode"> <span data-i18n="labelDedupe">去重（硬链接）</span>
-            </label>
-            <label>
+    <label>
                 <span data-i18n="labelScope">目录范围:</span>
                 <input type="text" id="scopeInput" placeholder="/home/user/proj" style="width:140px;">
             </label>
-            <label>
+    <label>
                 <span data-i18n="labelTypes">类型:</span>
                 <input type="text" id="typeInput" placeholder="go,md" style="width:80px;">
             </label>
-            <label>
+    <label>
                 <span data-i18n="labelExclude">排除:</span>
                 <input type="text" id="excludeInput" placeholder="*_test.go" style="width:100px;">
             </label>
-            <label>
+    <label>
                 <span data-i18n="labelMinSize">最小大小(B):</span>
                 <input type="number" id="minSizeInput" min="0" style="width:70px;">
             </label>
-            <label>
+    <label>
                 <span data-i18n="labelMaxSize">最大大小(B):</span>
                 <input type="number" id="maxSizeInput" min="0" style="width:70px;">
             </label>
-            <label>
+            </div>
+            <span class="opt-group" data-i18n="grpResult">结果</span>
+            <div class="opt-row">
+    <label>
+                <input type="checkbox" id="contentMode"> <span data-i18n="labelContent">内容搜索</span>
+            </label>
+    <label>
+                <input type="checkbox" id="dedupeMode"> <span data-i18n="labelDedupe">去重（硬链接）</span>
+            </label>
+    <label>
                 <span data-i18n="labelMaxResults">最大结果数:</span> <input type="number" id="maxResults" value="100" min="1" max="10000">
             </label>
             </div>
-        </div>
+</div>
         
         <!-- Search History -->
         <div class="search-history" id="searchHistoryContainer" style="display: none;">
