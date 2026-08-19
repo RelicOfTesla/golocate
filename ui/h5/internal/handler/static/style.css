@@ -33,7 +33,7 @@ body {
     min-height: 100vh;
     line-height: 1.5;
 }
-.container { max-width: 1440px; margin: 0 auto; padding: 22px; }
+.container { max-width: 1200px; margin: 0 auto; padding: 22px; }
 
 /* Scrollbar */
 ::-webkit-scrollbar { width: 10px; height: 10px; }
@@ -554,3 +554,18 @@ table.results-table th { position: relative; }
 body.col-resizing { cursor: col-resize; user-select: none; }
 body.col-resizing table.results-table *, body.col-resizing .col-resizer { cursor: col-resize !important; }
 body.col-resizing .col-resizer::after { background: var(--accent); }
+
+/* ============ Wide screens: keep a comfortable content width ============ */
+/* The layout is centered at 1200px; on ultrawide monitors add airier row
+   padding so the table does not look sparse and the actions column stays
+   within easy reach. */
+@media (min-width: 1600px) {
+    table.results-table th { padding: 15px 14px; }
+    table.results-table td { padding: 13px 14px; }
+    .search-card, .results-table-container, .status-bar, .settings-panel { box-shadow: var(--shadow); }
+}
+@media (min-width: 2400px) {
+    .container { padding-top: 34px; padding-bottom: 34px; }
+    table.results-table th { padding: 16px 16px; }
+    table.results-table td { padding: 14px 16px; }
+}
