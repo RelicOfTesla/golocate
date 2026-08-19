@@ -69,7 +69,11 @@ func main() {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		}
 	})
-	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.FS(handler.Static))))
+	mux.Handle("/static/", http.StripPrefix("/static/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	// Always revalidate embedded assets so UI fixes reach the browser.
+	w.Header().Set("Cache-Control", "no-cache")
+	http.FileServer(http.FS(handler.Static)).ServeHTTP(w, r)
+})))
 
 	// Start server
 	slog.Info("starting golocate-h5", "addr", flagAddr)

@@ -45,9 +45,14 @@
             });
             try {
                 const saved = JSON.parse(localStorage.getItem('golocateColWidths') || '{}');
-                ths.forEach((th, idx) => {
-                    if (saved[idx]) th.style.width = saved[idx] + 'px';
-                });
+                // On small windows the CSS breakpoints manage the layout; only
+                // apply persisted pixel widths on wide (desktop) windows.
+                if ((window.innerWidth || 0) >= 900) {
+                    ths.forEach((th, idx) => {
+                        const w = Number(saved[idx]);
+                        if (w >= 70 && w <= 1800) th.style.width = w + 'px';
+                    });
+                }
             } catch (e) { /* ignore corrupt storage */ }
         }
         function colResizeStart(e) {
