@@ -295,10 +295,12 @@ td.col-actions button:hover {
 /* ============ Panels (settings / favorites) ============ */
 .settings-panel {
     display: none;
+    max-width: 640px;             /* keep simple panels compact */
+    margin: 0 auto 16px;          /* centered under the full-width chrome */
     background: rgba(26, 30, 40, 0.85);
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    padding: 20px 22px; margin-bottom: 16px;
+    padding: 20px 22px;
     box-shadow: var(--shadow);
 }
 .settings-panel h3 {
