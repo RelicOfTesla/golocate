@@ -168,10 +168,13 @@ func TestPrintResults(t *testing.T) {
 	}
 
 	// Test with count only
-	PrintResults(result, true)
+	PrintResults(result, true, false, false)
 
 	// Test with full output
-	PrintResults(result, false)
+	PrintResults(result, false, false, false)
+
+	// Test with NUL-separated output
+	PrintResults(result, false, true, false)
 }
 
 func TestSearchStreamWithoutServer(t *testing.T) {
@@ -289,5 +292,42 @@ func TestSearchOptionsWithCount(t *testing.T) {
 
 	if !opts.Count {
 		t.Error("Expected Count to be true")
+	}
+}
+
+func TestParseSize(t *testing.T) {
+	cases := map[string]int64{
+		"1024":  1024,
+		"1K":    1024,
+		"2M":    2 * 1024 * 1024,
+		"1G":    1024 * 1024 * 1024,
+		" 512 ": 512,
+	}
+	for in, want := range cases {
+		got, err := ParseSize(in)
+		if err != nil || got != want {
+			t.Errorf("ParseSize(%q) = %d, %v; want %d", in, got, err, want)
+		}
+	}
+	for _, bad := range []string{"", "-5", "abc", "1X"} {
+		if _, err := ParseSize(bad); err == nil {
+			t.Errorf("ParseSize(%q) should error", bad)
+		}
+	}
+}
+
+func TestParseMtime(t *testing.T) {
+	// "2006-01-02" parses to local midnight.
+	got, err := ParseMtime("2006-01-02")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := time.Date(2006, 1, 2, 0, 0, 0, 0, time.Local).Unix()
+	if got != want {
+		t.Errorf("ParseMtime(date) = %d, want %d", got, want)
+	}
+
+	if _, err := ParseMtime("not-a-date"); err == nil {
+		t.Error("ParseMtime should reject invalid input")
 	}
 }
