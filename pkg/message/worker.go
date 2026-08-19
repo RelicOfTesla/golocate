@@ -65,7 +65,6 @@ type MessageWorker interface {
 	//   - 特殊的同步处理需求
 	//
 
-
 	// ========== 方法注册 ==========
 
 	// RegisterMethod 注册方法处理器
@@ -150,8 +149,8 @@ type defaultMessageWorker struct {
 	runningMu sync.Mutex
 
 	// 消息队列
-	queue      chan Message
-	queueSize  int
+	queue     chan Message
+	queueSize int
 
 	// worker 配置
 	workerCount int

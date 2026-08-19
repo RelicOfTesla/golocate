@@ -156,7 +156,6 @@ func TestMessageWorker_Handle_AsyncQueue(t *testing.T) {
 	mu.Unlock()
 }
 
-
 func TestMessageWorker_HandleUnknownMethod(t *testing.T) {
 	worker := NewMessageWorker()
 

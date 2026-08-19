@@ -5,8 +5,6 @@ import (
 	"time"
 )
 
-
-
 // Connection configuration.
 const (
 	DefaultTimeout    = 30 * time.Second

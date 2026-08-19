@@ -60,9 +60,9 @@ func ParseUpdateStrategy(s string) UpdateStrategy {
 
 // MergeResult contains the result of a merge operation.
 type MergeResult struct {
-	Added    int
-	Deleted  int
-	Updated  int
+	Added     int
+	Deleted   int
+	Updated   int
 	Unchanged int
 }
 
@@ -73,10 +73,10 @@ type MergeResult struct {
 // 3. Updates modified files
 func (idx *Index) Merge(ctx context.Context, directories []string, ignoreMatcher *ignore.Matcher) (*MergeResult, error) {
 	result := &MergeResult{}
-	
+
 	// Track which files we've seen during this scan
 	seen := make(map[string]bool)
-	
+
 	// Scan all directories
 	for _, dir := range directories {
 		err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
@@ -85,11 +85,11 @@ func (idx *Index) Merge(ctx context.Context, directories []string, ignoreMatcher
 				return ctx.Err()
 			default:
 			}
-			
+
 			if err != nil {
 				return nil // Skip errors
 			}
-			
+
 			// Check if path should be ignored
 			if ignoreMatcher != nil && ignoreMatcher.Match(path) {
 				if info.IsDir() {
@@ -97,10 +97,10 @@ func (idx *Index) Merge(ctx context.Context, directories []string, ignoreMatcher
 				}
 				return nil
 			}
-			
+
 			// Mark as seen
 			seen[path] = true
-			
+
 			// Check if already in index
 			if existing, exists := idx.Get(path); exists {
 				// Check if modified
@@ -126,15 +126,15 @@ func (idx *Index) Merge(ctx context.Context, directories []string, ignoreMatcher
 				idx.Add(entry)
 				result.Added++
 			}
-			
+
 			return nil
 		})
-		
+
 		if err != nil && err != context.Canceled {
 			slog.Warn("error walking directory", "path", dir, "error", err)
 		}
 	}
-	
+
 	// Remove entries that no longer exist
 	// This is O(n) but necessary for correctness
 	idx.mu.Lock()
@@ -161,7 +161,7 @@ func (idx *Index) Merge(ctx context.Context, directories []string, ignoreMatcher
 		}
 	}
 	idx.mu.Unlock()
-	
+
 	return result, nil
 }
 
@@ -170,17 +170,17 @@ func (idx *Index) AutoUpdateStrategy(directories []string, ignoreMatcher *ignore
 	// Estimate: if we have many files already, use merge
 	// If we have few files or empty index, use replace
 	total := idx.Len()
-	
+
 	if total == 0 {
 		return StrategyReplace
 	}
-	
+
 	// Simple heuristic: if index has more than 10,000 files, prefer merge
 	// This reduces memory pressure
 	if total > 10000 {
 		return StrategyMerge
 	}
-	
+
 	return StrategyReplace
 }
 
@@ -193,16 +193,16 @@ func (b *Builder) UpdateWithStrategy(ctx context.Context, directories []string, 
 			return nil, err
 		}
 		return &MergeResult{Added: b.idx.Len()}, nil
-		
+
 	case StrategyMerge:
 		// Merge with existing index
 		return b.idx.Merge(ctx, directories, b.ignoreMatcher)
-		
+
 	case StrategyAuto:
 		// Auto-select strategy
 		autoStrategy := b.idx.AutoUpdateStrategy(directories, b.ignoreMatcher)
 		return b.UpdateWithStrategy(ctx, directories, autoStrategy)
-		
+
 	default:
 		return nil, nil
 	}

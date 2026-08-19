@@ -28,7 +28,7 @@ func TestSplitJSONMessages(t *testing.T) {
 			input:    `  {"method":"search"}  `,
 			expected: []string{`{"method":"search"}`},
 		},
-		
+
 		// ===== Two JSON objects merged =====
 		{
 			name:     "two JSON objects merged",
@@ -45,7 +45,7 @@ func TestSplitJSONMessages(t *testing.T) {
 			input:    `{"method":"search"}  {"method":"status"}`,
 			expected: []string{`{"method":"search"}`, `{"method":"status"}`},
 		},
-		
+
 		// ===== Multiple JSON objects merged =====
 		{
 			name:     "three JSON objects merged",
@@ -57,7 +57,7 @@ func TestSplitJSONMessages(t *testing.T) {
 			input:    `{"a":1}{"b":2}{"c":3}{"d":4}`,
 			expected: []string{`{"a":1}`, `{"b":2}`, `{"c":3}`, `{"d":4}`},
 		},
-		
+
 		// ===== Nested JSON objects =====
 		{
 			name:     "nested JSON objects",
@@ -74,7 +74,7 @@ func TestSplitJSONMessages(t *testing.T) {
 			input:    `{"l1":{"l2":{"l3":"value"}}}`,
 			expected: []string{`{"l1":{"l2":{"l3":"value"}}}`},
 		},
-		
+
 		// ===== JSON with strings containing braces =====
 		{
 			name:     "JSON with braces in string",
@@ -96,7 +96,7 @@ func TestSplitJSONMessages(t *testing.T) {
 			input:    `{"text":"He said \"hello\""}{"method":"status"}`,
 			expected: []string{`{"text":"He said \"hello\""}`, `{"method":"status"}`},
 		},
-		
+
 		// ===== Real-world scenarios =====
 		{
 			name:     "search request followed by status request",
@@ -108,7 +108,7 @@ func TestSplitJSONMessages(t *testing.T) {
 			input:    `{"method":"status"}{"method":"search","content":"test"}`,
 			expected: []string{`{"method":"status"}`, `{"method":"search","content":"test"}`},
 		},
-		
+
 		// ===== Empty JSON objects =====
 		{
 			name:     "empty JSON object",
@@ -125,7 +125,7 @@ func TestSplitJSONMessages(t *testing.T) {
 			input:    `{}` + `{"method":"search"}`,
 			expected: []string{`{}`, `{"method":"search"}`},
 		},
-		
+
 		// ===== JSON with arrays =====
 		{
 			name:     "JSON with array",
@@ -137,7 +137,7 @@ func TestSplitJSONMessages(t *testing.T) {
 			input:    `{"items":[{"a":1},{"b":2}]}`,
 			expected: []string{`{"items":[{"a":1},{"b":2}]}`},
 		},
-		
+
 		// ===== Complex nested structures =====
 		{
 			name:     "complex nested with array",
@@ -154,13 +154,13 @@ func TestSplitJSONMessages(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := SplitJSONMessages([]byte(tt.input))
-			
+
 			// Convert [][]byte to []string for comparison
 			var resultStrings []string
 			for _, msg := range result {
 				resultStrings = append(resultStrings, string(msg))
 			}
-			
+
 			if !reflect.DeepEqual(resultStrings, tt.expected) {
 				t.Errorf("expected %v, got %v", tt.expected, resultStrings)
 			}
@@ -188,7 +188,7 @@ func TestSplitJSONMessagesWithRemainder(t *testing.T) {
 			expectedMessages:  []string{`{"a":1}`, `{"b":2}`},
 			expectedRemainder: "",
 		},
-		
+
 		// ===== Incomplete messages =====
 		{
 			name:              "incomplete JSON at end",
@@ -208,7 +208,7 @@ func TestSplitJSONMessagesWithRemainder(t *testing.T) {
 			expectedMessages:  nil,
 			expectedRemainder: `{"method":"sea`,
 		},
-		
+
 		// ===== Empty cases =====
 		{
 			name:              "empty input",
@@ -222,7 +222,7 @@ func TestSplitJSONMessagesWithRemainder(t *testing.T) {
 			expectedMessages:  nil,
 			expectedRemainder: "",
 		},
-		
+
 		// ===== Mixed complete and incomplete =====
 		{
 			name:              "complete followed by incomplete",
@@ -241,17 +241,17 @@ func TestSplitJSONMessagesWithRemainder(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			messages, remainder := SplitJSONMessagesWithRemainder([]byte(tt.input))
-			
+
 			// Convert [][]byte to []string for comparison
 			var messageStrings []string
 			for _, msg := range messages {
 				messageStrings = append(messageStrings, string(msg))
 			}
-			
+
 			if !reflect.DeepEqual(messageStrings, tt.expectedMessages) {
 				t.Errorf("expected messages %v, got %v", tt.expectedMessages, messageStrings)
 			}
-			
+
 			remainderStr := string(remainder)
 			if remainderStr != tt.expectedRemainder {
 				t.Errorf("expected remainder %q, got %q", tt.expectedRemainder, remainderStr)

@@ -109,7 +109,6 @@ func NewMessageParser() MessageParser {
 	}
 }
 
-
 // ParseMessage 实现 MessageParser 接口
 func (p *defaultMessageParser) ParseMessage(conn net.Conn, reader *bufio.Reader) (Message, []byte, error) {
 	p.mu.Lock()
@@ -206,7 +205,7 @@ func (p *defaultMessageParser) SetDefaultProtocol(protoType ProtocolType) {
 func (p *defaultMessageParser) createReplyFunc(conn net.Conn, proto protocol.Protocol, req *protocol.Request) ReplyFunc {
 	return func(ctx context.Context, messageID string, response any) error {
 		slog.Debug("called with response", "response", response)
-		
+
 		// 检查上下文是否已取消
 		select {
 		case <-ctx.Done():
@@ -243,7 +242,7 @@ func (p *defaultMessageParser) createReplyFunc(conn net.Conn, proto protocol.Pro
 			if errMsg, ok := r["error"].(string); ok {
 				resp.Error = errMsg
 			}
-			
+
 			// 将完整的 map 存储到 Result 字段（用于 status、get-config 等命令）
 			// 这样可以保留所有字段
 			resp.Result = r

@@ -32,7 +32,6 @@ func TestDefaultConfig(t *testing.T) {
 	}
 }
 
-
 func TestConfigDirectories(t *testing.T) {
 	cfg := &Config{
 		Directories: []string{"/home/user", "/var/log"},
@@ -80,19 +79,19 @@ func TestConfigSaveAndLoad(t *testing.T) {
 	defer os.Remove(configPath)
 
 	cfg := &Config{
-		Directories:       []string{"/home/user"},
-		IgnorePatterns:    []string{"*.log"},
-		DatabasePath:      filepath.Join(os.TempDir(), "golocate_test.db"),
-		SocketPath:        testutil.GetTestSocketPath("test"),
-		PIDFile:           filepath.Join(os.TempDir(), "golocate_test.pid"),
-		LogFile:           filepath.Join(os.TempDir(), "golocate_test.log"),
-		FollowSymlinks:    true,
-		WorkerCount:       8,
+		Directories:        []string{"/home/user"},
+		IgnorePatterns:     []string{"*.log"},
+		DatabasePath:       filepath.Join(os.TempDir(), "golocate_test.db"),
+		SocketPath:         testutil.GetTestSocketPath("test"),
+		PIDFile:            filepath.Join(os.TempDir(), "golocate_test.pid"),
+		LogFile:            filepath.Join(os.TempDir(), "golocate_test.log"),
+		FollowSymlinks:     true,
+		WorkerCount:        8,
 		ContentSearch:      true,
 		MaxContentFileSize: 5 * 1024 * 1024,
-		IndexInterval:     "1h",
-		ThrottleIndex:     false,
-		IndexStrategy:     "replace",
+		IndexInterval:      "1h",
+		ThrottleIndex:      false,
+		IndexStrategy:      "replace",
 	}
 	old := *cfg
 
@@ -228,3 +227,43 @@ func TestConfigFollowSymlinks(t *testing.T) {
 	}
 }
 
+func TestConfigThrottleWindow(t *testing.T) {
+	cfg := DefaultConfig()
+	require := func(err error) {
+		t.Helper()
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	}
+	require(cfg.SetField("throttle_window", "5m"))
+	if cfg.ThrottleWindow != "5m" {
+		t.Errorf("expected throttle_window 5m, got %q", cfg.ThrottleWindow)
+	}
+	require(cfg.Validate())
+
+	if err := cfg.SetField("throttle_window", "bogus"); err == nil {
+		t.Error("expected error for invalid throttle_window")
+	}
+}
+
+// TestConfigContentIndex verifies the optional content-index toggle parses
+// from YAML and SetField.
+func TestConfigContentIndex(t *testing.T) {
+	cfg, err := LoadFromYAML([]byte("content_index: true\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.ContentIndex {
+		t.Error("content_index: true should parse")
+	}
+
+	if err := cfg.SetField("content_index", "false"); err != nil {
+		t.Fatal(err)
+	}
+	if cfg.ContentIndex {
+		t.Error("SetField content_index=false should clear it")
+	}
+	if err := cfg.SetField("content_index", "invalid"); err == nil {
+		t.Error("SetField content_index=invalid should fail")
+	}
+}

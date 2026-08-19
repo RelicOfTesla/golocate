@@ -36,7 +36,7 @@ func (p *fastProtocol) ParseRequestWithRemainder(reader *bufio.Reader) (*Request
 	// Read lines until we find an empty line (end of request)
 	var lines []string
 	var lineBuffer bytes.Buffer
-	
+
 	for {
 		line, err := reader.ReadString('\n')
 		if err != nil {
@@ -46,14 +46,14 @@ func (p *fastProtocol) ParseRequestWithRemainder(reader *bufio.Reader) (*Request
 			}
 			return nil, nil, err
 		}
-		
+
 		line = strings.TrimRight(line, "\n")
-		
+
 		// Empty line marks end of current request
 		if line == "" {
 			break
 		}
-		
+
 		lines = append(lines, line)
 		lineBuffer.WriteString(line)
 		lineBuffer.WriteString("\n")
@@ -129,6 +129,32 @@ func (p *fastProtocol) ParseRequestWithRemainder(reader *bufio.Reader) (*Request
 			req.SortField = value
 		case FieldSortOrder:
 			req.SortOrder = value
+		case FieldScope:
+			req.Scope = value
+		case FieldExclude:
+			req.Exclude = append(req.Exclude, value)
+		case FieldTypes:
+			req.Types = append(req.Types, value)
+		case FieldMinSize:
+			if n, err := strconv.ParseInt(value, 10, 64); err == nil {
+				req.MinSize = n
+			}
+		case FieldMaxSize:
+			if n, err := strconv.ParseInt(value, 10, 64); err == nil {
+				req.MaxSize = n
+			}
+		case FieldMtimeAfter:
+			if n, err := strconv.ParseInt(value, 10, 64); err == nil {
+				req.MtimeAfter = n
+			}
+		case FieldMtimeBefore:
+			if n, err := strconv.ParseInt(value, 10, 64); err == nil {
+				req.MtimeBefore = n
+			}
+		case FieldExcludeHidden:
+			req.ExcludeHidden = value == "true"
+		case FieldDedupe:
+			req.Dedupe = value == "true"
 		}
 	}
 
@@ -160,6 +186,33 @@ func (p *fastProtocol) WriteRequest(writer *bufio.Writer, req *Request) error {
 	if req.SortOrder != "" {
 		fmt.Fprintf(writer, "sort_order=%s\n", req.SortOrder)
 	}
+	if req.Scope != "" {
+		fmt.Fprintf(writer, "scope=%s\n", req.Scope)
+	}
+	for _, ex := range req.Exclude {
+		fmt.Fprintf(writer, "exclude=%s\n", ex)
+	}
+	for _, t := range req.Types {
+		fmt.Fprintf(writer, "type=%s\n", t)
+	}
+	if req.MinSize > 0 {
+		fmt.Fprintf(writer, "min_size=%d\n", req.MinSize)
+	}
+	if req.MaxSize > 0 {
+		fmt.Fprintf(writer, "max_size=%d\n", req.MaxSize)
+	}
+	if req.MtimeAfter > 0 {
+		fmt.Fprintf(writer, "mtime_after=%d\n", req.MtimeAfter)
+	}
+	if req.MtimeBefore > 0 {
+		fmt.Fprintf(writer, "mtime_before=%d\n", req.MtimeBefore)
+	}
+	if req.ExcludeHidden {
+		fmt.Fprintf(writer, "exclude_hidden=true\n")
+	}
+	if req.Dedupe {
+		fmt.Fprintf(writer, "dedupe=true\n")
+	}
 	fmt.Fprint(writer, "\n") // empty line marks end of headers
 	return writer.Flush()
 }
@@ -174,7 +227,7 @@ func (p *fastProtocol) ParseResponse(reader *bufio.Reader) (*Response, error) {
 			return nil, err
 		}
 		line = strings.TrimRight(line, "\n")
-		
+
 		// Empty line marks end of headers
 		if line == "" {
 			break
@@ -242,7 +295,7 @@ func (p *fastProtocol) WriteResponse(writer *bufio.Writer, resp *Response) error
 	if resp.Error != "" {
 		fmt.Fprintf(writer, "error=%s\n", resp.Error)
 	}
-	
+
 	// Handle Result field (for status, get-config, etc.)
 	if resp.Result != nil {
 		// Serialize Result as JSON
@@ -252,19 +305,19 @@ func (p *fastProtocol) WriteResponse(writer *bufio.Writer, resp *Response) error
 		}
 		fmt.Fprintf(writer, "result=%s\n", string(resultJSON))
 	}
-	
+
 	// Always write count/total so clients can paginate.
 	// Search responses carry the Result map AND these fields; status-like
 	// commands go over JSON-RPC and never reach this code path.
 	fmt.Fprintf(writer, "count=%d\n", resp.Count)
 	fmt.Fprintf(writer, "total=%d\n", resp.Total)
-	
+
 	fmt.Fprint(writer, "\n") // empty line marks end of headers
-	
+
 	for _, path := range resp.Paths {
 		fmt.Fprintln(writer, path)
 	}
-	
+
 	return writer.Flush()
 }
 

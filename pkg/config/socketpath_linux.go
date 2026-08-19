@@ -12,7 +12,6 @@ const (
 	SocketPermission = 0666
 )
 
-
 // GetDefaultSocketPath returns the default Unix socket path for Linux.
 func GetDefaultSocketPath() string {
 	return "/tmp/golocate.sock"

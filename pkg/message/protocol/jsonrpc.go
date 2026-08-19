@@ -20,17 +20,17 @@ func NewJSONRPCProtocol() Protocol {
 
 // jsonrpcRequest represents a JSON-RPC request.
 type jsonrpcRequest struct {
-	Jsonrpc string        `json:"jsonrpc"`
-	ID      any           `json:"id"`
-	Method  string        `json:"method"`
-	Params  *Request      `json:"params,omitempty"` // Pointer to support optional params (JSON-RPC 2.0 spec)
+	Jsonrpc string   `json:"jsonrpc"`
+	ID      any      `json:"id"`
+	Method  string   `json:"method"`
+	Params  *Request `json:"params,omitempty"` // Pointer to support optional params (JSON-RPC 2.0 spec)
 }
 
 // jsonrpcResponse represents a JSON-RPC response.
 type jsonrpcResponse struct {
-	Jsonrpc string      `json:"jsonrpc"`
-	ID      any `json:"id"`
-	Result  any `json:"result,omitempty"`
+	Jsonrpc string        `json:"jsonrpc"`
+	ID      any           `json:"id"`
+	Result  any           `json:"result,omitempty"`
 	Error   *jsonrpcError `json:"error,omitempty"`
 }
 
@@ -52,35 +52,35 @@ func (p *jsonrpcProtocol) ParseRequestWithRemainder(reader *bufio.Reader) (*Requ
 	if err != nil && err != io.EOF {
 		return nil, nil, err
 	}
-	
+
 	// Trim whitespace
 	data := []byte(strings.TrimSpace(line))
 	if len(data) == 0 {
 		return nil, nil, fmt.Errorf("empty request")
 	}
-	
+
 	// Log the received data for debugging
 	slog.Debug("Received", "data", string(data))
-	
+
 	// Handle TCP sticky packets: split concatenated JSON messages
 	messages, jsonRemainder := SplitJSONMessagesWithRemainder(data)
-	
+
 	// If no complete JSON message found, return error
 	if len(messages) == 0 {
 		return nil, jsonRemainder, fmt.Errorf("no complete JSON message found")
 	}
-	
+
 	// Parse the first JSON message
 	firstMsg := messages[0]
 	slog.Debug("Parsing first message", "message", string(firstMsg))
-	
+
 	// Parse JSON-RPC
 	var req jsonrpcRequest
 	if err := json.Unmarshal(firstMsg, &req); err != nil {
 		slog.Error("Parse error", "error", err)
 		return nil, jsonRemainder, err
 	}
-	
+
 	// Log the parsed request
 	var content, patternMode string
 	var ignoreCase bool
@@ -97,7 +97,7 @@ func (p *jsonrpcProtocol) ParseRequestWithRemainder(reader *bufio.Reader) (*Requ
 		"pattern_mode", patternMode,
 		"ignore_case", ignoreCase,
 		"limit", limit)
-	
+
 	// Check for more data in the reader (mixed protocol sticky packet)
 	var remainder []byte
 	if len(jsonRemainder) > 0 {
@@ -115,26 +115,26 @@ func (p *jsonrpcProtocol) ParseRequestWithRemainder(reader *bufio.Reader) (*Requ
 			slog.Debug("Detected mixed protocol sticky packet", "remainder_bytes", len(remainder))
 		}
 	}
-	
+
 	// Convert to unified request
 	// Handle optional params (JSON-RPC 2.0 spec)
 	var params Request
 	if req.Params != nil {
 		params = *req.Params
 	}
-	
+
 	return &Request{
-		Method:        req.Method,
-		ID:            req.ID,
-		Pattern:       params.Pattern,     // Search pattern (path)
-		Content:       params.Content,     // File content search
-		IgnoreCase:    params.IgnoreCase,
-		Limit:         params.Limit,
-		PatternMode:   params.PatternMode,
-		Basename:      params.Basename,
-		Offset:        params.Offset,
-		SortField:     params.SortField,
-		SortOrder:     params.SortOrder,
+		Method:      req.Method,
+		ID:          req.ID,
+		Pattern:     params.Pattern, // Search pattern (path)
+		Content:     params.Content, // File content search
+		IgnoreCase:  params.IgnoreCase,
+		Limit:       params.Limit,
+		PatternMode: params.PatternMode,
+		Basename:    params.Basename,
+		Offset:      params.Offset,
+		SortField:   params.SortField,
+		SortOrder:   params.SortOrder,
 	}, remainder, nil
 }
 
@@ -146,23 +146,23 @@ func (p *jsonrpcProtocol) WriteRequest(writer *bufio.Writer, req *Request) error
 		Method:  req.Method,
 		Params:  req, // Pointer to Request
 	}
-	
+
 	// Encode JSON
 	data, err := json.Marshal(jsonrpcReq)
 	if err != nil {
 		return err
 	}
-	
+
 	// Write to writer
 	if _, err := writer.Write(data); err != nil {
 		return err
 	}
-	
+
 	// Add newline delimiter for message framing
 	if _, err := writer.Write([]byte("\n")); err != nil {
 		return err
 	}
-	
+
 	return writer.Flush()
 }
 
@@ -172,41 +172,41 @@ func (p *jsonrpcProtocol) ParseResponse(reader *bufio.Reader) (*Response, error)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	slog.Debug("ParseResponse received data", "data", string(data))
-	
+
 	// Parse JSON-RPC
 	var resp jsonrpcResponse
 	if err := json.Unmarshal(data, &resp); err != nil {
 		return nil, err
 	}
-	
+
 	slog.Debug("ParseResponse parsed", "id", resp.ID, "result", resp.Result, "error", resp.Error)
-	
+
 	// Handle error
 	if resp.Error != nil {
 		return &Response{
-			ID:    resp.ID,  // Preserve the request ID
+			ID:    resp.ID, // Preserve the request ID
 			Error: resp.Error.Message,
 		}, nil
 	}
-	
+
 	// Handle result
 	if resp.Result != nil {
 		// Try to parse as response with count and paths
 		if resultMap, ok := resp.Result.(map[string]any); ok {
 			slog.Debug("ParseResponse resultMap", "resultMap", resultMap)
-			
+
 			count := 0
 			if c, ok := resultMap["count"].(float64); ok {
 				count = int(c)
 			}
-			
+
 			total := 0
 			if t, ok := resultMap["total"].(float64); ok {
 				total = int(t)
 			}
-			
+
 			var paths []string
 			if p, ok := resultMap["paths"].([]any); ok {
 				for _, path := range p {
@@ -215,29 +215,29 @@ func (p *jsonrpcProtocol) ParseResponse(reader *bufio.Reader) (*Response, error)
 					}
 				}
 			}
-			
+
 			result := &Response{
-				ID:     resp.ID,  // Preserve the request ID
+				ID:     resp.ID, // Preserve the request ID
 				Count:  count,
 				Total:  total,
 				Paths:  paths,
 				Result: resultMap, // Keep original result for status, get-config, etc.
 			}
-			
+
 			slog.Debug("ParseResponse returning", "id", result.ID, "count", result.Count, "total", result.Total, "result", result.Result)
-			
+
 			return result, nil
 		}
-		
+
 		// For non-map results, keep the original result
 		return &Response{
-			ID:     resp.ID,  // Preserve the request ID
+			ID:     resp.ID, // Preserve the request ID
 			Result: resp.Result,
 		}, nil
 	}
-	
+
 	return &Response{
-		ID: resp.ID,  // Preserve the request ID
+		ID: resp.ID, // Preserve the request ID
 	}, nil
 }
 
@@ -245,9 +245,9 @@ func (p *jsonrpcProtocol) WriteResponse(writer *bufio.Writer, resp *Response) er
 	// Create JSON-RPC response
 	jsonrpcResp := jsonrpcResponse{
 		Jsonrpc: "2.0",
-		ID:      resp.ID,  // Use the request ID from response
+		ID:      resp.ID, // Use the request ID from response
 	}
-	
+
 	// Handle error
 	if resp.Error != "" {
 		jsonrpcResp.Error = &jsonrpcError{
@@ -267,25 +267,25 @@ func (p *jsonrpcProtocol) WriteResponse(writer *bufio.Writer, resp *Response) er
 			}
 		}
 	}
-	
+
 	// Encode JSON
 	data, err := json.Marshal(jsonrpcResp)
 	if err != nil {
 		return err
 	}
-	
+
 	slog.Debug("WriteResponse sending JSON", "data", string(data))
-	
+
 	// Write to writer with newline delimiter
 	if _, err := writer.Write(data); err != nil {
 		return err
 	}
-	
+
 	// Add newline delimiter for message framing
 	if _, err := writer.Write([]byte("\n")); err != nil {
 		return err
 	}
-	
+
 	return writer.Flush()
 }
 

@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/fsnotify/fsnotify"
 	"github.com/RelicOfTesla/golocate/pkg/ignore"
+	"github.com/fsnotify/fsnotify"
 )
 
 // fsnotifyWatcher implements Watcher using fsnotify on non-Linux platforms.
@@ -29,27 +29,27 @@ type fsnotifyWatcher struct {
 // newFsnotifyWatcher creates a new fsnotify-based watcher.
 func newFsnotifyWatcher(ctx context.Context, cfg *Config) (Watcher, error) {
 	childCtx, cancel := context.WithCancel(ctx)
-	
+
 	w, err := fsnotify.NewWatcher()
 	if err != nil {
 		cancel()
 		return nil, fmt.Errorf("fsnotify init failed: %w", err)
 	}
-	
+
 	fw := &fsnotifyWatcher{
-		ctx:      childCtx,
-		cancel:   cancel,
-		watcher:  w,
-		events:   make(chan Event, 1000),
-		errors:   make(chan error, 100),
-		done:     make(chan struct{}),
-		config:   cfg,
+		ctx:     childCtx,
+		cancel:  cancel,
+		watcher: w,
+		events:  make(chan Event, 1000),
+		errors:  make(chan error, 100),
+		done:    make(chan struct{}),
+		config:  cfg,
 	}
-	
+
 	if len(cfg.IgnorePatterns) > 0 {
 		fw.ignoreMatcher = ignore.NewMatcher(cfg.IgnorePatterns)
 	}
-	
+
 	// Start watching specified directories
 	if len(cfg.Directories) > 0 {
 		for _, dir := range cfg.Directories {
@@ -72,10 +72,10 @@ func newFsnotifyWatcher(ctx context.Context, cfg *Config) (Watcher, error) {
 			PrintFanotifyWarning()
 		}()
 	}
-	
+
 	// Start event loop
 	go fw.eventLoop()
-	
+
 	return fw, nil
 }
 
@@ -83,11 +83,11 @@ func newFsnotifyWatcher(ctx context.Context, cfg *Config) (Watcher, error) {
 func (w *fsnotifyWatcher) Add(name string) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	
+
 	if err := w.watcher.Add(name); err != nil {
 		return fmt.Errorf("fsnotify add failed for %s: %w", name, err)
 	}
-	
+
 	slog.Info("watching", "path", name)
 	return nil
 }
@@ -98,16 +98,16 @@ func (w *fsnotifyWatcher) AddRecursive(name string) error {
 		if err != nil {
 			return nil // Skip errors
 		}
-		
+
 		if !info.IsDir() {
 			return nil
 		}
-		
+
 		// Check if path should be ignored
 		if w.ignoreMatcher != nil && w.ignoreMatcher.Match(path) {
 			return filepath.SkipDir
 		}
-		
+
 		return w.Add(path)
 	})
 }
@@ -116,7 +116,7 @@ func (w *fsnotifyWatcher) AddRecursive(name string) error {
 func (w *fsnotifyWatcher) Remove(name string) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	
+
 	return w.watcher.Remove(name)
 }
 
@@ -124,13 +124,13 @@ func (w *fsnotifyWatcher) Remove(name string) error {
 func (w *fsnotifyWatcher) Close() error {
 	w.cancel()
 	<-w.done
-	
+
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	
+
 	close(w.events)
 	close(w.errors)
-	
+
 	return w.watcher.Close()
 }
 
@@ -147,7 +147,7 @@ func (w *fsnotifyWatcher) Errors() <-chan error {
 // eventLoop reads events from fsnotify.
 func (w *fsnotifyWatcher) eventLoop() {
 	defer close(w.done)
-	
+
 	for {
 		select {
 		case <-w.ctx.Done():
@@ -156,12 +156,12 @@ func (w *fsnotifyWatcher) eventLoop() {
 			if !ok {
 				return
 			}
-			
+
 			// Check if path should be ignored
 			if w.ignoreMatcher != nil && w.ignoreMatcher.Match(event.Name) {
 				continue
 			}
-			
+
 			// Convert fsnotify event to our Event
 			var op Op
 			if event.Op&fsnotify.Create != 0 {
@@ -179,7 +179,7 @@ func (w *fsnotifyWatcher) eventLoop() {
 			if event.Op&fsnotify.Chmod != 0 {
 				op |= Chmod
 			}
-			
+
 			// For Create events, add subdirectories to watch
 			if op&Create != 0 {
 				if info, err := os.Stat(event.Name); err == nil && info.IsDir() {
@@ -190,13 +190,13 @@ func (w *fsnotifyWatcher) eventLoop() {
 					}
 				}
 			}
-			
+
 			w.events <- Event{
 				Name: filepath.Base(event.Name),
 				Path: event.Name,
 				Op:   op,
 			}
-			
+
 		case err, ok := <-w.watcher.Errors:
 			if !ok {
 				return

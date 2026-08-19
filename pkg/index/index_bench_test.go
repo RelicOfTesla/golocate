@@ -16,10 +16,10 @@ import (
 // BenchmarkSearch benchmarks search performance with different dataset sizes.
 func BenchmarkSearch(b *testing.B) {
 	sizes := []int{
-		1000,      // 1K files
-		10000,     // 10K files
-		100000,    // 100K files
-		1000000,   // 1M files
+		1000,    // 1K files
+		10000,   // 10K files
+		100000,  // 100K files
+		1000000, // 1M files
 		//10000000,  // 10M files (千万级)
 	}
 
@@ -246,8 +246,8 @@ func TestMemoryUsage(t *testing.T) {
 		count     int
 		maxMemory int64 // in bytes
 	}{
-		{"100K", 100000, 50 * 1024 * 1024},    // 50MB
-		{"1M", 1000000, 400 * 1024 * 1024},    // 400MB（实测约 349MB；原 300MB 目标与 <300ms 性能目标冲突，见 docs/BUGS.md B10）
+		{"100K", 100000, 50 * 1024 * 1024}, // 50MB
+		{"1M", 1000000, 400 * 1024 * 1024}, // 400MB（实测约 349MB；原 300MB 目标与 <300ms 性能目标冲突，见 docs/BUGS.md B10）
 		//{"10M", 10000000, 3 * 1024 * 1024 * 1024}, // 3GB
 	}
 
@@ -335,7 +335,7 @@ func createMockIndex(count int) *index.Index {
 // getRandomPaths returns random paths from the index for testing.
 func getRandomPaths(idx *index.Index, count int) []string {
 	paths := make([]string, 0, count)
-	
+
 	// Get all paths (this is just for testing, not efficient)
 	results := idx.Search(index.SearchOptions{Pattern: "", Limit: count * 10})
 	for i, entry := range results {

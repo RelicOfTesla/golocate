@@ -26,7 +26,7 @@ func (e *ServerNotRunningError) Unwrap() error {
 // FriendlyMessage returns a user-friendly error message.
 func (e *ServerNotRunningError) FriendlyMessage() string {
 	var sb strings.Builder
-	
+
 	sb.WriteString("❌ Cannot connect to golocated server\n\n")
 	sb.WriteString("The golocated server is not running. To start it:\n\n")
 	sb.WriteString("  golocated --service\n\n")
@@ -34,7 +34,7 @@ func (e *ServerNotRunningError) FriendlyMessage() string {
 	sb.WriteString("  golocated --install --user   # Install as user service\n")
 	sb.WriteString("  golocated --install          # Install as system service\n")
 	sb.WriteString("  golocated --start            # Start the service\n")
-	
+
 	return sb.String()
 }
 
