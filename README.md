@@ -16,12 +16,17 @@ A high-performance file location tool, written in Go. **golocate** provides inst
 
 ## ✨ Features
 
-- 🚀 **Blazing Fast** - High-performance search with substring, regex, and wildcard modes
+- 🚀 **Blazing Fast** - Substring, regex, wildcard, and multi-term (terms) modes
+- 🎯 **Advanced Filters** - scope, exclude globs, type/size/mtime filters, hidden-file toggle, hard-link dedupe (--dedupe)
+- 📄 **Content Search** - grep-style output (line numbers/context), UTF-8 / GBK / UTF-16 auto-detection, newest files scanned first
 - 🔄 **Real-time Index** - Automatic file system monitoring and index updates
-- 🔌 **Multiple Protocols** - Fast protocol, JSON, and JSON-RPC support
-- 🌐 **Web UI** - Built-in H5 interface for easy access
+- 💾 **Pluggable Persistence** - incremental (default, low-write) / snapshot / none, instant startup on reboot
+- 🔌 **Multiple Protocols** - Fast, JSON, and JSON-RPC; protocol version exposed via status
+- 🌐 **Web UI** - Built-in H5: zh/en toggle, directory management, server-side sorting, export, open/copy paths, offline banner, /healthz
 - 🖥️ **GTK GUI** - Native desktop application
-- 🔒 **Secure** - Unix socket with restricted permissions
+- ⌨️ **Complete CLI** - locate-compatible (-0/-e/exit codes), --open/--open-dir/--copy, --long format, shell completion, user autostart
+- 📊 **Ops** - Build progress/stats (per-directory & history), log file with rotation, crash self-healing
+- 🔒 **Secure** - Unix socket permissions + path whitelist validation
 - 📦 **Lightweight** - Minimal memory footprint and dependencies
 
 ---
@@ -78,6 +83,39 @@ golocate -r <regex_pattern>
 
 # Basename search only
 golocate -b <pattern>
+
+# Advanced queries
+golocate --terms "server -test"      # multi-term AND + exclude
+golocate --scope pkg/ main.go        # scope to a directory
+golocate --exclude "*.test.*" pkg    # exclude globs (repeatable)
+golocate --type go,md --min-size 1K --max-size 10M   # type/size filters
+golocate --mtime-after 2024-01-01 --no-hidden        # time/hidden filters
+golocate --long main.go              # long format: size<TAB>time<TAB>path
+golocate --dedupe main.go            # collapse hard links to one result
+
+# Content search (grep-style; GBK / UTF-16 / UTF-8 aware)
+golocate --content keyword [path]
+
+# Actions on the first match: open / open directory / copy path
+golocate --open main.go              # open with the default application
+golocate --open-dir main.go          # open its parent directory
+golocate --copy main.go              # copy the path to the clipboard
+
+# locate compatibility
+golocate -0 main.go | xargs -0 ls -l # NUL-separated output
+golocate -e main.go                  # only existing files (exit 0=found / 1=none)
+
+# Daemon management
+golocated --autostart                # install a user autostart entry
+golocated --no-autostart             # remove the autostart entry
+golocated --service-status           # status incl. build progress/stats
+```
+
+### Ops Endpoints (served by golocate-h5)
+
+```bash
+curl http://127.0.0.1:8080/healthz   # liveness probe (200 when the daemon is reachable, else 503)
+curl http://127.0.0.1:8080/metrics    # Prometheus text metrics (search/content/open/build counters + indexed files)
 ```
 
 ### Protocol API
@@ -88,7 +126,7 @@ golocate supports three protocols for programmatic access:
 
 ```bash
 echo "method=search
-data_content=test
+content=test
 ignore_case=true
 limit=10
 " | nc -U /tmp/golocate.sock
@@ -97,16 +135,30 @@ limit=10
 #### JSON Protocol
 
 ```bash
-printf '{"method":"search","data_content":"test","ignore_case":true,"limit":10}\n' | nc -U /tmp/golocate.sock
+printf '{"method":"search","content":"test","ignore_case":true,"limit":10}\n' | nc -U /tmp/golocate.sock
 ```
+
+#### Method List
+
+`search` / `status` / `get-config` / `set-config` / `build` / `reload-config` / `open` (opens a file/directory with the default app after pathValidator whitelist check) / `stop`
 
 #### JSON-RPC Protocol
 
 ```bash
-printf '{"jsonrpc":"2.0","method":"search","params":{"data_content":"test"},"id":1}\n' | nc -U /tmp/golocate.sock
+printf '{"jsonrpc":"2.0","method":"search","params":{"content":"test"},"id":1}\n' | nc -U /tmp/golocate.sock
 ```
 
 ---
+
+## 🌐 Remote Access (optional)
+
+golocate is local-only by default (Unix socket + H5 bound to `127.0.0.1`). For LAN access, bind the H5 bridge to a non-loopback address (**no authentication — trusted networks only**):
+
+```bash
+golocate-h5 -addr 0.0.0.0:8080
+```
+
+The daemon's search socket itself is never exposed directly.
 
 ## 🌐 Platform Notes
 
@@ -173,6 +225,9 @@ directories:
   - /home/user/documents
 
 # Ignore patterns
+# When unset, a sensible default set applies: VCS metadata (.git/.svn/.hg/.bzr),
+# node_modules, cache/temp/backup files (*.cache/ *.tmp/ *.swp/ *.swo/ *.bak),
+# .DS_Store / Thumbs.db
 ignore_patterns:
   - "*.log"
   - "*.tmp"
@@ -181,12 +236,46 @@ ignore_patterns:
 
 # Performance settings
 worker_count: 4
-index_interval: 3h
+index_interval: 24h
 max_file_size: 10485760  # 10MB
+throttle_index: true     # throttle periodic/background rebuilds
+throttle_window: 10m     # boot window: scans run low-IO; a search request lifts the throttle instantly
+
+# Persistence strategy (pluggable component)
+persist_mode: incremental # incremental (default) | snapshot | none
+persist_flush_interval: 30s # incremental mode: batch flush interval for watcher changes
+snapshot_max_age: 24h    # snapshot mode: snapshots older than this trigger a background rebuild on start
+
+# Optional in-memory content token index (precise single-word content-search
+# candidates; rebuilt on every index build, kept fresh by watcher events)
+content_index: false
 
 # Server settings
 socket_path: /tmp/golocate.sock
 ```
+
+### 💾 Persistence strategies
+
+The index lives in memory and is authoritative; persistence only exists to
+make restarts cheap (search works immediately instead of waiting for a full
+rescan). The persistence layer is a pluggable component (`internal/persist`)
+selected by `persist_mode`:
+
+| Mode | Behavior | When to use |
+|------|----------|-------------|
+| `incremental` (default) | Full baseline after each build, then watcher-driven changes applied in batched low-volume writes (`persist_flush_interval`, default 30s). The stored index stays current with **no periodic full rewrites** — a quiet filesystem writes nothing | System services / large indexes: instant startup AND SSD-friendly (write volume ≈ actual changes, e.g. a few MB/day instead of hundreds of MB every cycle) |
+| `snapshot` | Full snapshot written after each index build; restored on start when the directory fingerprint matches, the snapshot is not marked dirty, and it is not older than `snapshot_max_age` | Explicit full-snapshot semantics; rebuild-triggered writes only |
+| `none` | No persistence at all; cold start rebuilds in the background (throttled) | Small indexes, maximum SSD friendliness (zero writes) |
+
+When no usable snapshot exists (first run, config change, stale or dirty
+snapshot), the daemon starts serving immediately with an empty index and
+rebuilds **in the background with throttled IO**, hot-swapping the result —
+so boot does not freeze the machine and search is available in seconds.
+
+Within `throttle_window` after service start (default `10m`), automatic
+background scans run at low IO; **the first search request lifts the throttle
+to full speed immediately**, so a user waiting for results never pays for the
+boot-friendly pacing.
 
 ---
 
@@ -236,6 +325,7 @@ golocate/
 ├── internal/               # Private packages
 │   ├── client/             # Socket client
 │   ├── database/           # BBolt persistence
+│   ├── persist/            # Pluggable persistence strategies (snapshot/none)
 │   ├── scheduler/          # Periodic index rebuild
 │   ├── server/             # Request handlers
 │   ├── socket/             # Platform socket abstractions
@@ -257,6 +347,7 @@ golocate/
 └── ui/                     # User interfaces
     ├── h5/                 # Web UI
     └── gtk/                # GTK GUI
+test/                       # Integration tests (socket-level API tests)
 ```
 
 ### Running Tests

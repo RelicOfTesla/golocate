@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -29,12 +31,12 @@ var mainWindow *gtk.ApplicationWindow
 
 // Pagination state
 type PaginationState struct {
-	currentPage int
-	totalPages  int
+	currentPage  int
+	totalPages   int
 	totalResults int
-	pageSize    int
+	pageSize     int
 	currentQuery string
-	isLoading   bool
+	isLoading    bool
 }
 
 var pagination = PaginationState{
@@ -59,7 +61,7 @@ var (
 	loadingSpinner   *gtk.Spinner
 )
 
-// Results table (name / path / size / modtime)
+// Results table (name / path / size / modtime / match)
 var (
 	resultsStore *gtk.ListStore
 	resultsTree  *gtk.TreeView
@@ -67,13 +69,15 @@ var (
 	pathCol      *gtk.TreeViewColumn
 	sizeCol      *gtk.TreeViewColumn
 	timeCol      *gtk.TreeViewColumn
+	matchCol     *gtk.TreeViewColumn
 )
 
 // Current page results + sort state (for click-to-sort and export)
 var (
 	currentEntries []*index.Entry
-	sortField      string // "", "name", "path", "size", "time"
-	sortOrder      string // "asc", "desc"
+	currentMatches []*client.ContentMatch // content search matches (content mode)
+	sortField      string                 // "", "name", "path", "size", "time"
+	sortOrder      string                 // "asc", "desc"
 )
 
 // Search history state
@@ -87,6 +91,7 @@ var (
 var (
 	ignoreCaseBtn *gtk.CheckButton
 	regexBtn      *gtk.CheckButton
+	contentBtn    *gtk.CheckButton
 	exportBtn     *gtk.Button
 )
 
@@ -143,10 +148,10 @@ func refreshHistoryModel() {
 
 func main() {
 	app := gtk.NewApplication("com.github.golocate", 0)
-	
+
 	// Add --socket option
 	app.AddMainOption("socket", 's', glib.OptionFlagNone, glib.OptionArgString, "Socket path or named pipe name", "PATH")
-	
+
 	// Handle command-line options
 	app.ConnectHandleLocalOptions(func(options *glib.VariantDict) int {
 		if v := options.LookupValue("socket", nil); v != nil {
@@ -154,11 +159,11 @@ func main() {
 		}
 		return -1 // Continue with default handling
 	})
-	
+
 	app.Connect("activate", func() {
 		createMainWindow(app)
 	})
-	
+
 	// Run application
 	status := app.Run(os.Args)
 	if status > 0 {
@@ -173,24 +178,24 @@ func createMainWindow(app *gtk.Application) {
 	mainWindow = win
 	win.SetTitle("golocate - Fast File Search")
 	win.SetDefaultSize(900, 700)
-	
+
 	// Create main container
 	mainBox := gtk.NewBox(gtk.OrientationVertical, 10)
 	mainBox.SetMarginTop(10)
 	mainBox.SetMarginBottom(10)
 	mainBox.SetMarginStart(10)
 	mainBox.SetMarginEnd(10)
-	
+
 	// Create search box
 	searchBox := gtk.NewBox(gtk.OrientationHorizontal, 10)
-	
+
 	// Create search entry
 	searchEntry = gtk.NewEntry()
 	searchEntry.SetPlaceholderText("Search files...")
 	searchEntry.SetHExpand(true)
 	searchBox.Append(searchEntry)
 	entry := searchEntry
-	
+
 	// Search history completion
 	historyStore = gtk.NewListStore([]coreglib.Type{coreglib.TypeString})
 	loadHistory()
@@ -199,51 +204,69 @@ func createMainWindow(app *gtk.Application) {
 	completion.SetModel(historyStore)
 	completion.SetTextColumn(0)
 	entry.SetCompletion(completion)
-	
+
 	// Create search button
 	searchBtn := gtk.NewButtonWithLabel("Search")
 	searchBox.Append(searchBtn)
-	
+
 	// Create status button
 	statusBtn := gtk.NewButtonWithLabel("Status")
 	searchBox.Append(statusBtn)
-	
+
 	// Create config button
 	configBtn := gtk.NewButtonWithLabel("Config")
 	searchBox.Append(configBtn)
-	
+
+	// Rebuild index button
+	rebuildBtn := gtk.NewButtonWithLabel("重建索引")
+	rebuildBtn.SetTooltipText("请求服务端重建索引")
+	searchBox.Append(rebuildBtn)
+
+	// Open buttons (operate on the selected result row)
+	openBtn := gtk.NewButtonWithLabel("打开")
+	openBtn.SetTooltipText("打开选中的文件 (双击结果行亦可)")
+	searchBox.Append(openBtn)
+
+	openDirBtn := gtk.NewButtonWithLabel("打开目录")
+	openDirBtn.SetTooltipText("打开选中文件所在的目录")
+	searchBox.Append(openDirBtn)
+
 	// Advanced search options
 	ignoreCaseBtn = gtk.NewCheckButtonWithLabel("忽略大小写")
 	ignoreCaseBtn.SetActive(false)
 	searchBox.Append(ignoreCaseBtn)
-	
+
 	regexBtn = gtk.NewCheckButtonWithLabel("正则")
 	regexBtn.SetActive(false)
 	searchBox.Append(regexBtn)
-	
+
+	contentBtn = gtk.NewCheckButtonWithLabel("内容搜索")
+	contentBtn.SetActive(false)
+	searchBox.Append(contentBtn)
+
 	// Export results button (saves current page as CSV)
 	exportBtn = gtk.NewButtonWithLabel("导出 CSV")
 	exportBtn.Connect("clicked", exportResults)
 	searchBox.Append(exportBtn)
-	
+
 	mainBox.Append(searchBox)
-	
+
 	// Create results info label
 	resultsInfoLabel = gtk.NewLabel("")
 	resultsInfoLabel.SetHAlign(gtk.AlignStart)
 	mainBox.Append(resultsInfoLabel)
-	
+
 	// Create scrolled window for results
 	scrolled := gtk.NewScrolledWindow()
 	scrolled.SetVExpand(true)
-	
-	// Create results table (name / path / size / modtime)
+
+	// Create results table (name / path / size / modtime / match)
 	resultsStore = gtk.NewListStore([]coreglib.Type{
-		coreglib.TypeString, coreglib.TypeString, coreglib.TypeString, coreglib.TypeString,
+		coreglib.TypeString, coreglib.TypeString, coreglib.TypeString, coreglib.TypeString, coreglib.TypeString,
 	})
 	resultsTree = gtk.NewTreeViewWithModel(resultsStore)
 	resultsTree.SetHeadersVisible(true)
-	
+
 	nameCol = gtk.NewTreeViewColumn()
 	nameCol.SetTitle("文件名")
 	nameCol.SetResizable(true)
@@ -254,7 +277,7 @@ func createMainWindow(app *gtk.Application) {
 	nameCol.AddAttribute(nameRenderer, "text", 0)
 	nameCol.ConnectClicked(func() { toggleSort("name") })
 	resultsTree.AppendColumn(nameCol)
-	
+
 	pathCol = gtk.NewTreeViewColumn()
 	pathCol.SetTitle("路径")
 	pathCol.SetResizable(true)
@@ -265,7 +288,7 @@ func createMainWindow(app *gtk.Application) {
 	pathCol.AddAttribute(pathRenderer, "text", 1)
 	pathCol.ConnectClicked(func() { toggleSort("path") })
 	resultsTree.AppendColumn(pathCol)
-	
+
 	sizeCol = gtk.NewTreeViewColumn()
 	sizeCol.SetTitle("大小")
 	sizeCol.SetResizable(true)
@@ -276,7 +299,7 @@ func createMainWindow(app *gtk.Application) {
 	sizeCol.SetFixedWidth(100)
 	sizeCol.ConnectClicked(func() { toggleSort("size") })
 	resultsTree.AppendColumn(sizeCol)
-	
+
 	timeCol = gtk.NewTreeViewColumn()
 	timeCol.SetTitle("修改时间")
 	timeCol.SetResizable(true)
@@ -287,28 +310,38 @@ func createMainWindow(app *gtk.Application) {
 	timeCol.SetFixedWidth(150)
 	timeCol.ConnectClicked(func() { toggleSort("time") })
 	resultsTree.AppendColumn(timeCol)
-	
+
+	matchCol = gtk.NewTreeViewColumn()
+	matchCol.SetTitle("匹配内容")
+	matchCol.SetResizable(true)
+	matchRenderer := gtk.NewCellRendererText()
+	matchCol.PackStart(matchRenderer, false)
+	matchCol.AddAttribute(matchRenderer, "text", 4)
+	matchCol.SetSizing(gtk.TreeViewColumnFixed)
+	matchCol.SetFixedWidth(300)
+	resultsTree.AppendColumn(matchCol)
+
 	scrolled.SetChild(resultsTree)
-	
+
 	mainBox.Append(scrolled)
-	
+
 	// Create pagination controls
 	createPaginationControls(mainBox, entry)
-	
+
 	// Create loading spinner
 	loadingSpinner = gtk.NewSpinner()
 	loadingSpinner.SetHAlign(gtk.AlignCenter)
 	loadingSpinner.SetVAlign(gtk.AlignCenter)
-	
+
 	// Create client with socket path
 	c := client.New()
 	if socketPath != "" {
 		c.SetSocketPath(socketPath)
 	}
-	
+
 	// Setup keyboard shortcuts
 	setupKeyboardShortcuts(win, entry)
-	
+
 	// Search function
 	doSearch := func() {
 		query := entry.Text()
@@ -317,13 +350,13 @@ func createMainWindow(app *gtk.Application) {
 			resultsStore.Clear()
 			return
 		}
-		
+
 		// Reset to first page for new search
 		if query != pagination.currentQuery {
 			pagination.currentPage = 1
 			pagination.currentQuery = query
 		}
-		
+
 		// Save to search history (most recent first, deduped)
 		var rest []string
 		for _, h := range searchHistory {
@@ -337,16 +370,16 @@ func createMainWindow(app *gtk.Application) {
 		}
 		refreshHistoryModel()
 		saveHistory()
-		
+
 		performSearch(c, query)
 	}
-	
+
 	// Connect search button
 	searchBtn.Connect("clicked", doSearch)
-	
+
 	// Connect entry activate (Enter key)
 	entry.Connect("activate", doSearch)
-	
+
 	// Connect status button
 	statusBtn.Connect("clicked", func() {
 		status, err := c.Status()
@@ -359,7 +392,7 @@ func createMainWindow(app *gtk.Application) {
 			showErrorDialog(fmt.Sprintf("Error: %v", err))
 			return
 		}
-		
+
 		// Display status
 		running, _ := status["running"].(bool)
 		var indexSize int
@@ -370,7 +403,7 @@ func createMainWindow(app *gtk.Application) {
 		}
 		uptime, _ := status["uptime"].(string)
 		pid, _ := status["pid"].(float64)
-		
+
 		var statusText string
 		if running {
 			statusText = fmt.Sprintf("Server 状态: 运行中\n\nPID: %.0f\n索引文件数: %d\n运行时间: %s", pid, indexSize, uptime)
@@ -379,17 +412,90 @@ func createMainWindow(app *gtk.Application) {
 		}
 		showInfoDialog(statusText)
 	})
-	
+
 	// Connect config button
 	configBtn.Connect("clicked", func() {
 		showConfigDialog(win, c)
 	})
-	
+
+	// Connect rebuild button
+	rebuildBtn.Connect("clicked", func() {
+		go func() {
+			err := c.Build()
+			glib.IdleAdd(func() bool {
+				if err != nil {
+					showErrorDialog(fmt.Sprintf("重建请求失败: %v", err))
+				} else {
+					showInfoDialog("索引重建已开始")
+				}
+				return false
+			})
+		}()
+	})
+
+	// Connect open buttons (selected row based)
+	openBtn.Connect("clicked", func() {
+		if p, ok := selectedResultPath(); ok {
+			openWithSystemApp(p)
+		} else {
+			resultsInfoLabel.SetText("请先选择一个结果")
+		}
+	})
+	openDirBtn.Connect("clicked", func() {
+		if p, ok := selectedResultPath(); ok {
+			openWithSystemApp(filepath.Dir(p))
+		} else {
+			resultsInfoLabel.SetText("请先选择一个结果")
+		}
+	})
+
+	// Double-click a result row opens the file
+	resultsTree.Connect("row-activated", func() {
+		if p, ok := selectedResultPath(); ok {
+			openWithSystemApp(p)
+		}
+	})
+
 	// Set window child
 	win.SetChild(mainBox)
-	
+
 	// Show window
 	win.Present()
+}
+
+// selectedResultPath returns the path of the currently selected result row.
+func selectedResultPath() (string, bool) {
+	sel := resultsTree.Selection()
+	if sel == nil {
+		return "", false
+	}
+	_, iter := sel.Selected()
+	if iter == nil {
+		return "", false
+	}
+	v := resultsStore.Value(iter, 1) // column 1 = path
+	p, ok := v.String()
+	if !ok || p == "" {
+		return "", false
+	}
+	return p, true
+}
+
+// openWithSystemApp opens the given file/directory with the platform's
+// default application (xdg-open on Linux, open on macOS, explorer on Windows).
+func openWithSystemApp(p string) {
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "windows":
+		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", p)
+	case "darwin":
+		cmd = exec.Command("open", p)
+	default:
+		cmd = exec.Command("xdg-open", p)
+	}
+	if err := cmd.Start(); err != nil {
+		showErrorDialog(fmt.Sprintf("打开失败: %v", err))
+	}
 }
 
 func createPaginationControls(mainBox *gtk.Box, entry *gtk.Entry) {
@@ -398,7 +504,7 @@ func createPaginationControls(mainBox *gtk.Box, entry *gtk.Entry) {
 	paginationBox.SetHAlign(gtk.AlignCenter)
 	paginationBox.SetMarginTop(10)
 	paginationBox.SetMarginBottom(10)
-	
+
 	// First page button
 	firstPageBtn = gtk.NewButtonWithLabel("◀◀ 首页")
 	firstPageBtn.SetTooltipText("首页 (Home)")
@@ -406,7 +512,7 @@ func createPaginationControls(mainBox *gtk.Box, entry *gtk.Entry) {
 		goToFirstPage(entry)
 	})
 	paginationBox.Append(firstPageBtn)
-	
+
 	// Previous page button
 	prevPageBtn = gtk.NewButtonWithLabel("◀ 上一页")
 	prevPageBtn.SetTooltipText("上一页 (PageUp / ←)")
@@ -414,16 +520,16 @@ func createPaginationControls(mainBox *gtk.Box, entry *gtk.Entry) {
 		goToPrevPage(entry)
 	})
 	paginationBox.Append(prevPageBtn)
-	
+
 	// Page label
 	pageLabel = gtk.NewLabel("第 1/1 页")
 	pageLabel.SetMarginStart(10)
 	pageLabel.SetMarginEnd(10)
 	paginationBox.Append(pageLabel)
-	
+
 	// Page entry for jumping
 	pageEntryBox := gtk.NewBox(gtk.OrientationHorizontal, 5)
-	
+
 	pageEntry = gtk.NewEntry()
 	pageEntry.SetPlaceholderText("页码")
 	pageEntry.SetWidthChars(6)
@@ -432,15 +538,15 @@ func createPaginationControls(mainBox *gtk.Box, entry *gtk.Entry) {
 		jumpToPage(entry)
 	})
 	pageEntryBox.Append(pageEntry)
-	
+
 	jumpBtn := gtk.NewButtonWithLabel("跳转")
 	jumpBtn.Connect("clicked", func() {
 		jumpToPage(entry)
 	})
 	pageEntryBox.Append(jumpBtn)
-	
+
 	paginationBox.Append(pageEntryBox)
-	
+
 	// Next page button
 	nextPageBtn = gtk.NewButtonWithLabel("下一页 ▶")
 	nextPageBtn.SetTooltipText("下一页 (PageDown / →)")
@@ -448,7 +554,7 @@ func createPaginationControls(mainBox *gtk.Box, entry *gtk.Entry) {
 		goToNextPage(entry)
 	})
 	paginationBox.Append(nextPageBtn)
-	
+
 	// Last page button
 	lastPageBtn = gtk.NewButtonWithLabel("末页 ▶▶")
 	lastPageBtn.SetTooltipText("末页 (End)")
@@ -456,10 +562,10 @@ func createPaginationControls(mainBox *gtk.Box, entry *gtk.Entry) {
 		goToLastPage(entry)
 	})
 	paginationBox.Append(lastPageBtn)
-	
+
 	// Initially hide pagination
 	paginationBox.SetVisible(false)
-	
+
 	mainBox.Append(paginationBox)
 }
 
@@ -480,12 +586,12 @@ func setupKeyboardShortcuts(win *gtk.ApplicationWindow, entry *gtk.Entry) {
 			}
 			return false
 		}
-		
+
 		// Don't handle shortcuts when loading
 		if pagination.isLoading {
 			return false
 		}
-		
+
 		switch keyval {
 		case gdk.KEY_Page_Down:
 			goToNextPage(entry)
@@ -514,10 +620,10 @@ func setupKeyboardShortcuts(win *gtk.ApplicationWindow, entry *gtk.Entry) {
 				return true
 			}
 		}
-		
+
 		return false
 	})
-	
+
 	win.AddController(controller)
 }
 
@@ -529,22 +635,55 @@ func focusPageEntry() {
 
 func performSearch(c *client.Client, query string) {
 	pagination.isLoading = true
-	
+
 	// Calculate offset
 	offset := int64((pagination.currentPage - 1) * pagination.pageSize)
-	
-	// Search
-	result, err := c.SearchFast(query, index.SearchOptions{
-		Limit:       pagination.pageSize,
-		Offset:      offset,
-		IgnoreCase:  ignoreCaseBtn.Active(),
-		PatternMode: modeFromUI(),
-	})
-	
+
+	contentMode := contentBtn != nil && contentBtn.Active()
+
+	var entries []*index.Entry
+	var matches []*client.ContentMatch
+	total := 0
+	var err error
+
+	if contentMode {
+		// Content search: keyword = query, no path pre-filter
+		var cres *client.ContentSearchResult
+		cres, err = c.SearchContent("", query, index.SearchOptions{
+			Limit:       pagination.pageSize,
+			Offset:      offset,
+			IgnoreCase:  ignoreCaseBtn.Active(),
+			PatternMode: modeFromUI(),
+		})
+		if err == nil {
+			matches = cres.Matches
+			total = cres.Total
+			entries = make([]*index.Entry, 0, len(matches))
+			for _, m := range matches {
+				entries = append(entries, &index.Entry{
+					Path: m.Path,
+					Name: filepath.Base(m.Path),
+				})
+			}
+		}
+	} else {
+		var result *client.SearchResult
+		result, err = c.SearchFast(query, index.SearchOptions{
+			Limit:       pagination.pageSize,
+			Offset:      offset,
+			IgnoreCase:  ignoreCaseBtn.Active(),
+			PatternMode: modeFromUI(),
+		})
+		if err == nil {
+			entries = result.Entries
+			total = result.Total
+		}
+	}
+
 	pagination.isLoading = false
-	
+
 	resultsStore.Clear()
-	
+
 	if err != nil {
 		// Check if it's a server not running error
 		if errors.IsServerNotRunningError(err) {
@@ -556,31 +695,44 @@ func performSearch(c *client.Client, query string) {
 		updatePaginationUI()
 		return
 	}
-	
+
 	// Display results in the table
-	if len(result.Entries) == 0 {
+	if len(entries) == 0 {
 		resultsInfoLabel.SetText("未找到结果")
 		updatePaginationUI()
 		return
 	}
-	
-	currentEntries = result.Entries
+
+	currentEntries = entries
+	currentMatches = matches
 	if sortField != "" {
 		applySort()
 	}
-	populateTable(resultsStore, currentEntries)
-	
+	populateTable(resultsStore, currentEntries, matchTexts(currentMatches))
+
 	// Update pagination state
-	pagination.totalResults = result.Total
-	pagination.totalPages = (result.Total + pagination.pageSize - 1) / pagination.pageSize
+	pagination.totalResults = total
+	pagination.totalPages = (total + pagination.pageSize - 1) / pagination.pageSize
 	if pagination.totalPages < 1 {
 		pagination.totalPages = 1
 	}
-	
+
 	// Update UI
 	resultsInfoLabel.SetText(fmt.Sprintf("共 %d 条（当前页 %d 条，第 %d/%d 页）",
-		pagination.totalResults, result.Count, pagination.currentPage, pagination.totalPages))
+		pagination.totalResults, len(entries), pagination.currentPage, pagination.totalPages))
 	updatePaginationUI()
+}
+
+// matchTexts formats content matches as "行N: 匹配行内容" for table display.
+func matchTexts(matches []*client.ContentMatch) []string {
+	if len(matches) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(matches))
+	for _, m := range matches {
+		out = append(out, fmt.Sprintf("行%d: %s", m.LineNum, m.Line))
+	}
+	return out
 }
 
 // formatSize formats file size for display.
@@ -615,14 +767,20 @@ func modeFromUI() index.PatternMode {
 }
 
 // populateTable fills the results tree store from entries.
-func populateTable(store *gtk.ListStore, entries []*index.Entry) {
+// matches are parallel content-search texts (nil in normal mode).
+func populateTable(store *gtk.ListStore, entries []*index.Entry, matches []string) {
 	store.Clear()
-	for _, r := range entries {
+	for i, r := range entries {
 		iter := store.Append()
+		matchText := "-"
+		if matches != nil && i < len(matches) {
+			matchText = matches[i]
+		}
 		store.SetValue(iter, 0, coreglib.NewValue(r.Name))
 		store.SetValue(iter, 1, coreglib.NewValue(r.Path))
 		store.SetValue(iter, 2, coreglib.NewValue(formatSize(r.Size)))
 		store.SetValue(iter, 3, coreglib.NewValue(formatModTime(r.ModTime)))
+		store.SetValue(iter, 4, coreglib.NewValue(matchText))
 	}
 }
 
@@ -648,7 +806,7 @@ func applySort() {
 	}
 	sortOpts := search.ParseSort(sortField + ":" + sortOrder)
 	search.Sort(currentEntries, sortOpts)
-	populateTable(resultsStore, currentEntries)
+	populateTable(resultsStore, currentEntries, matchTexts(currentMatches))
 	updateSortHeader()
 }
 
@@ -665,12 +823,30 @@ func exportResults() {
 	dir = filepath.Join(dir, "Downloads")
 	_ = os.MkdirAll(dir, 0755)
 	path := filepath.Join(dir, fmt.Sprintf("golocate_export_%s.csv", time.Now().Format("20060102_150405")))
-	
+
 	var sb strings.Builder
-	sb.WriteString("文件名,路径,大小,修改时间\n")
-	for _, r := range currentEntries {
-		sb.WriteString(fmt.Sprintf("%s,%s,%s,%s\n",
-			r.Name, r.Path, formatSize(r.Size), formatModTime(r.ModTime)))
+	if len(currentMatches) > 0 {
+		// Content search export: include line numbers, matching text and context
+		sb.WriteString("文件名,路径,行号,匹配内容,上下文\n")
+		for i, r := range currentEntries {
+			if i >= len(currentMatches) {
+				break
+			}
+			m := currentMatches[i]
+			ctx := make([]string, 0, len(m.Before)+len(m.After))
+			ctx = append(ctx, m.Before...)
+			ctx = append(ctx, m.After...)
+			sb.WriteString(fmt.Sprintf("%s,%s,%d,\"%s\",\"%s\"\n",
+				r.Name, r.Path, m.LineNum,
+				strings.ReplaceAll(m.Line, "\"", "\"\""),
+				strings.ReplaceAll(strings.Join(ctx, " | "), "\"", "\"\"")))
+		}
+	} else {
+		sb.WriteString("文件名,路径,大小,修改时间\n")
+		for _, r := range currentEntries {
+			sb.WriteString(fmt.Sprintf("%s,%s,%s,%s\n",
+				r.Name, r.Path, formatSize(r.Size), formatModTime(r.ModTime)))
+		}
 	}
 	if err := os.WriteFile(path, []byte(sb.String()), 0644); err != nil {
 		resultsInfoLabel.SetText(fmt.Sprintf("导出失败: %v", err))
@@ -707,13 +883,13 @@ func updateSortHeader() {
 func updatePaginationUI() {
 	// Update page label
 	pageLabel.SetText(fmt.Sprintf("第 %d/%d 页", pagination.currentPage, pagination.totalPages))
-	
+
 	// Update button sensitivity
 	firstPageBtn.SetSensitive(pagination.currentPage > 1)
 	prevPageBtn.SetSensitive(pagination.currentPage > 1)
 	nextPageBtn.SetSensitive(pagination.currentPage < pagination.totalPages)
 	lastPageBtn.SetSensitive(pagination.currentPage < pagination.totalPages)
-	
+
 	// Show pagination if there are results
 	paginationBox.SetVisible(pagination.totalResults > 0)
 }
@@ -723,7 +899,7 @@ func goToFirstPage(entry *gtk.Entry) {
 		return
 	}
 	pagination.currentPage = 1
-	
+
 	// Trigger search
 	entry.Emit("activate")
 }
@@ -733,7 +909,7 @@ func goToPrevPage(entry *gtk.Entry) {
 		return
 	}
 	pagination.currentPage--
-	
+
 	// Trigger search
 	entry.Emit("activate")
 }
@@ -743,7 +919,7 @@ func goToNextPage(entry *gtk.Entry) {
 		return
 	}
 	pagination.currentPage++
-	
+
 	// Trigger search
 	entry.Emit("activate")
 }
@@ -753,7 +929,7 @@ func goToLastPage(entry *gtk.Entry) {
 		return
 	}
 	pagination.currentPage = pagination.totalPages
-	
+
 	// Trigger search
 	entry.Emit("activate")
 }
@@ -763,27 +939,27 @@ func jumpToPage(entry *gtk.Entry) {
 	if text == "" {
 		return
 	}
-	
+
 	// Parse page number
 	page := 0
 	if _, err := fmt.Sscanf(text, "%d", &page); err != nil {
 		pageEntry.SetText("")
 		return
 	}
-	
+
 	// Validate page number
 	if page < 1 || page > pagination.totalPages {
 		pageEntry.SetText(fmt.Sprintf("%d", pagination.currentPage))
 		return
 	}
-	
+
 	if page == pagination.currentPage || pagination.isLoading {
 		return
 	}
-	
+
 	pagination.currentPage = page
 	pageEntry.SetText("")
-	
+
 	// Trigger search
 	entry.Emit("activate")
 }
@@ -795,7 +971,7 @@ func showConfigDialog(parent *gtk.ApplicationWindow, c *client.Client) {
 	dialog.SetTitle("服务器配置")
 	dialog.SetModal(true)
 	dialog.SetDefaultSize(600, 500)
-	
+
 	// Get content area
 	contentArea := dialog.ContentArea()
 	contentArea.SetMarginTop(10)
@@ -803,17 +979,17 @@ func showConfigDialog(parent *gtk.ApplicationWindow, c *client.Client) {
 	contentArea.SetMarginStart(10)
 	contentArea.SetMarginEnd(10)
 	contentArea.SetSpacing(10)
-	
+
 	// Create label
 	label := gtk.NewLabel("编辑配置文件 (YAML 格式):")
 	label.SetHAlign(gtk.AlignStart)
 	contentArea.Append(label)
-	
+
 	// Create scrolled window
 	scrolled := gtk.NewScrolledWindow()
 	scrolled.SetVExpand(true)
 	scrolled.SetHExpand(true)
-	
+
 	// Create text view
 	textView := gtk.NewTextView()
 	textView.SetEditable(true)
@@ -821,14 +997,14 @@ func showConfigDialog(parent *gtk.ApplicationWindow, c *client.Client) {
 	textView.SetWrapMode(gtk.WrapWordChar)
 	buffer := textView.Buffer()
 	buffer.SetText("Loading configuration...")
-	
+
 	scrolled.SetChild(textView)
 	contentArea.Append(scrolled)
-	
+
 	// Add buttons
 	dialog.AddButton("取消", int(gtk.ResponseCancel))
 	dialog.AddButton("保存", int(gtk.ResponseAccept))
-	
+
 	// Load config asynchronously
 	go func() {
 		config, err := c.GetConfig()
@@ -839,7 +1015,7 @@ func showConfigDialog(parent *gtk.ApplicationWindow, c *client.Client) {
 			})
 			return
 		}
-		
+
 		// Convert to YAML
 		yamlData, err := yaml.Marshal(config)
 		if err != nil {
@@ -849,24 +1025,24 @@ func showConfigDialog(parent *gtk.ApplicationWindow, c *client.Client) {
 			})
 			return
 		}
-		
+
 		// Update UI in main thread
 		glib.IdleAdd(func() bool {
 			buffer.SetText(string(yamlData))
 			return false
 		})
 	}()
-	
+
 	// Show dialog
 	dialog.Present()
-	
+
 	// Handle response
 	dialog.Connect("response", func(dialog *gtk.Dialog, responseID int) {
 		if responseID == int(gtk.ResponseAccept) {
 			// Save config
 			startIter, endIter := buffer.Bounds()
 			yamlText := buffer.Text(startIter, endIter, false)
-			
+
 			go func() {
 				err := c.SetConfig(yamlText)
 				glib.IdleAdd(func() bool {
@@ -879,7 +1055,7 @@ func showConfigDialog(parent *gtk.ApplicationWindow, c *client.Client) {
 				})
 			}()
 		}
-		
+
 		// Close dialog
 		dialog.Close()
 	})

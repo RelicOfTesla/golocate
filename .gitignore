@@ -44,3 +44,7 @@ Thumbs.db
 *.bak
 
 cmd/memory-analyze
+
+# Local Go tool caches (created by sandboxed builds)
+.gocache/
+.gopath/
