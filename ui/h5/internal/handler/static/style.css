@@ -464,3 +464,69 @@ button.small { padding: 6px 13px; font-size: 13px; border-radius: 8px; }
 body.light-theme .search-card { background: rgba(255, 255, 255, 0.9); }
 body.light-theme .opt-group { color: var(--text-3); }
 body.light-theme .results-table-container .results-header { background: rgba(15, 23, 42, 0.02); }
+
+/* ============ Responsive: adapt to screen width ============ */
+
+/* ≤900px: tablet — compact chrome, hide the match column */
+@media (max-width: 900px) {
+    .container { padding: 14px; }
+    .header { padding: 12px 14px; }
+    .header h1 { font-size: 20px; }
+    .search-card, .results-table-container, .status-bar, .settings-panel { border-radius: 12px; }
+    table.results-table th.col-match, table.results-table td.col-match { display: none; }
+    table.results-table th.col-path { width: 38%; }
+}
+
+/* ≤640px: phone — single column, stacked controls, horizontal-scroll table */
+@media (max-width: 640px) {
+    body { font-size: 14px; }
+    .container { padding: 10px; }
+
+    /* Header stacks; buttons become a full-width row */
+    .header { flex-direction: column; align-items: stretch; gap: 10px; }
+    .header h1 { text-align: left; }
+    .header-buttons { display: grid; grid-template-columns: repeat(auto-fit, minmax(88px, 1fr)); gap: 8px; }
+    .header-buttons button { padding: 9px 6px; font-size: 12.5px; }
+
+    /* Search card stacks: title + toggle, then full-width box */
+    .search-card { padding: 12px; }
+    .search-card-header { flex-direction: row; }
+    .search-card-title { font-size: 14px; }
+    .search-box { flex-direction: column; }
+    .search-box input[type="text"] { width: 100%; font-size: 16px; } /* ≥16px avoids iOS zoom */
+    .search-box button { width: 100%; padding: 11px; }
+    .advanced-options .opt-row { flex-direction: column; align-items: stretch; }
+    .advanced-options label { justify-content: space-between; width: 100%; }
+    .advanced-options input[type="text"],
+    .advanced-options input[type="number"],
+    .advanced-options select { width: auto !important; min-width: 0; flex: 1; }
+
+    /* Results table: keep name/path/size/actions, scroll horizontally */
+    .results-table-container { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    table.results-table { min-width: 420px; }
+    table.results-table th.col-modtime, table.results-table td.col-modtime { display: none; }
+    table.results-table th.col-name { width: 22%; }
+    table.results-table th.col-path { width: 48%; }
+    table.results-table th.col-actions { width: 30%; }
+    td.col-path { font-size: 12px; word-break: break-all; }
+    td.col-actions button { padding: 5px 7px; } /* bigger touch targets */
+
+    .results-table-container .results-header { flex-wrap: wrap; gap: 8px; padding: 10px 12px; }
+    .export-buttons { flex-wrap: wrap; }
+
+    .pagination { gap: 6px; }
+    .pagination span { font-size: 12.5px; }
+    .pagination button { padding: 7px 10px; font-size: 12.5px; }
+    .pagination label { display: none; } /* hide jump-to on phones */
+
+    .settings-panel { padding: 14px; }
+    .status-bar { padding: 10px 12px; font-size: 12px; }
+}
+
+/* ≤420px: very narrow — path gets the remaining space, tighten further */
+@media (max-width: 420px) {
+    .header-buttons { grid-template-columns: repeat(2, 1fr); }
+    .search-card-title { font-size: 13px; }
+    .results-count { width: 100%; }
+    table.results-table { min-width: 380px; }
+}
