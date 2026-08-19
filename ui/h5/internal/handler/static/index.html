@@ -13,13 +13,17 @@
             <h1>🔍 <span data-i18n="appTitle">golocate - 快速文件搜索</span></h1>
             <div class="header-buttons">
                 <button class="secondary" onclick="toggleLang()" id="langBtn">🌐 EN</button>
-                <button class="secondary" onclick="toggleFavPanel()" id="favBtn">⭐ <span data-i18n="favorites">收藏</span></button>
                 <button class="secondary" onclick="refreshStatus()" data-i18n="btnStatus">📊 状态</button>
-                <button class="secondary" onclick="toggleSettings()" data-i18n="btnSettings">⚙️ 设置</button>
-                <button class="secondary" onclick="toggleServerPanel()" data-i18n="btnServer">🛠️ 服务器</button>
             </div>
         </div>
 
+        
+        <!-- Top tabs: single-page switching between the panels -->
+        <div class="panel-tabs" id="panelTabs">
+            <button class="tab secondary" data-target="favPanel" onclick="switchPanel('favPanel')" data-i18n="favorites">⭐ 收藏</button>
+            <button class="tab secondary" data-target="settingsPanel" onclick="switchPanel('settingsPanel')" data-i18n="btnSettings">⚙️ 设置</button>
+            <button class="tab secondary" data-target="serverPanel" onclick="switchPanel('serverPanel')" data-i18n="btnServer">🛠️ 服务器</button>
+        </div>
         
         <!-- Server Status -->
         <div class="status-bar" id="statusBar" style="display: none;">

@@ -55,6 +55,7 @@ type StatusResponse struct {
 	LastBuildTime    string         `json:"last_build_time"`
 	ConfigPath       string         `json:"config_path"`
 	Pid              int            `json:"pid,omitempty"`
+	OpenSupported    bool           `json:"open_supported"`
 	Stats            map[string]int `json:"stats,omitempty"`
 	Error            string         `json:"error,omitempty"`
 }
@@ -225,6 +226,7 @@ func (c *Client) Status() (*StatusResponse, error) {
 		LastBuildTime:    asString(status["last_build_time"]),
 		ConfigPath:       asString(status["config_path"]),
 		Pid:              asInt(status["pid"]),
+		OpenSupported:    asBool(status["open_supported"]),
 		Stats:            asStats(status["stats"]),
 	}, nil
 }

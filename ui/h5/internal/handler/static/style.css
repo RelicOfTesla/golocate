@@ -572,3 +572,33 @@ body.col-resizing .col-resizer::after { background: var(--accent); }
     table.results-table th { padding: 16px 16px; }
     table.results-table td { padding: 14px 16px; }
 }
+
+/* ============ Top tab bar (single-page panel switching) ============ */
+.panel-tabs {
+    display: flex; gap: 8px; flex-wrap: wrap;
+    margin: 0 0 14px;
+}
+.panel-tabs .tab {
+    padding: 8px 18px;
+    font-size: 13.5px;
+    border-radius: 999px;
+    opacity: 0.78;
+    color: var(--text-2);
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border);
+    box-shadow: none;
+}
+.panel-tabs .tab:hover { opacity: 1; color: var(--text); border-color: var(--accent-border); }
+.panel-tabs .tab.active {
+    opacity: 1;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    border-color: transparent;
+    color: #06251c;
+    font-weight: 700;
+    box-shadow: 0 4px 14px rgba(52, 211, 153, 0.28);
+}
+body.light-theme .panel-tabs .tab { background: rgba(15, 23, 42, 0.05); color: var(--text-2); }
+body.light-theme .panel-tabs .tab.active {
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    color: #fff;
+}

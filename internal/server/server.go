@@ -603,11 +603,14 @@ func (s *Server) handleStatusHandler(ctx context.Context, msg message.Message) (
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	// Platform "open" capability (xdg-open / open / rundll32 present) so
+	// clients can hide open buttons when the default app is unavailable.
 	result := map[string]any{
 		"running":          s.running,
 		"index_size":       s.index.Len(),
 		"pid":              os.Getpid(),
 		"protocol_version": protocol.ProtocolVersion,
+		"open_supported":   openCommandSupported(),
 	}
 	if !s.startTime.IsZero() {
 		result["uptime"] = time.Since(s.startTime).String()
@@ -966,6 +969,26 @@ func (s *Server) handleOpenHandler(ctx context.Context, msg message.Message) (an
 
 	slog.Info("opened path via default application", "path", req.Path)
 	return map[string]any{"status": "opened", "path": req.Path}, nil
+}
+
+// openCommand returns the platform default "open" command name.
+func openCommand() string {
+	switch runtime.GOOS {
+	case "darwin":
+		return "open"
+	case "windows":
+		return "rundll32"
+	default:
+		return "xdg-open"
+	}
+}
+
+// openCommandSupported reports whether the platform default opener is
+// installed on this host (used by the H5 UI to hide open buttons when it is
+// not available).
+func openCommandSupported() bool {
+	_, err := exec.LookPath(openCommand())
+	return err == nil
 }
 
 // openPath opens a file or directory with the platform's default application.

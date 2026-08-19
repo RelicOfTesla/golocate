@@ -10,6 +10,8 @@
         let currentResults = [];
         let currentMatches = [];
         let currentSort = { field: null, display: null, direction: 'asc' };
+        let openEnabled = true;   // set from server status (open_supported)
+        let activePanel = null;
         let currentPage = 1;
         let lastQuery = '';
         let currentTotal = 0;
@@ -122,6 +124,7 @@
                     bar.innerHTML = '<span class="dot off"></span><span>' + t('offline') + ': ' + escapeHtml(data.error) + '</span>';
                     return;
                 }
+                if (data && data.open_supported !== undefined) openEnabled = !!data.open_supported;
                 const dotClass = data.is_building ? 'building' : (data.running ? 'on' : 'off');
                 let building = data.is_building ? t('statusBuilding') : '';
                 if (data.is_building) {
@@ -156,10 +159,27 @@
         }
         
         // Settings Functions
-        function toggleServerPanel() {
-            const panel = document.getElementById('serverPanel');
+        // Top tabs: at most one panel is visible; the active tab is highlighted.
+        // Clicking the active tab again closes the panel.
+        function switchPanel(id) {
+            const panel = document.getElementById(id);
             if (!panel) return;
-            panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+            const alreadyOpen = activePanel === id && panel.style.display === 'block';
+            ['favPanel', 'settingsPanel', 'serverPanel'].forEach(pid => {
+                const el = document.getElementById(pid);
+                if (el && el !== panel) el.style.display = 'none';
+            });
+            document.querySelectorAll('#panelTabs .tab').forEach(b => b.classList.remove('active'));
+            if (alreadyOpen) {
+                panel.style.display = 'none';
+                activePanel = null;
+                return;
+            }
+            panel.style.display = 'block';
+            activePanel = id;
+            const tb = document.querySelector('#panelTabs .tab[data-target="' + id + '"]');
+            if (tb) tb.classList.add('active');
+            if (id === 'favPanel') { renderFavorites(); renderRecents(); }
         }
         function toggleSettings() {
             const panel = document.getElementById('settingsPanel');
@@ -496,9 +516,11 @@
                 html += '<td class="col-size">' + size + '</td>';
                 html += '<td class="col-modtime">' + modTime + '</td>';
                 html += '<td class="col-match" title="' + escapeHtml(matchTitle || matchCell) + '">' + matchCell + '</td>';
-                html += '<td class="col-actions">' +
+                const openBtns = openEnabled ?
                     '<button onclick="openResult(' + i + ')">' + t('open') + '</button>' +
-                    '<button onclick="openDirResult(' + i + ')">' + t('openDir') + '</button>' +
+                    '<button onclick="openDirResult(' + i + ')">' + t('openDir') + '</button>' : '';
+                html += '<td class="col-actions">' +
+                    openBtns +
                     '<button onclick="copyResult(' + i + ')">' + t('copy') + '</button>' +
                     '<button onclick="toggleFavorite(' + i + ')" id="fav-' + i + '" title="' + t('favorite') + '">☆</button>' +
                     '</td>';
