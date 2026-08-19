@@ -20,7 +20,8 @@
             statusLastBuild: '上次构建', statusUptime: '运行时长', yes: '是', no: '否',
             searching: '搜索中...', noResults: '未找到结果', errPrefix: '错误',
             resultsFound: '找到', resultsTotal: '个结果（共', linePrefix: '行',
-            noDirs: '暂无索引目录', pageInfo: '第', open: '打开', openDir: '打开目录', noDirToOpen: '无目录可打开', openFail: '打开失败', opened: '已打开', copy: '复制', delete: '删除', favorites: '收藏', favorite: '收藏', noFavorites: '暂无收藏', recent: '最近打开', noRecent: '暂无最近打开',
+            noDirs: '暂无索引目录', pageInfo: '第', open: '打开', openDir: '打开目录', noDirToOpen: '无目录可打开', openFail: '打开失败', opened: '已打开', copy: '复制', delete: '删除', favorites: '收藏', favorite: '收藏', noFavorites: '暂无收藏',
+            btnAdvanced: '高级选项 ▾', btnAdvancedHide: '收起 ▴', grpMatch: '匹配', grpFilter: '过滤与结果', recent: '最近打开', noRecent: '暂无最近打开',
         };
         const I18N_EN = {
             appTitle: 'golocate - Fast File Search', btnSearch: 'Search', btnStatus: '📊 Status',
@@ -43,7 +44,8 @@
             statusLastBuild: 'Last build', statusUptime: 'Uptime', yes: 'yes', no: 'no',
             searching: 'Searching...', noResults: 'No results', errPrefix: 'Error',
             resultsFound: 'Found', resultsTotal: 'results (of', linePrefix: 'L',
-            noDirs: 'No index directories', pageInfo: 'Page', open: 'Open', openDir: 'Open dir', noDirToOpen: 'No directory to open', openFail: 'Open failed', opened: 'Opened', copy: 'Copy', delete: 'Delete', favorites: 'Favorites', favorite: 'Favorite', noFavorites: 'No favorites yet', recent: 'Recently opened', noRecent: 'No recent files',
+            noDirs: 'No index directories', pageInfo: 'Page', open: 'Open', openDir: 'Open dir', noDirToOpen: 'No directory to open', openFail: 'Open failed', opened: 'Opened', copy: 'Copy', delete: 'Delete', favorites: 'Favorites', favorite: 'Favorite', noFavorites: 'No favorites yet',
+            btnAdvanced: 'Advanced ▾', btnAdvancedHide: 'Hide ▴', grpMatch: 'Match', grpFilter: 'Filter \u0026 result', recent: 'Recently opened', noRecent: 'No recent files',
         };
         let currentLang = localStorage.getItem('golocateLang') || 'zh';
         function t(key) {

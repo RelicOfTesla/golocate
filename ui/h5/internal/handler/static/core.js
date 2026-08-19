@@ -661,4 +661,12 @@
             div.textContent = text;
             return div.innerHTML;
         }
-        
+
+// Toggle the collapsed advanced search options.
+function toggleAdvanced() {
+    const box = document.getElementById("advancedOptions");
+    const btn = document.getElementById("advToggleBtn");
+    const open = box.style.display !== "block";
+    box.style.display = open ? "block" : "none";
+    if (btn) btn.textContent = open ? t("btnAdvancedHide") : t("btnAdvanced");
+}

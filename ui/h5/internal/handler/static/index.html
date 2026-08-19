@@ -72,14 +72,21 @@
             <div id="recentList"></div>
         </div>
         
-        <!-- Search Box -->
+        <!-- Search Card: box + advanced options + history -->
+        <div class="search-card">
+        <div class="search-card-header">
+            <span class="search-card-title">🔍 <span data-i18n="appTitle">golocate - 快速文件搜索</span></span>
+            <button class="secondary small" onclick="toggleAdvanced()" id="advToggleBtn" data-i18n="btnAdvanced">高级选项</button>
+        </div>
         <div class="search-box">
             <input type="text" id="searchInput" placeholder="搜索文件..." autofocus data-i18n-placeholder="searchPlaceholder">
             <button onclick="search()" data-i18n="btnSearch">搜索</button>
         </div>
         
-        <!-- Advanced Options -->
-        <div class="advanced-options">
+        <!-- Advanced Options (collapsed; toggle with the header button) -->
+        <div class="advanced-options" id="advancedOptions" style="display:none;">
+            <span class="opt-group" data-i18n="grpMatch">匹配</span>
+            <div class="opt-row">
             <label>
                 <input type="checkbox" id="ignoreCase" checked> <span data-i18n="labelIgnoreCase">忽略大小写</span>
             </label>
@@ -98,6 +105,9 @@
             <label>
                 <input type="checkbox" id="regexMode"> <span data-i18n="labelRegex">正则表达式</span>
             </label>
+            </div>
+            <span class="opt-group" data-i18n="grpFilter">过滤</span>
+            <div class="opt-row">
             <label>
                 <input type="checkbox" id="contentMode"> <span data-i18n="labelContent">内容搜索</span>
             </label>
@@ -127,6 +137,7 @@
             <label>
                 <span data-i18n="labelMaxResults">最大结果数:</span> <input type="number" id="maxResults" value="100" min="1" max="10000">
             </label>
+            </div>
         </div>
         
         <!-- Search History -->
@@ -134,19 +145,18 @@
             <div class="search-history-title">最近搜索:</div>
             <div class="search-history-items" id="searchHistoryItems"></div>
         </div>
+        </div><!-- /search-card -->
         
-        <!-- Results Header -->
-        <div class="results-header">
-            <div class="results-count" id="resultsCount"></div>
-            <div class="export-buttons" id="exportButtons" style="display: none;">
-                <button onclick="exportResults('json')" data-i18n="exportJson">导出 JSON</button>
-                <button onclick="exportResults('csv')" data-i18n="exportCsv">导出 CSV</button>
-                <button onclick="exportResults('txt')" data-i18n="exportTxt">导出 TXT</button>
-            </div>
-        </div>
-        
-        <!-- Results Table -->
+        <!-- Results Table (count bar + table merged in one card) -->
         <div class="results-table-container" id="resultsContainer">
+            <div class="results-header">
+                <div class="results-count" id="resultsCount"></div>
+                <div class="export-buttons" id="exportButtons" style="display: none;">
+                    <button onclick="exportResults('json')" data-i18n="exportJson">导出 JSON</button>
+                    <button onclick="exportResults('csv')" data-i18n="exportCsv">导出 CSV</button>
+                    <button onclick="exportResults('txt')" data-i18n="exportTxt">导出 TXT</button>
+                </div>
+            </div>
             <table class="results-table" id="resultsTable">
                 <thead>
                     <tr>
