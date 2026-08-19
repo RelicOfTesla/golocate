@@ -39,6 +39,7 @@ type SearchOptions struct {
 	Existing    bool     // only show files that still exist on disk
 	Null        bool     // NUL-separated output (xargs-friendly)
 	Long        bool     // long format: size + mtime + path
+	Offset      int64    // pagination offset (used by streaming paging)
 	SocketPath  string
 }
 
@@ -47,6 +48,7 @@ type SearchResult struct {
 	Entries []*index.Entry
 	Matches []*client.ContentMatch // set when opts.Content != ""
 	Count   int
+	Total   int // total matches across all pages (path search; server total)
 	Error   error
 }
 
@@ -63,6 +65,7 @@ func Search(opts SearchOptions) (*SearchResult, error) {
 		IgnoreCase:    opts.IgnoreCase,
 		Basename:      opts.Basename,
 		Limit:         opts.Limit,
+		Offset:        opts.Offset,
 		Scope:         opts.Scope,
 		Exclude:       opts.Exclude,
 		Types:         opts.Types,
@@ -112,7 +115,7 @@ func Search(opts SearchOptions) (*SearchResult, error) {
 			Count:   contentResult.Count,
 		}
 	} else {
-		entries, err := c.Search(opts.Pattern, searchOpts)
+		sr, err := c.SearchWithTotal(opts.Pattern, searchOpts)
 		if err != nil {
 			// If it's a server not running error, wrap it with friendly message
 			if errpkg.IsServerNotRunningError(err) {
@@ -121,8 +124,9 @@ func Search(opts SearchOptions) (*SearchResult, error) {
 			return nil, err
 		}
 		result = &SearchResult{
-			Entries: entries,
-			Count:   len(entries),
+			Entries: sr.Entries,
+			Count:   sr.Count,
+			Total:   sr.Total,
 		}
 	}
 
@@ -150,12 +154,6 @@ func Search(opts SearchOptions) (*SearchResult, error) {
 			result.Matches = filtered
 			result.Count = len(filtered)
 		}
-	}
-
-	// Sort if needed (server should handle this, but fallback)
-	if opts.Sort != "" && len(result.Entries) > 0 {
-		sortOpts := search.ParseSort(opts.Sort)
-		search.Sort(result.Entries, sortOpts)
 	}
 
 	return result, nil

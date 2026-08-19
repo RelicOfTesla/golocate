@@ -312,6 +312,17 @@ func searchIndex(pattern string, args []string) {
 		opts.MtimeBefore = n
 	}
 
+	// Large path searches (no --limit) stream page-by-page: print each page
+	// as it arrives instead of buffering every result, so huge result sets
+	// (e.g. `golocate a`) start producing output immediately with bounded
+	// memory. Count/content/open modes keep the single-shot behaviour.
+	if flagLimit == 0 && !flagCount && opts.Content == "" && !flagOpen && !flagOpenDir && !flagCopy {
+		if streamSearch(opts) {
+			return
+		}
+		os.Exit(1)
+	}
+
 	results, err := cliclient.Search(opts)
 	if err != nil {
 		errpkg.PrintFriendlyError(err)
@@ -354,6 +365,52 @@ func searchIndex(pattern string, args []string) {
 	if results.Count == 0 {
 		os.Exit(1)
 	}
+}
+
+// streamSearch fetches a path search page-by-page (streamBatch per page) and
+// prints each page as soon as it arrives. Returns true when at least one row
+// was printed (used for the locate-compatible exit code).
+func streamSearch(opts cliclient.SearchOptions) bool {
+	const streamBatch = 5000
+	var found, total int
+	hasTotal := false
+
+	// Streaming paging needs a stable server-side order so consecutive
+	// pages don't overlap or skip rows (the unsorted order is map-random).
+	// Default to a deterministic path sort when the user didn't pick one.
+	if pageSort := opts.Sort; pageSort == "" {
+		opts.Sort = "path:asc"
+		_ = pageSort
+	}
+
+	for offset := 0; ; offset += streamBatch {
+		page := opts
+		page.Limit = streamBatch
+		page.Offset = int64(offset)
+
+		res, err := cliclient.Search(page)
+		if err != nil {
+			errpkg.PrintFriendlyError(err)
+			slog.Error("streamed search failed", "offset", offset)
+			return false
+		}
+		if !hasTotal {
+			total = res.Total
+			hasTotal = true
+		}
+		found += res.Count
+		cliclient.PrintResults(res, false, flagNull, flagLong)
+
+		if hasTotal && total > 0 && offset+streamBatch >= total {
+			break // consumed the whole result set
+		}
+		if !hasTotal || total <= 0 {
+			if res.Count < streamBatch {
+				break // server returned no more (total unavailable)
+			}
+		}
+	}
+	return found > 0
 }
 
 // firstResultPath returns the path of the first match (path search) or the
