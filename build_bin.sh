@@ -18,13 +18,10 @@ echo "==> Build golocate-gtk (GTK GUI)"
 if ! pkg-config --exists gtk4 2>/dev/null; then
     echo "GTK development libraries not found. Skipping GTK build."
     echo "To install GTK development libraries:"
-    echo "  Ubuntu/Debian: sudo apt-get install libgtk-4-dev"
+    echo "  Ubuntu/Debian: sudo apt-get install libgtk-4-dev gobject-introspection"
     echo "  Fedora/RHEL:   sudo dnf install gtk4-devel"
 else
     # gotk4 is cgo-based; it is silently excluded when CGO is disabled.
-    if [ "$(go env CGO_ENABLED)" != "1" ]; then
-        echo "Note: CGO_ENABLED=$(go env CGO_ENABLED); gotk4 requires CGO — forcing CGO_ENABLED=1."
-    fi
     if (cd ui/gtk && CGO_ENABLED=1 go build -o ../../bin/golocate-gtk ./cmd/golocate-gtk/); then
         echo "GTK version built successfully -> bin/golocate-gtk"
     else
