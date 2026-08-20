@@ -45,8 +45,14 @@ go build -o bin/golocated ./cmd/golocated/
 go build -o bin/golocate ./cmd/golocate/
 go build -o bin/golocate-h5 ./ui/h5/cmd/golocate-h5/
 
-# Optional: Build GTK GUI (requires GTK dependencies)
+# Optional: Build GTK GUI (requires GTK4 dev + cgo)
+#   Debian/Ubuntu: sudo apt install libgtk-4-dev gcc pkg-config libglib2.0-dev
+#   macOS: brew install gtk4
+# gotk4 generates full bindings on first build (slower the first time);
+# keep the module/tool cache outside /tmp to avoid rebuilds if /tmp is wiped.
+export CGO_ENABLED=1
 go build -o bin/golocate-gtk ./ui/gtk/cmd/golocate-gtk/
+# verify: ./bin/golocate-gtk -h   (prints gotk4/GApplication options; -s connects a socket)
 ```
 
 ### Quick Start
