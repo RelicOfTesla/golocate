@@ -283,6 +283,9 @@ func createMainWindow(app *gtk.Application) {
 	mainWindow = win
 	win.SetTitle("golocate - Fast File Search")
 	win.SetDefaultSize(900, 700)
+	// 显式启用窗口装饰：确保标题栏带 最小化/最大化/关闭 按钮
+	// （GTK4 默认 CSD 在部分主题只显示关闭；SetDecorated(true) 交由 WM 提供完整按钮组）。
+	win.SetDecorated(true)
 
 	// Create main container
 	mainBox := gtk.NewBox(gtk.OrientationVertical, 10)
