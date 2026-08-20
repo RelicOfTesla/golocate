@@ -29,17 +29,29 @@ type Index struct {
 	tokens      map[string]map[string]struct{}
 	fileCount   int
 	maxFileSize int64
+	maxTokens   int
 }
 
 // NewIndex creates an empty content index. Files larger than maxFileSize are
-// skipped (0 = use the default 10MB).
+// skipped (0 = use the default 10MB); at most MaxTokensPerFile tokens are
+// kept per file.
 func NewIndex(maxFileSize int64) *Index {
+	return NewIndexParam(maxFileSize, MaxTokensPerFile)
+}
+
+// NewIndexParam is NewIndex with an explicit per-file token cap
+// (docs/PERFORMANCE.md S6).
+func NewIndexParam(maxFileSize int64, maxTokens int) *Index {
 	if maxFileSize <= 0 {
 		maxFileSize = 10 * 1024 * 1024
+	}
+	if maxTokens <= 0 {
+		maxTokens = MaxTokensPerFile
 	}
 	return &Index{
 		tokens:      make(map[string]map[string]struct{}),
 		maxFileSize: maxFileSize,
+		maxTokens:   maxTokens,
 	}
 }
 
@@ -58,7 +70,11 @@ func (ix *Index) AddFile(path string) {
 		return
 	}
 
-	seen := make(map[string]struct{}, MaxTokensPerFile)
+	cap := ix.maxTokens
+	if cap <= 0 {
+		cap = MaxTokensPerFile
+	}
+	seen := make(map[string]struct{}, cap)
 	count := 0
 	for _, tok := range tokenize(text) {
 		if _, dup := seen[tok]; dup {
@@ -67,7 +83,7 @@ func (ix *Index) AddFile(path string) {
 		seen[tok] = struct{}{}
 		ix.addToken(tok, path)
 		count++
-		if count >= MaxTokensPerFile {
+		if count >= cap {
 			break
 		}
 	}

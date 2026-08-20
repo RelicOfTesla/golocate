@@ -65,6 +65,9 @@ type Config struct {
 	// every index build, and watcher changes are NOT reflected until the next
 	// rebuild. Costs extra memory proportional to indexed tokens.
 	ContentIndex bool `yaml:"content_index"`
+	// ContentIndexMaxTokens caps tokens kept per file in the optional content
+	// index (0 = default 256). Tune down to shrink its memory footprint.
+	ContentIndexMaxTokens int `yaml:"content_index_max_tokens"`
 }
 
 // getWindowsDrives returns a list of available drive letters on Windows.
@@ -125,24 +128,25 @@ func DefaultConfig() *Config {
 	var ignorePatterns = DefaultIgnorePatterns()
 
 	return &Config{
-		Directories:          defaultDirs,
-		IgnorePatterns:       ignorePatterns,
-		DatabasePath:         filepath.Join(homeDir, ".local/share/golocate/index.db"),
-		SocketPath:           GetDefaultSocketPath(), // 使用跨平台函数
-		PIDFile:              filepath.Join(homeDir, ".local/run/golocate.pid"),
-		LogFile:              filepath.Join(homeDir, ".local/log/golocate.log"),
-		FollowSymlinks:       false,
-		WorkerCount:          4,
-		ContentSearch:        false,
-		MaxContentFileSize:   10 * 1024 * 1024, // 10MB
-		IndexInterval:        "",               // 定时全量重建默认关闭（incremental 模式下不需要）
-		ThrottleIndex:        true,             // 默认降频
-		ThrottleWindow:       "10m",            // 开机窗口内后台扫描节流，搜索即提速
-		IndexStrategy:        "auto",           // 默认自动选择
-		PersistMode:          "incremental",    // 默认增量持久化（写量 ≈ 变更量，无定期全量）
-		SnapshotMaxAge:       "24h",            // snapshot 模式下：快照超过 24h 视为过期
-		PersistFlushInterval: "30s",            // incremental 批量落盘间隔
-		ContentIndex:         false,            // 可选内容倒排索引（默认关：内存代价）
+		Directories:           defaultDirs,
+		IgnorePatterns:        ignorePatterns,
+		DatabasePath:          filepath.Join(homeDir, ".local/share/golocate/index.db"),
+		SocketPath:            GetDefaultSocketPath(), // 使用跨平台函数
+		PIDFile:               filepath.Join(homeDir, ".local/run/golocate.pid"),
+		LogFile:               filepath.Join(homeDir, ".local/log/golocate.log"),
+		FollowSymlinks:        false,
+		WorkerCount:           4,
+		ContentSearch:         false,
+		MaxContentFileSize:    10 * 1024 * 1024, // 10MB
+		IndexInterval:         "",               // 定时全量重建默认关闭（incremental 模式下不需要）
+		ThrottleIndex:         true,             // 默认降频
+		ThrottleWindow:        "10m",            // 开机窗口内后台扫描节流，搜索即提速
+		IndexStrategy:         "auto",           // 默认自动选择
+		PersistMode:           "incremental",    // 默认增量持久化（写量 ≈ 变更量，无定期全量）
+		SnapshotMaxAge:        "24h",            // snapshot 模式下：快照超过 24h 视为过期
+		PersistFlushInterval:  "30s",            // incremental 批量落盘间隔
+		ContentIndex:          false,            // 可选内容倒排索引（默认关：内存代价）
+		ContentIndexMaxTokens: 0,                // 0 = content 包默认 256
 	}
 }
 
@@ -500,6 +504,13 @@ func (c *Config) SetField(key, value string) error {
 			return fmt.Errorf("invalid value for %s: %w", key, err)
 		}
 		c.ContentIndex = val
+
+	case "content_index_max_tokens":
+		val, err := parseInt(value, 0, 100000)
+		if err != nil {
+			return fmt.Errorf("invalid value for %s: %w", key, err)
+		}
+		c.ContentIndexMaxTokens = val
 
 	default:
 		return fmt.Errorf("unknown configuration key: %s", key)

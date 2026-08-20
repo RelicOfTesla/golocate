@@ -719,20 +719,21 @@ func (s *Server) handleGetConfigHandler(ctx context.Context, msg message.Message
 
 	// Return complete config (including default values)
 	result := map[string]any{
-		"socket_path":           s.config.SocketPath,
-		"directories":           s.config.Directories,
-		"database_path":         s.config.DatabasePath,
-		"ignore_patterns":       s.config.IgnorePatterns,
-		"pid_file":              s.config.PIDFile,
-		"log_file":              s.config.LogFile,
-		"follow_symlinks":       s.config.FollowSymlinks,
-		"worker_count":          s.config.WorkerCount,
-		"content_search":        s.config.ContentSearch,
-		"max_content_file_size": s.config.MaxContentFileSize,
-		"index_interval":        s.config.IndexInterval,
-		"throttle_index":        s.config.ThrottleIndex,
-		"index_strategy":        s.config.IndexStrategy,
-		"content_index":         s.config.ContentIndex,
+		"socket_path":              s.config.SocketPath,
+		"directories":              s.config.Directories,
+		"database_path":            s.config.DatabasePath,
+		"ignore_patterns":          s.config.IgnorePatterns,
+		"pid_file":                 s.config.PIDFile,
+		"log_file":                 s.config.LogFile,
+		"follow_symlinks":          s.config.FollowSymlinks,
+		"worker_count":             s.config.WorkerCount,
+		"content_search":           s.config.ContentSearch,
+		"max_content_file_size":    s.config.MaxContentFileSize,
+		"index_interval":           s.config.IndexInterval,
+		"throttle_index":           s.config.ThrottleIndex,
+		"index_strategy":           s.config.IndexStrategy,
+		"content_index":            s.config.ContentIndex,
+		"content_index_max_tokens": s.config.ContentIndexMaxTokens,
 	}
 
 	return result, nil

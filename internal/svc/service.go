@@ -323,7 +323,7 @@ func (d *DaemonService) swapIndex(idx *index.Index) {
 // buildContentIndex tokenizes every indexed file into the in-memory content
 // index (keyword -> paths). Cost: reads every file once per build.
 func (d *DaemonService) buildContentIndex(idx *index.Index) *contentpkg.Index {
-	ix := contentpkg.NewIndex(d.cfg.MaxContentFileSize)
+	ix := contentpkg.NewIndexParam(d.cfg.MaxContentFileSize, d.cfg.ContentIndexMaxTokens)
 	start := time.Now()
 	for _, e := range idx.GetAllEntries() {
 		if e.IsDir {
