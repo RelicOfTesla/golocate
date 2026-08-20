@@ -362,7 +362,6 @@ body.light-theme {
 }
 body.light-theme .header,
 body.light-theme .results-table-container,
-body.light-theme .status-bar,
 body.light-theme .settings-panel {
     background: rgba(255, 255, 255, 0.85);
     border-color: var(--border);
@@ -455,7 +454,7 @@ body.light-theme .results-table-container .results-header { background: rgba(15,
     .container { padding: 14px; }
     .header { padding: 12px 14px; }
     .header h1 { font-size: 20px; }
-    .search-card, .results-table-container, .status-bar, .settings-panel { border-radius: 12px; }
+    .search-card, .results-table-container, .settings-panel { border-radius: 12px; }
     table.results-table th.col-match, table.results-table td.col-match { display: none; }
     table.results-table th.col-name { width: 22%; }
     table.results-table th.col-path { width: 40%; }
@@ -508,7 +507,6 @@ body.light-theme .results-table-container .results-header { background: rgba(15,
     .pagination label { display: none; } /* hide jump-to on phones */
 
     .settings-panel { padding: 14px; }
-    .status-bar { padding: 10px 12px; font-size: 12px; }
 }
 
 /* ≤420px: very narrow — path gets the remaining space, tighten further */
@@ -543,7 +541,7 @@ body.col-resizing .col-resizer::after { background: var(--accent); }
 @media (min-width: 1600px) {
     table.results-table th { padding: 15px 14px; }
     table.results-table td { padding: 13px 14px; }
-    .search-card, .results-table-container, .status-bar, .settings-panel { box-shadow: var(--shadow); }
+    .search-card, .results-table-container, .settings-panel { box-shadow: var(--shadow); }
 }
 @media (min-width: 2400px) {
     .container { padding-top: 34px; padding-bottom: 34px; }
