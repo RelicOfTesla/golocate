@@ -190,6 +190,26 @@
                     '<span class="stat">' + t('statusIndexed') + ': <b>' + (data.indexed_file_count || 0) + '</b></span>' +
                     '<span class="stat">' + t('statusLastBuild') + ': <b>' + escapeHtml(data.last_build_time ? data.last_build_time.replace('T', ' ').slice(0, 19) : '-') + '</b></span>' +
                     '<span class="stat">' + t('statusUptime') + ': <b>' + escapeHtml(data.uptime || '-') + '</b></span>' + building;
+
+                // Detail panel (status tab)
+                const body = document.getElementById('statusPanelBody');
+                if (body) {
+                    const stats = data.stats || {};
+                    body.innerHTML =
+                        row(t('statusRunning'), (data.running ? t('yes') : t('no')) + (data.is_building ? ' · ' + t('statusBuilding') : '')) +
+                        row(t('statusIndexFiles'), data.index_size || 0) +
+                        row(t('statusIndexed'), data.indexed_file_count || 0) +
+                        row(t('statusLastBuild'), data.last_build_time ? data.last_build_time.replace('T', ' ').slice(0, 19) : '-') +
+                        row(t('statusUptime'), data.uptime || '-') +
+                        row(t('statusProtocol'), data.protocol_version || '-') +
+                        row(t('statusPid'), data.pid || '-') +
+                        (data.is_building ? row(t('statusBuilding'), (data.build_scanned || 0) + (data.build_history ? ' · ' + t('metaBuilds') + ': ' + (data.build_history || 0) : '')) : '') +
+                        (stats.searches ? row(t('statusSearches'), stats.searches) : '') +
+                        (stats.content_searches ? row(t('statusContentSearches'), stats.content_searches) : '') +
+                        (stats.builds ? row(t('statusBuilds'), stats.builds) : '') +
+                        (stats.opens ? row(t('statusOpens'), stats.opens) : '');
+                    function row(k, v) { return '<div class="stat-row"><span>' + escapeHtml(String(k)) + '</span><b>' + escapeHtml(String(v)) + '</b></div>'; }
+                }
             } catch (err) {
                 bar.style.display = 'flex';
                 bar.innerHTML = '<span class="dot off"></span><span>' + t('statusFail') + ': ' + escapeHtml(err.message) + '</span>';
@@ -218,7 +238,7 @@
             const panel = document.getElementById(id);
             if (!panel) return;
             const alreadyOpen = activePanel === id && panel.style.display === 'block';
-            ['favPanel', 'settingsPanel', 'serverPanel'].forEach(pid => {
+            ['favPanel', 'settingsPanel', 'serverPanel', 'statusPanel'].forEach(pid => {
                 const el = document.getElementById(pid);
                 if (el && el !== panel) el.style.display = 'none';
             });
@@ -233,6 +253,7 @@
             const tb = document.querySelector('.header-buttons .tab[data-target="' + id + '"]');
             if (tb) tb.classList.add('active');
             if (id === 'favPanel') { renderFavorites(); renderRecents(); }
+            if (id === 'statusPanel') { refreshStatus(); }
         }
         function toggleSettings() {
             const panel = document.getElementById('settingsPanel');

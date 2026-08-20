@@ -624,3 +624,11 @@ body.light-theme .header-buttons .tab.active {
 }
 body.light-theme .ctx-menu { background: rgba(255, 255, 255, 0.98); }
 body.light-theme .ctx-menu .ctx-item:hover { color: #fff; }
+
+/* ============ Status panel (tab) ============ */
+#statusPanelBody .stat-row {
+    display: flex; justify-content: space-between; gap: 16px;
+    padding: 6px 2px; border-bottom: 1px dashed var(--border);
+    font-size: 13.5px;
+}
+#statusPanelBody .stat-row b { color: var(--accent); }
