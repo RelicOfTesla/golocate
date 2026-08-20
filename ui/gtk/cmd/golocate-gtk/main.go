@@ -95,7 +95,7 @@ var (
 	contentEntry  *gtk.Entry        // 独立内容关键词（与 searchEntry 路径过滤 AND，跟随 H5）
 	typesEntry    *gtk.Entry        // 类型过滤（逗号/空格分隔，可选）
 	dedupeBtn     *gtk.CheckButton  // 硬链接去重
-	modeCombo     *gtk.ComboBoxText // 搜索模式（普通/正则/通配符/多词，互斥）
+	modeDropDown  *gtk.DropDown // 搜索模式（普通/正则/通配符/多词）——GTK4 DropDown 整块可点、弹出响应快
 	exportBtn     *gtk.Button
 )
 
@@ -256,17 +256,12 @@ func createMainWindow(app *gtk.Application) {
 	ignoreCaseBtn.SetActive(false)
 	advancedBox.Append(ignoreCaseBtn)
 
-	modeCombo = gtk.NewComboBoxText()
-	modeCombo.AppendText("普通")
-	modeCombo.AppendText("正则")
-	modeCombo.AppendText("通配符")
-	modeCombo.AppendText("多词")
-	modeCombo.SetActive(0)
-	modeCombo.SetTooltipText("搜索匹配模式")
-	// GTK4 popover 类控件默认 focus-on-click 为关：首次点击只获得焦点而不
-	// 弹列表（显得“很难弹出”）。开启后单击即弹出。
-	modeCombo.SetFocusOnClick(true)
-	advancedBox.Append(modeCombo)
+	modeDropDown = gtk.NewDropDownFromStrings([]string{"普通", "正则", "通配符", "多词"})
+	modeDropDown.SetSelected(0)
+	modeDropDown.SetTooltipText("搜索匹配模式")
+	// GtkDropDown 提供整块点击区域且弹层响应快（替代 ComboBoxText 的
+	// 窄点击区/慢 popover，解决“很难弹出、必须精确点文字”问题）。
+	advancedBox.Append(modeDropDown)
 
 	contentBtn = gtk.NewCheckButtonWithLabel("内容搜索")
 	contentBtn.SetActive(false)
@@ -841,12 +836,11 @@ func formatModTime(t time.Time) string {
 // Empty means auto-detect on the server (wildcard vs substring).
 func modeFromUI() index.PatternMode {
 	// 优先级：通配符 > 多词 > 正则 > 普通（同时勾选时取较特定的一种）。
-	// ComboBoxText item index -> pattern mode. (gotk4 exposes the combo's
-	// "active" property getter as Active(); there is no GetActive().)
-	if modeCombo == nil {
+	// GtkDropDown selected index -> pattern mode (0 普通 / 1 正则 / 2 通配符 / 3 多词).
+	if modeDropDown == nil {
 		return index.PatternMode("")
 	}
-	switch modeCombo.Active() {
+	switch modeDropDown.Selected() {
 	case 1:
 		return index.PatternModeExtendedRegex
 	case 2:
