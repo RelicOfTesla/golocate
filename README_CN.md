@@ -130,35 +130,11 @@ curl http://127.0.0.1:8080/metrics    # Prometheus 文本指标（搜索/内容�
 
 ### 协议 API
 
-golocate 支持三种协议用于编程访问：
+程序化访问通过 Unix socket 走 **Fast / JSON / JSON-RPC** 三种协议。
+方法：`search` / `status` / `get-config` / `set-config` / `build` / `reload-config` / `open` / `stop`；
+协议版本通过 `status` 暴露。CLI 侧可直接用 `golocate --json` 等 param。
 
-#### 快速协议（默认）
 
-```bash
-echo "method=search
-content=test
-ignore_case=true
-limit=10
-" | nc -U /tmp/golocate.sock
-```
-
-#### JSON 协议
-
-```bash
-printf '{"method":"search","content":"test","ignore_case":true,"limit":10}\n' | nc -U /tmp/golocate.sock
-```
-
-#### 方法清单
-
-`search` / `status` / `get-config` / `set-config` / `build` / `reload-config` / `open`（经 pathValidator 白名单校验后用默认应用打开文件/目录）/ `stop`
-
-#### JSON-RPC 协议
-
-```bash
-printf '{"jsonrpc":"2.0","method":"search","params":{"content":"test"},"id":1}\n' | nc -U /tmp/golocate.sock
-```
-
----
 
 ## 🌐 远程访问（可选）
 
@@ -172,33 +148,11 @@ daemon 本身的搜索接口仍走本机 socket，不会直接暴露。
 
 ## 🌐 平台说明
 
-### Linux
-- 使用 **Unix socket** (`/tmp/golocate.sock`)
-- 高性能且安全
-- 推荐用于生产环境
+- **Linux** —— Unix socket（`/tmp/golocate.sock`），实时监控用 **fanotify**（内核 2.6.37+，`CONFIG_FANOTIFY`）；不可用时自动回退 inotify/fsnotify。若被权限拦截，一次授权：`sudo setcap cap_sys_admin+ep ./bin/golocated`。
+- **Windows** —— 命名管道（`\\.\pipe\golocate`），仅当前用户、无端口冲突。
+- 默认仅本机使用；跨机器访问见上方“远程访问”。
 
-### Windows
-- 使用 **Named Pipe** (`\\.\pipe\golocate`)
-- Windows 原生 IPC 机制
-- 比 TCP socket 更安全（只有当前用户可访问）
-- 无端口冲突
 
-```powershell
-# Windows 示例（PowerShell）
-# 启动守护进程
-.\bin\golocated.exe --service
-
-# 搜索文件
-.\bin\golocate.exe test
-
-# Named Pipe 路径：\\.\pipe\golocate
-```
-
-```bash
-printf '{"jsonrpc":"2.0","method":"search","params":{"path":"test"},"id":1}\n' | nc -U /tmp/golocate.sock
-```
-
----
 
 ## ⚙️ 配置
 
@@ -256,24 +210,10 @@ socket_path: /tmp/golocate.sock
 
 ## 🏗️ 架构
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                      golocate                                │
-├─────────────────────────────────────────────────────────────┤
-│  命令行客户端   │  H5 Web界面  │  GTK GUI   │  API 客户端   │
-├─────────────────────────────────────────────────────────────┤
-│              协议层 (Fast/JSON/JSON-RPC)                     │
-├─────────────────────────────────────────────────────────────┤
-│                     golocated (守护进程)                     │
-│  ┌──────────────┬──────────────┬────────────────────────┐  │
-│  │  索引构建    │  文件监控    │  搜索引擎              │  │
-│  └──────────────┴──────────────┴────────────────────────┘  │
-├─────────────────────────────────────────────────────────────┤
-│                 Unix Socket (/tmp/golocate.sock)            │
-└─────────────────────────────────────────────────────────────┘
-```
+单一守护进程 `golocated` 同时持有内存索引、文件监控与搜索引擎，通过一个 Unix socket 服务所有客户端；
+CLI、内置 H5 Web、GTK GUI 均为薄客户端。CLI/GTK/H5 在连不上时可自动拉起守护进程（单一共享实例）。
 
----
+
 
 ## 📊 性能
 
@@ -289,41 +229,14 @@ socket_path: /tmp/golocate.sock
 
 ## 🔧 开发
 
-### 项目结构
+### 项目结构（要点）
 
-```
-golocate/
-├── cmd/                    # 应用程序入口
-│   ├── golocate/           # CLI 客户端
-│   ├── golocated/          # 守护进程服务器
-│   └── memory-analyze/     # 内存使用分析工具
-├── internal/               # 私有包
-│   ├── client/             # Socket 客户端
-│   ├── database/           # BBolt 持久化
-│   ├── persist/            # 可插拔持久化策略（snapshot / none）
-│   ├── scheduler/          # 定时索引重建
-│   ├── server/             # 请求处理器
-│   ├── socket/             # 平台 socket 抽象
-│   ├── svc/                # 服务生命周期
-│   └── testutil/           # 测试辅助
-├── pkg/                    # 公共包
-│   ├── cli/                # CLI 参数解析
-│   ├── config/             # YAML 配置
-│   ├── content/            # 文件内容索引
-│   ├── errors/             # 错误类型
-│   ├── ignore/             # 忽略模式匹配
-│   ├── index/              # 内存索引 + 搜索
-│   ├── message/            # 协议解析 + 工作分发
-│   │   └── protocol/       # Fast / JSON / JSON-RPC 编码器
-│   ├── pool/               # 对象池
-│   ├── search/             # 结果格式化
-│   ├── security/           # 权限检查
-│   └── watcher/            # fanotify / fsnotify
-└── ui/                     # 用户界面
-    ├── h5/                 # Web UI
-    └── gtk/                # GTK GUI
-test/                       # 集成测试（socket 级 API 测试）
-```
+`cmd/golocate`（CLI）、`cmd/golocated`（守护）、`ui/h5`（Web）、`ui/gtk`（GUI）；
+`pkg/index`（索引+搜索）、`pkg/message/protocol`（Fast/JSON/JSON-RPC）、
+`pkg/autostart`（自动拉起守护）、`internal/svc|persist|watcher|server`、
+`test/`（socket 级集成测试）。
+
+
 
 ### 运行测试
 

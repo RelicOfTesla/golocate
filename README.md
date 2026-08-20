@@ -140,33 +140,10 @@ curl http://127.0.0.1:8080/metrics    # Prometheus text metrics (search/content/
 
 ### Protocol API
 
-golocate supports three protocols for programmatic access:
+Programmatic access uses Fast / JSON / JSON-RPC over the Unix socket.
+Methods: `search` / `status` / `get-config` / `set-config` / `build` / `reload-config` / `open` / `stop`.
+Protocol version is exposed via `status`. The CLI exposes this via `golocate --json` and flags.
 
-#### Fast Protocol (Default)
-
-```bash
-echo "method=search
-content=test
-ignore_case=true
-limit=10
-" | nc -U /tmp/golocate.sock
-```
-
-#### JSON Protocol
-
-```bash
-printf '{"method":"search","content":"test","ignore_case":true,"limit":10}\n' | nc -U /tmp/golocate.sock
-```
-
-#### Method List
-
-`search` / `status` / `get-config` / `set-config` / `build` / `reload-config` / `open` (opens a file/directory with the default app after pathValidator whitelist check) / `stop`
-
-#### JSON-RPC Protocol
-
-```bash
-printf '{"jsonrpc":"2.0","method":"search","params":{"content":"test"},"id":1}\n' | nc -U /tmp/golocate.sock
-```
 
 ---
 
@@ -182,55 +159,11 @@ The daemon's search socket itself is never exposed directly.
 
 ## 🌐 Platform Notes
 
-### Linux
-- Uses **Unix socket** (`/tmp/golocate.sock`)
-- High performance and secure
-- Recommended for production use
+- **Linux** — Unix socket (`/tmp/golocate.sock`), real-time monitoring via **fanotify** (kernel 2.6.37+, `CONFIG_FANOTIFY`); automatic fallback to inotify/fsnotify when unavailable. If fanotify is blocked by permissions, grant it once: `sudo setcap cap_sys_admin+ep ./bin/golocated`.
+- **Windows** — Named Pipe (`\\.\pipe\golocate`), current-user only, no port conflicts.
+- Local-first by default; see *Remote Access* above.
 
-#### fanotify Requirements
 
-golocate uses **fanotify** for real-time file system monitoring on Linux. To use fanotify:
-
-**Kernel Requirements**:
-- Linux kernel 2.6.37 or later
-- fanotify support enabled in kernel config (`CONFIG_FANOTIFY=y`)
-
-**Permission Requirements**:
-- **Option 1**: Run as root (not recommended for production)
-- **Option 2**: Set `CAP_SYS_ADMIN` capability on the binary:
-  ```bash
-  sudo setcap cap_sys_admin+ep ./bin/golocated
-  ```
-
-**Fallback Mode**:
-- If fanotify is not available, golocate will automatically fallback to **inotify** or **fsnotify**
-- No manual configuration needed - the system auto-detects the best available watcher
-
-**Checking fanotify Support**:
-```bash
-# Check kernel version (requires 2.6.37+)
-uname -r
-
-# Check if fanotify is enabled in kernel config
-grep CONFIG_FANOTIFY /boot/config-$(uname -r)
-```
-
-### Windows
-- Uses **Named Pipe** (`\\.\pipe\golocate`)
-- Native Windows IPC mechanism
-- More secure than TCP socket (only current user can access)
-- No port conflicts
-
-```powershell
-# Windows example (PowerShell)
-# Start the daemon
-.\bin\golocated.exe --service
-
-# Search for files
-.\bin\golocate.exe test
-
-# Named Pipe path: \\.\pipe\golocate
-```
 
 ---
 
@@ -301,22 +234,12 @@ boot-friendly pacing.
 
 ## 🏗️ Architecture
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                      golocate                                │
-├─────────────────────────────────────────────────────────────┤
-│  CLI Client    │  H5 Web UI    │  GTK GUI    │  API Client  │
-├─────────────────────────────────────────────────────────────┤
-│              Protocol Layer (Fast/JSON/JSON-RPC)            │
-├─────────────────────────────────────────────────────────────┤
-│                     golocated (Daemon)                      │
-│  ┌──────────────┬──────────────┬────────────────────────┐  │
-│  │  Index Build │  File Watch  │  Search Engine         │  │
-│  └──────────────┴──────────────┴────────────────────────┘  │
-├─────────────────────────────────────────────────────────────┤
-│                 Unix Socket (/tmp/golocate.sock)            │
-└─────────────────────────────────────────────────────────────┘
-```
+A single daemon (`golocated`) owns the in-memory index, file watcher and search
+engine, serving all clients over one Unix socket. Clients are thin: CLI, built-in
+H5 web UI, GTK GUI, and the API layer. The CLI/GTK/H5 can auto-start the daemon
+when it is unreachable (single shared instance).
+
+
 
 ---
 
@@ -334,41 +257,14 @@ boot-friendly pacing.
 
 ## 🔧 Development
 
-### Project Structure
+### Project Structure (highlights)
 
-```
-golocate/
-├── cmd/                    # Application entry points
-│   ├── golocate/           # CLI client
-│   ├── golocated/          # Daemon server
-│   └── memory-analyze/     # Memory usage analysis tool
-├── internal/               # Private packages
-│   ├── client/             # Socket client
-│   ├── database/           # BBolt persistence
-│   ├── persist/            # Pluggable persistence strategies (snapshot/none)
-│   ├── scheduler/          # Periodic index rebuild
-│   ├── server/             # Request handlers
-│   ├── socket/             # Platform socket abstractions
-│   ├── svc/                # Service lifecycle
-│   └── testutil/           # Test helpers
-├── pkg/                    # Public packages
-│   ├── cli/                # CLI flag parsing
-│   ├── config/             # YAML configuration
-│   ├── content/            # File content indexing
-│   ├── errors/             # Error types
-│   ├── ignore/             # Ignore pattern matching
-│   ├── index/              # In-memory index + search
-│   ├── message/            # Protocol parsing + worker dispatch
-│   │   └── protocol/       # Fast / JSON / JSON-RPC encoders
-│   ├── pool/               # Object pools
-│   ├── search/             # Result formatting
-│   ├── security/           # Permission checks
-│   └── watcher/            # fanotify / fsnotify
-└── ui/                     # User interfaces
-    ├── h5/                 # Web UI
-    └── gtk/                # GTK GUI
-test/                       # Integration tests (socket-level API tests)
-```
+`cmd/golocate` (CLI), `cmd/golocated` (daemon), `ui/h5` (web), `ui/gtk` (GUI);
+`pkg/index` (index+search), `pkg/message/protocol` (Fast/JSON/JSON-RPC),
+`pkg/autostart` (auto-start daemon), `internal/svc|persist|watcher|server`,
+`test/` (socket-level integration tests).
+
+
 
 ### Running Tests
 
