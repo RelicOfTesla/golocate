@@ -720,7 +720,8 @@
             }
             
             searchHistoryContainer.style.display = 'block';
-            searchHistoryItems.innerHTML = '';
+            // 标题作为历史项容器首个元素 → 与历史 chip 天然同一行（紧凑）。
+            searchHistoryItems.innerHTML = '<span class=\'search-history-title\'>' + t('recentSearches') + '</span>';
             
             history.slice(0, 10).forEach(item => {
                 const div = document.createElement('div');

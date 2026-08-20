@@ -153,6 +153,7 @@ select { cursor: pointer; }
 .search-history-title {
     color: var(--text-3); font-size: 0.85em;
     white-space: nowrap; letter-spacing: 0.3px; flex-shrink: 0;
+    margin-right: 4px; align-self: center;
 }
 .search-history-items { display: inline-flex; gap: 6px; flex-wrap: wrap; }
 .search-history-item {
