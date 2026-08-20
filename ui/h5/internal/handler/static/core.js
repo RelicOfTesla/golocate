@@ -145,25 +145,30 @@
             e.preventDefault();
             showRowContextMenu(parseInt(tr.dataset.index, 10), e.clientX, e.clientY);
         });
+        // Click delegation at document (capture): the menu may be inserted into
+        // the DOM after this script runs, so bind once at document level. A
+        // click inside the menu executes the item's action; anywhere else hides
+        // the menu.
         document.addEventListener('click', (e) => {
-            if (!e.target || !e.target.closest || !e.target.closest('#ctxMenu')) hideCtxMenu();
+            const menu = document.getElementById('ctxMenu');
+            if (!menu) return;
+            const inside = e.target && e.target.closest ? !!e.target.closest('#ctxMenu') : false;
+            if (inside) {
+                const item = e.target.closest ? e.target.closest('.ctx-item') : null;
+                if (item && item.dataset && item.dataset.act !== undefined) {
+                    const idx = parseInt(menu.dataset.index, 10);
+                    if (item.dataset.act === 'open') openResult(idx);
+                    else if (item.dataset.act === 'opendir') openDirResult(idx);
+                    else if (item.dataset.act === 'copy') copyResult(idx);
+                    else if (item.dataset.act === 'fav') toggleFavorite(idx);
+                    menu.style.display = 'none';
+                }
+            } else {
+                menu.style.display = 'none';
+            }
         }, true);
         window.addEventListener('scroll', hideCtxMenu, true);
         document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hideCtxMenu(); });
-        const ctxMenuEl = document.getElementById('ctxMenu');
-        if (ctxMenuEl) {
-            ctxMenuEl.addEventListener('click', (e) => {
-                const act = e.target && e.target.dataset ? e.target.dataset.act : null;
-                if (!act) return;
-                const idx = parseInt(ctxMenuEl.dataset.index, 10);
-                if (act === 'open') openResult(idx);
-                else if (act === 'opendir') openDirResult(idx);
-                else if (act === 'copy') copyResult(idx);
-                else if (act === 'fav') toggleFavorite(idx);
-                hideCtxMenu();
-            });
-        }
-
         
         // Server Status & Index Rebuild
         async function refreshStatus() {
