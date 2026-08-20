@@ -1,5 +1,5 @@
-//go:build linux
-// +build linux
+//go:build unix
+// +build unix
 
 // Package socket provides cross-platform socket utilities.
 package socket
@@ -14,7 +14,7 @@ import (
 	"github.com/RelicOfTesla/golocate/pkg/config"
 )
 
-// createListener creates a Unix socket listener on Linux.
+// createListener creates a Unix socket listener on Unix.
 func createListener(socketPath string) (net.Listener, error) {
 	// Remove existing socket file
 	if err := os.Remove(socketPath); err != nil && !os.IsNotExist(err) {
@@ -43,12 +43,12 @@ func createListener(socketPath string) (net.Listener, error) {
 	return listener, nil
 }
 
-// getDefaultAddress returns the default Unix socket path on Linux.
+// getDefaultAddress returns the default Unix socket path on Unix.
 func getDefaultAddress() string {
 	return config.GetDefaultSocketPath()
 }
 
-// connect connects to the Unix socket on Linux.
+// connect connects to the Unix socket on Unix.
 func connect(socketPath string) (net.Conn, error) {
 	conn, err := net.DialTimeout("unix", socketPath, 5*time.Second)
 	if err != nil {
