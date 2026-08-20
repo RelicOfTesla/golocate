@@ -146,9 +146,15 @@ select { cursor: pointer; }
 .advanced-options select { padding: 5px 8px; font-size: 13px; }
 
 /* ============ Search History ============ */
-.search-history { margin-bottom: 16px; }
-.search-history-title { color: var(--text-3); font-size: 0.85em; margin-bottom: 6px; letter-spacing: 0.3px; }
-.search-history-items { display: flex; gap: 8px; flex-wrap: wrap; }
+.search-history {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    margin-bottom: 10px;
+}
+.search-history-title {
+    color: var(--text-3); font-size: 0.85em;
+    white-space: nowrap; letter-spacing: 0.3px; flex-shrink: 0;
+}
+.search-history-items { display: inline-flex; gap: 6px; flex-wrap: wrap; }
 .search-history-item {
     padding: 5px 13px;
     background: rgba(255, 255, 255, 0.06);
