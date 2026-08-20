@@ -663,7 +663,7 @@
             const minSize = document.getElementById('minSizeInput').value;
             const maxSize = document.getElementById('maxSizeInput').value;
 
-            let url = '/api/search?q=' + encodeURIComponent(query) +
+            const base = '/api/search?q=' + encodeURIComponent(query) +
                 '&ignore_case=' + ignoreCase + '&regex=' + regexMode +
                 '&pattern_mode=' + encodeURIComponent(patternMode) +
                 '&basename=' + basename + '&dedupe=' + dedupe +
@@ -671,25 +671,34 @@
                     '&type=' + encodeURIComponent(types) +
                     '&exclude=' + encodeURIComponent(exclude) +
                     '&min_size=' + minSize + '&max_size=' + maxSize +
-                    '&limit=100000&offset=0';
-            if (contentMode) {
-                url += '&content=' + encodeURIComponent(contentKw);
-            }
-            let data;
+                    (contentMode ? '&content=' + encodeURIComponent(contentKw) : '');
+
+            // Stream the export page-by-page (paths only; content search is
+            // served as a single page), so huge result sets don't arrive as
+            // one giant response / JSON object. (docs/PERFORMANCE.md H2)
+            const EX_PAGE = 5000;
+            let allResults = [], allMatches = [], total = null, offset = 0;
             try {
-                const r = await fetch(url);
-                data = await r.json();
+                for (;;) {
+                    const page = contentMode ? (EX_PAGE * 20) : EX_PAGE;
+                    const r = await fetch(base + '&limit=' + page + '&offset=' + offset);
+                    const d = await r.json();
+                    if (d.error) { alert('导出失败: ' + d.error); return; }
+                    const rs = d.results || [];
+                    const ms = d.matches || [];
+                    allResults = allResults.concat(rs);
+                    allMatches = allMatches.concat(ms);
+                    if (total === null) total = d.total;
+                    if (contentMode) break;
+                    offset += EX_PAGE;
+                    if (total !== null && offset >= total) break;
+                    if (rs.length < EX_PAGE) break;
+                }
             } catch (err) {
                 alert('导出失败: ' + err.message);
                 return;
             }
-            if (data.error) {
-                alert('导出失败: ' + data.error);
-                return;
-            }
 
-            const allResults = data.results || [];
-            const allMatches = data.matches || [];
             const useMatches = allMatches.length > 0;
             if (allResults.length === 0 && !useMatches) {
                 alert('无结果可导出');
