@@ -102,6 +102,14 @@ type Server struct {
 	openCount          atomic.Int64
 	buildCount         atomic.Int64
 
+	// sorted-page cache: path searches with a sort field remember the
+	// filtered+sorted result list so subsequent pages (e.g. CLI streaming)
+	// slice it instead of re-sorting the whole index per page.
+	// (docs/PERFORMANCE.md C2)
+	sortCacheMu  sync.Mutex
+	sortCacheKey string
+	sortCacheVal []*index.Entry
+
 	// Runtime hooks (registered by svc) — called WITHOUT s.mu held.
 	indexBuiltHook    func(*index.Index)   // after an index build completes and the live index is swapped
 	configChangedHook func(*config.Config) // after set-config / reload-config is applied
@@ -470,12 +478,16 @@ func (s *Server) handleSearchHandler(ctx context.Context, msg message.Message) (
 		_ = re // 验证通过，不需要使用
 	}
 
+	// totalFromCache is set by the sorted-page cache path (filtered total).
+	totalFromCache := 0
+
 	// 4. 执行路径搜索（Pattern 用于文件路径匹配）
 	opts.Pattern = pattern
 	slog.Debug("searching for pattern", "pattern", opts.Pattern, "pattern_mode", opts.PatternMode, "ignore_case", opts.IgnoreCase, "basename", opts.Basename)
 
 	// 内容搜索时的候选文件集合
 	var candidates []*index.Entry
+	var results []*index.Entry
 	if content != "" {
 		// 内容搜索时 limit 作用于"内容匹配数"，而非路径候选数：
 		// 候选搜索不截断，否则前面的候选不含关键词时结果会被错误地截成 0。
@@ -514,10 +526,18 @@ func (s *Server) handleSearchHandler(ctx context.Context, msg message.Message) (
 			slog.Warn("content search candidate list capped", "total", len(candidates), "scanning", maxContentScanFiles)
 			candidates = candidates[:maxContentScanFiles]
 		}
+		results = candidates
 	} else {
-		candidates = s.index.Search(opts)
+		if opts.SortField != "" {
+			// 带排序的路径搜索：走服务端排序缓存，分页/流式大结果免重复全排。
+			var sortedTotal int
+			results, sortedTotal = s.pathSearchSorted(opts)
+			totalFromCache = sortedTotal
+			slog.Debug("sorted path search (cached)", "count", len(results), "total", sortedTotal)
+		} else {
+			results = s.index.Search(opts)
+		}
 	}
-	results := candidates
 	slog.Debug("found results from path search", "count", len(results))
 
 	// 5. 如果有 Content 参数，进行文件内容搜索
@@ -566,12 +586,17 @@ func (s *Server) handleSearchHandler(ctx context.Context, msg message.Message) (
 		return resultMap, nil
 	}
 
-	// 6. 获取总数（用于分页）
-	totalCount := s.index.Count(pattern, index.SearchOptions{
-		IgnoreCase:  opts.IgnoreCase,
-		Basename:    opts.Basename,
-		PatternMode: opts.PatternMode,
-	})
+	// 6. 获取总数（用于分页）：排序缓存路径直接用过滤后总数（更精确）；
+	// 其它路径沿用 Count（未过滤，与结果集口径一致）。
+	totalCount := totalFromCache
+	if totalCount == 0 {
+		totalCount = s.index.Count(pattern, index.SearchOptions{
+			IgnoreCase:  opts.IgnoreCase,
+			Basename:    opts.Basename,
+			PatternMode: opts.PatternMode,
+		})
+	}
+	_ = totalFromCache
 
 	// 7. 安全过滤
 	if s.pathValidator != nil {
@@ -1002,6 +1027,55 @@ func openPath(path string) error {
 		cmd = exec.Command("xdg-open", path)
 	}
 	return cmd.Start()
+}
+
+// maxSortCacheEntries bounds how large a sorted result list is worth
+// caching (larger lists would cost more memory than the repeated sort).
+const maxSortCacheEntries = 100000
+
+// cacheKeyFor builds the cache key for a path search: any parameter that can
+// change the filtered+sorted result set must be part of it.
+func cacheKeyFor(opts index.SearchOptions) string {
+	return fmt.Sprintf("%s|%s|%v|%v|%s|%s|%s|%s|%s|%d|%d|%d|%d|%v|%v",
+		opts.Pattern, opts.PatternMode, opts.IgnoreCase, opts.Basename,
+		opts.SortField, opts.SortOrder, opts.Scope,
+		strings.Join(opts.Exclude, ","), strings.Join(opts.Types, ","),
+		opts.MinSize, opts.MaxSize, opts.MtimeAfter, opts.MtimeBefore,
+		opts.ExcludeHidden, opts.Dedupe)
+}
+
+// pathSearchSorted returns a sorted page for a path search, backed by a small
+// cache of the filtered+sorted result list keyed on the query parameters.
+func (s *Server) pathSearchSorted(opts index.SearchOptions) ([]*index.Entry, int) {
+	key := cacheKeyFor(opts)
+	s.sortCacheMu.Lock()
+	defer s.sortCacheMu.Unlock()
+
+	if s.sortCacheKey == key && s.sortCacheVal != nil {
+		return sliceSortedPage(s.sortCacheVal, opts.Offset, opts.Limit), len(s.sortCacheVal)
+	}
+
+	fullOpts := opts
+	fullOpts.Offset = 0
+	fullOpts.Limit = 0
+	full := s.index.Search(fullOpts) // filtered + deduped + sorted (no paging)
+	if len(full) <= maxSortCacheEntries {
+		s.sortCacheKey = key
+		s.sortCacheVal = full
+	}
+	return sliceSortedPage(full, opts.Offset, opts.Limit), len(full)
+}
+
+// sliceSortedPage cuts a page out of a full sorted list.
+func sliceSortedPage(full []*index.Entry, offset int64, limit int) []*index.Entry {
+	if offset >= int64(len(full)) {
+		return nil
+	}
+	page := full[offset:]
+	if limit > 0 && len(page) > limit {
+		page = page[:limit]
+	}
+	return page
 }
 
 // newestFirst sorts entries by modification time, newest first. Entries with
