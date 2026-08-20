@@ -290,6 +290,9 @@ func createMainWindow(app *gtk.Application) {
 	mainBox.SetMarginBottom(10)
 	mainBox.SetMarginStart(10)
 	mainBox.SetMarginEnd(10)
+	// 点击窗口空白处可移焦：让搜索框失焦并关闭历史补全弹层。
+	mainBox.SetFocusable(true)
+	mainBox.SetCanTarget(true)
 
 	// Create search box
 	searchBox := gtk.NewBox(gtk.OrientationHorizontal, 10)
@@ -308,6 +311,7 @@ func createMainWindow(app *gtk.Application) {
 	completion := gtk.NewEntryCompletion()
 	completion.SetModel(historyStore)
 	completion.SetTextColumn(0)
+	completion.SetMinimumKeyLength(1) // 空输入不弹历史补全
 	// 关闭“单匹配自动回填”：输入 A（历史含 AB）时回车不会被改成历史项。
 	completion.SetPopupSingleMatch(false)
 	entry.SetCompletion(completion)
