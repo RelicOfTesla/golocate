@@ -734,6 +734,7 @@ func (s *Server) handleGetConfigHandler(ctx context.Context, msg message.Message
 		"index_strategy":           s.config.IndexStrategy,
 		"content_index":            s.config.ContentIndex,
 		"content_index_max_tokens": s.config.ContentIndexMaxTokens,
+		"slow_request_ms":          s.config.SlowRequestMs,
 	}
 
 	return result, nil
@@ -1197,6 +1198,10 @@ func (s *Server) SetLastBuildPerDir(perDir map[string]PerDirCount) {
 
 // SetConfig sets the config for the server (for get-config command).
 func (s *Server) SetConfig(cfg *config.Config) {
+	// Apply the slow-request log threshold to the worker (0 => default 300ms).
+	if cfg != nil && cfg.SlowRequestMs > 0 {
+		message.SlowRequestThreshold = time.Duration(cfg.SlowRequestMs) * time.Millisecond
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.config = cfg

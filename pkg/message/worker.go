@@ -5,7 +5,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sync"
+	"time"
 )
 
 // 错误定义
@@ -14,6 +16,11 @@ var (
 	ErrQueueFull        = errors.New("message queue is full")
 	ErrWorkerRunning    = errors.New("worker is already running")
 )
+
+// SlowRequestThreshold is the request duration (>=) at which a "slow request"
+// warning is logged. Every request additionally gets a Debug-level duration
+// line. Servers may override it from config (slow_request_ms).
+var SlowRequestThreshold = 300 * time.Millisecond
 
 // MessageWorker 消息处理器接口
 //
@@ -222,13 +229,24 @@ func (w *defaultMessageWorker) processMessage(msg Message) error {
 		})
 	}
 
-	// 执行方法处理器
+	// 执行方法处理器；记录每个请求的耗时，超过阈值时告警（定位慢请求）。
+	start := time.Now()
 	response, err := handler.Handle(msg.Context(), msg)
+	took := time.Since(start)
+
 	if err != nil {
 		// 处理失败，返回错误响应
+		slog.Warn("request failed", "method", msg.Method(), "took_s", took.Seconds(), "error", err.Error())
 		return msg.Reply(map[string]any{
 			"error": err.Error(),
 		})
+	}
+
+	// Every request gets a duration line (Info), so slow actions are easy to
+	// spot; requests at/over the threshold additionally log a WARN.
+	slog.Info("request served", "method", msg.Method(), "took_s", took.Seconds())
+	if SlowRequestThreshold > 0 && took >= SlowRequestThreshold {
+		slog.Warn("slow request", "method", msg.Method(), "took_s", took.Seconds(), "threshold_s", SlowRequestThreshold.Seconds())
 	}
 
 	// 如果处理器返回了响应，发送它

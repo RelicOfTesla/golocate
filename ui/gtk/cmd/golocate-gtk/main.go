@@ -91,13 +91,11 @@ var (
 // Advanced search options
 var (
 	ignoreCaseBtn *gtk.CheckButton
-	regexBtn      *gtk.CheckButton
 	contentBtn    *gtk.CheckButton
-	contentEntry  *gtk.Entry       // 独立内容关键词（与 searchEntry 路径过滤 AND，跟随 H5）
-	typesEntry    *gtk.Entry       // 类型过滤（逗号/空格分隔，可选）
-	dedupeBtn     *gtk.CheckButton // 硬链接去重
-	wildcardBtn   *gtk.CheckButton // 通配符模式
-	termsBtn      *gtk.CheckButton // 多词(terms)模式
+	contentEntry  *gtk.Entry        // 独立内容关键词（与 searchEntry 路径过滤 AND，跟随 H5）
+	typesEntry    *gtk.Entry        // 类型过滤（逗号/空格分隔，可选）
+	dedupeBtn     *gtk.CheckButton  // 硬链接去重
+	modeCombo     *gtk.ComboBoxText // 搜索模式（普通/正则/通配符/多词，互斥）
 	exportBtn     *gtk.Button
 )
 
@@ -222,6 +220,8 @@ func createMainWindow(app *gtk.Application) {
 	completion := gtk.NewEntryCompletion()
 	completion.SetModel(historyStore)
 	completion.SetTextColumn(0)
+	// 关闭“单匹配自动回填”：输入 A（历史含 AB）时回车不会被改成历史项。
+	completion.SetPopupSingleMatch(false)
 	entry.SetCompletion(completion)
 
 	// Create search button
@@ -256,17 +256,14 @@ func createMainWindow(app *gtk.Application) {
 	ignoreCaseBtn.SetActive(false)
 	advancedBox.Append(ignoreCaseBtn)
 
-	regexBtn = gtk.NewCheckButtonWithLabel("正则")
-	regexBtn.SetActive(false)
-	advancedBox.Append(regexBtn)
-
-	wildcardBtn = gtk.NewCheckButtonWithLabel("通配符")
-	wildcardBtn.SetActive(false)
-	advancedBox.Append(wildcardBtn)
-
-	termsBtn = gtk.NewCheckButtonWithLabel("多词")
-	termsBtn.SetActive(false)
-	advancedBox.Append(termsBtn)
+	modeCombo = gtk.NewComboBoxText()
+	modeCombo.AppendText("普通")
+	modeCombo.AppendText("正则")
+	modeCombo.AppendText("通配符")
+	modeCombo.AppendText("多词")
+	modeCombo.SetActive(0)
+	modeCombo.SetTooltipText("搜索匹配模式")
+	advancedBox.Append(modeCombo)
 
 	contentBtn = gtk.NewCheckButtonWithLabel("内容搜索")
 	contentBtn.SetActive(false)
@@ -835,16 +832,16 @@ func formatModTime(t time.Time) string {
 // Empty means auto-detect on the server (wildcard vs substring).
 func modeFromUI() index.PatternMode {
 	// 优先级：通配符 > 多词 > 正则 > 普通（同时勾选时取较特定的一种）。
-	if wildcardBtn != nil && wildcardBtn.Active() {
-		return index.PatternModeWildcard
-	}
-	if termsBtn != nil && termsBtn.Active() {
-		return index.PatternModeTerms
-	}
-	if regexBtn != nil && regexBtn.Active() {
+	switch {
+	case modeCombo != nil && modeCombo.GetActive() == 1:
 		return index.PatternModeExtendedRegex
+	case modeCombo != nil && modeCombo.GetActive() == 2:
+		return index.PatternModeWildcard
+	case modeCombo != nil && modeCombo.GetActive() == 3:
+		return index.PatternModeTerms
+	default:
+		return index.PatternMode("")
 	}
-	return index.PatternMode("")
 }
 
 // populateTable fills the results tree store from entries.

@@ -68,6 +68,10 @@ type Config struct {
 	// ContentIndexMaxTokens caps tokens kept per file in the optional content
 	// index (0 = default 256). Tune down to shrink its memory footprint.
 	ContentIndexMaxTokens int `yaml:"content_index_max_tokens"`
+	// SlowRequestMs logs a "slow request" warning when a RPC request takes at
+	// least this many milliseconds (0 = default 300ms). Every request also
+	// gets a Debug-level duration line.
+	SlowRequestMs int `yaml:"slow_request_ms"`
 }
 
 // getWindowsDrives returns a list of available drive letters on Windows.
@@ -147,6 +151,7 @@ func DefaultConfig() *Config {
 		PersistFlushInterval:  "30s",            // incremental 批量落盘间隔
 		ContentIndex:          false,            // 可选内容倒排索引（默认关：内存代价）
 		ContentIndexMaxTokens: 0,                // 0 = content 包默认 256
+		SlowRequestMs:         0,                // 0 = 默认 300ms 慢请求阈值
 	}
 }
 
@@ -511,6 +516,13 @@ func (c *Config) SetField(key, value string) error {
 			return fmt.Errorf("invalid value for %s: %w", key, err)
 		}
 		c.ContentIndexMaxTokens = val
+
+	case "slow_request_ms":
+		val, err := parseInt(value, 0, 3600000)
+		if err != nil {
+			return fmt.Errorf("invalid value for %s: %w", key, err)
+		}
+		c.SlowRequestMs = val
 
 	default:
 		return fmt.Errorf("unknown configuration key: %s", key)
