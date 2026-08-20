@@ -1,3 +1,4 @@
+//go:build linux
 // +build linux
 
 package watcher
@@ -27,35 +28,35 @@ type FanotifyCapability struct {
 // CheckFanotifySupport 检测系统是否支持 fanotify
 func CheckFanotifySupport() FanotifyCapability {
 	cap := FanotifyCapability{}
-	
+
 	// 1. 检测内核版本
 	uname := &syscall.Utsname{}
 	if err := syscall.Uname(uname); err != nil {
 		cap.Reason = "无法获取内核版本"
 		return cap
 	}
-	
+
 	// 转换内核版本字符串
 	version := charsToString(uname.Release[:])
 	cap.KernelVersion = version
-	
+
 	// 解析内核版本（例如：5.15.0-generic）
 	parts := strings.Split(version, ".")
 	if len(parts) < 2 {
 		cap.Reason = "无法解析内核版本: " + version
 		return cap
 	}
-	
+
 	var major, minor int
 	fmt.Sscanf(parts[0], "%d", &major)
 	fmt.Sscanf(parts[1], "%d", &minor)
-	
+
 	// fanotify 需要 Linux 5.1+
 	if major < 5 || (major == 5 && minor < 1) {
 		cap.Reason = fmt.Sprintf("内核版本过低: %s (需要 >= 5.1)", version)
 		return cap
 	}
-	
+
 	// 2. 检测是否有权限（需要 root 或 CAP_SYS_ADMIN）
 	// 尝试初始化 fanotify
 	fd, err := unix.FanotifyInit(0, 0)
@@ -68,7 +69,7 @@ func CheckFanotifySupport() FanotifyCapability {
 		return cap
 	}
 	unix.Close(fd)
-	
+
 	// 3. 检测是否支持 FAN_REPORT_DIR_FID（需要 5.1+）
 	fd, err = unix.FanotifyInit(unix.FAN_REPORT_DIR_FID, 0)
 	if err != nil {
@@ -76,7 +77,7 @@ func CheckFanotifySupport() FanotifyCapability {
 		return cap
 	}
 	unix.Close(fd)
-	
+
 	cap.Supported = true
 	cap.HasPermissions = true
 	return cap
@@ -138,7 +139,7 @@ func canUseFanotify() bool {
 	if os.Geteuid() == 0 {
 		return true
 	}
-	
+
 	// 非 root 用户，检查是否有 CAP_SYS_ADMIN
 	// 简化处理：非 root 用户尝试初始化
 	fd, err := unix.FanotifyInit(0, 0)

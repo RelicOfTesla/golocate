@@ -88,10 +88,10 @@ type defaultMessage struct {
 	metadata map[string]any
 
 	// 生命周期
-	done        chan struct{}
-	doneOnce    sync.Once
-	onComplete  func()      // 消息处理完成时的回调
-	completeMu  sync.Mutex  // 保护 onComplete
+	done       chan struct{}
+	doneOnce   sync.Once
+	onComplete func()     // 消息处理完成时的回调
+	completeMu sync.Mutex // 保护 onComplete
 }
 
 // NewMessage 创建新的消息
@@ -169,12 +169,12 @@ func (m *defaultMessage) markDone() {
 	m.doneOnce.Do(func() {
 		// 标记为已完成
 		close(m.done)
-		
+
 		// 调用完成回调（如果有）
 		m.completeMu.Lock()
 		callback := m.onComplete
 		m.completeMu.Unlock()
-		
+
 		if callback != nil {
 			callback()
 		}

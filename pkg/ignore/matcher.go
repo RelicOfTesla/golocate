@@ -40,6 +40,27 @@ func (m *Matcher) MatchBase(path string) bool {
 	return false
 }
 
+// MatchPath reports whether the path itself, its basename, or any ancestor
+// directory basename matches an ignore pattern. This makes patterns like
+// ".git" or "node_modules" match a directory anywhere in the tree, so files
+// under an ignored directory are ignored too.
+func (m *Matcher) MatchPath(path string) bool {
+	if m == nil {
+		return false
+	}
+	if m.Match(path) || m.MatchBase(path) {
+		return true
+	}
+	dir := filepath.Dir(path)
+	for dir != "." && dir != "/" && dir != path {
+		if m.MatchBase(dir) {
+			return true
+		}
+		path, dir = dir, filepath.Dir(dir)
+	}
+	return false
+}
+
 // Patterns returns the list of patterns in the matcher.
 func (m *Matcher) Patterns() []string {
 	if m == nil {

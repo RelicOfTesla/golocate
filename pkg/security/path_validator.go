@@ -22,25 +22,38 @@ func NewPathValidator(allowedDirs []string) *PathValidator {
 func (v *PathValidator) IsPathAllowed(path string) bool {
 	// Clean the path to prevent path traversal
 	cleanPath := filepath.Clean(path)
-	
+
 	// Check for path traversal attempts
 	if strings.Contains(cleanPath, "..") {
 		return false
 	}
-	
+
 	// If no allowed directories specified, allow all (for backward compatibility)
 	if len(v.allowedDirs) == 0 {
 		return true
 	}
-	
+
+	// Resolve relative paths against the working directory so indexes built
+	// with relative roots (e.g. tests, "golocated .") validate correctly.
+	if !filepath.IsAbs(cleanPath) {
+		if abs, err := filepath.Abs(cleanPath); err == nil {
+			cleanPath = abs
+		}
+	}
+
 	// Check if path is within allowed directories
 	for _, allowedDir := range v.allowedDirs {
 		allowedDirClean := filepath.Clean(allowedDir)
+		if !filepath.IsAbs(allowedDirClean) {
+			if abs, err := filepath.Abs(allowedDirClean); err == nil {
+				allowedDirClean = abs
+			}
+		}
 		if strings.HasPrefix(cleanPath, allowedDirClean) {
 			return true
 		}
 	}
-	
+
 	return false
 }
 
@@ -48,17 +61,17 @@ func (v *PathValidator) IsPathAllowed(path string) bool {
 func SanitizePath(path string) string {
 	// Clean the path
 	cleanPath := filepath.Clean(path)
-	
+
 	// Remove any null bytes
 	cleanPath = strings.ReplaceAll(cleanPath, "\x00", "")
-	
+
 	return cleanPath
 }
 
 // IsPathTraversal checks if a path contains path traversal attempts.
 func IsPathTraversal(path string) bool {
 	cleanPath := filepath.Clean(path)
-	return strings.Contains(cleanPath, "..") || 
-	       strings.Contains(path, "..") ||
-	       strings.Contains(path, "\x00")
+	return strings.Contains(cleanPath, "..") ||
+		strings.Contains(path, "..") ||
+		strings.Contains(path, "\x00")
 }

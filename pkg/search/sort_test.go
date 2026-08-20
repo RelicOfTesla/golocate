@@ -181,9 +181,9 @@ func TestSortByMultiple(t *testing.T) {
 
 func TestParseSort(t *testing.T) {
 	tests := []struct {
-		input      string
-		wantField  SortField
-		wantOrder  SortOrder
+		input     string
+		wantField SortField
+		wantOrder SortOrder
 	}{
 		{"name:asc", SortByName, OrderAsc},
 		{"name:desc", SortByName, OrderDesc},

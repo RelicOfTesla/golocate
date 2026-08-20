@@ -15,10 +15,10 @@ func TestStickyPacket_TwoJSONRequests(t *testing.T) {
 	// 输入：{"method":"status"}{"method":"status"}
 	// 预期：服务器应该能够分离这两个请求，并分别处理
 	stickyData := `{"method":"status"}{"method":"status"}`
-	
+
 	response := sendRawData(t, stickyData)
 	t.Logf("Response: %s", response)
-	
+
 	// 预期：至少应该有一个响应（第一个请求的响应）
 	// 由于 TCP 的特性，可能无法在同一个连接中接收多个响应
 	// 但至少不应该报错
@@ -32,10 +32,10 @@ func TestStickyPacket_TwoJSONRequestsWithNewline(t *testing.T) {
 	// 输入：{"method":"status"}\n{"method":"status"}
 	// 预期：服务器应该能够正确处理这两个请求
 	stickyData := `{"method":"status"}` + "\n" + `{"method":"status"}`
-	
+
 	response := sendRawData(t, stickyData)
 	t.Logf("Response: %s", response)
-	
+
 	// 预期：至少应该有一个响应
 	assert.True(t, responseContainsError(response) || responseHasResults(response) || response == "",
 		"Should handle newline-separated requests gracefully")
@@ -47,10 +47,10 @@ func TestStickyPacket_SearchFollowedByStatus(t *testing.T) {
 	// 输入：{"method":"search","path":"*","content":"main.go"}{"method":"status"}
 	// 预期：服务器应该能够分离这两个请求，并分别处理
 	stickyData := `{"method":"search","path":"*","content":"main.go","limit":5}{"method":"status"}`
-	
+
 	response := sendRawData(t, stickyData)
 	t.Logf("Response: %s", response)
-	
+
 	// 预期：至少应该有一个响应
 	assert.True(t, responseContainsError(response) || responseHasResults(response) || response == "",
 		"Should handle search+status sticky packet gracefully")
@@ -62,10 +62,10 @@ func TestStickyPacket_StatusFollowedBySearch(t *testing.T) {
 	// 输入：{"method":"status"}{"method":"search","path":"*","content":"main.go"}
 	// 预期：服务器应该能够分离这两个请求，并分别处理
 	stickyData := `{"method":"status"}{"method":"search","path":"*","content":"main.go","limit":5}`
-	
+
 	response := sendRawData(t, stickyData)
 	t.Logf("Response: %s", response)
-	
+
 	// 预期：至少应该有一个响应
 	assert.True(t, responseContainsError(response) || responseHasResults(response) || response == "",
 		"Should handle status+search sticky packet gracefully")
@@ -77,10 +77,10 @@ func TestStickyPacket_ThreeJSONRequests(t *testing.T) {
 	// 输入：{"method":"status"}{"method":"status"}{"method":"status"}
 	// 预期：服务器应该能够分离这三个请求，并分别处理
 	stickyData := `{"method":"status"}{"method":"status"}{"method":"status"}`
-	
+
 	response := sendRawData(t, stickyData)
 	t.Logf("Response: %s", response)
-	
+
 	// 预期：至少应该有一个响应
 	assert.True(t, responseContainsError(response) || responseHasResults(response) || response == "",
 		"Should handle three sticky requests gracefully")
@@ -92,10 +92,10 @@ func TestStickyPacket_JSONAndJSONRPC(t *testing.T) {
 	// 输入：{"method":"status"}{"jsonrpc":"2.0","method":"status","id":1}
 	// 预期：服务器应该能够分离这两个请求，并分别处理
 	stickyData := `{"method":"status"}{"jsonrpc":"2.0","method":"status","id":1}`
-	
+
 	response := sendRawData(t, stickyData)
 	t.Logf("Response: %s", response)
-	
+
 	// 预期：至少应该有一个响应
 	assert.True(t, responseContainsError(response) || responseHasResults(response) || response == "",
 		"Should handle JSON+JSON-RPC sticky packet gracefully")
@@ -107,10 +107,10 @@ func TestStickyPacket_EmptyJSONObject(t *testing.T) {
 	// 输入：{}{"method":"status"}
 	// 预期：服务器应该能够分离这两个请求，并分别处理
 	stickyData := `{}` + `{"method":"status"}`
-	
+
 	response := sendRawData(t, stickyData)
 	t.Logf("Response: %s", response)
-	
+
 	// 预期：至少应该有一个响应（或者错误）
 	assert.True(t, responseContainsError(response) || responseHasResults(response) || response == "",
 		"Should handle empty JSON + valid request sticky packet gracefully")
@@ -122,10 +122,10 @@ func TestStickyPacket_WithWhitespace(t *testing.T) {
 	// 输入：{"method":"status"}  {"method":"status"}
 	// 预期：服务器应该能够分离这两个请求，并分别处理
 	stickyData := `{"method":"status"}  {"method":"status"}`
-	
+
 	response := sendRawData(t, stickyData)
 	t.Logf("Response: %s", response)
-	
+
 	// 预期：至少应该有一个响应
 	assert.True(t, responseContainsError(response) || responseHasResults(response) || response == "",
 		"Should handle whitespace-separated requests gracefully")
@@ -137,10 +137,10 @@ func TestStickyPacket_NestedJSON(t *testing.T) {
 	// 输入：{"outer":{"inner":"value"}}{"method":"status"}
 	// 预期：服务器应该能够分离这两个请求，并分别处理
 	stickyData := `{"outer":{"inner":"value"}}{"method":"status"}`
-	
+
 	response := sendRawData(t, stickyData)
 	t.Logf("Response: %s", response)
-	
+
 	// 预期：至少应该有一个响应
 	assert.True(t, responseContainsError(response) || responseHasResults(response) || response == "",
 		"Should handle nested JSON sticky packet gracefully")
@@ -152,10 +152,10 @@ func TestStickyPacket_JSONWithBracesInString(t *testing.T) {
 	// 输入：{"text":"{not an object}"}{"method":"status"}
 	// 预期：服务器应该能够正确识别字符串中的大括号，并正确分离请求
 	stickyData := `{"text":"{not an object}"}{"method":"status"}`
-	
+
 	response := sendRawData(t, stickyData)
 	t.Logf("Response: %s", response)
-	
+
 	// 预期：至少应该有一个响应
 	assert.True(t, responseContainsError(response) || responseHasResults(response) || response == "",
 		"Should handle JSON with braces in string sticky packet gracefully")
@@ -167,10 +167,10 @@ func TestStickyPacket_JSONWithEscapedQuotes(t *testing.T) {
 	// 输入：{"text":"He said \"hello\""}{"method":"status"}
 	// 预期：服务器应该能够正确处理转义引号，并正确分离请求
 	stickyData := `{"text":"He said \"hello\""}{"method":"status"}`
-	
+
 	response := sendRawData(t, stickyData)
 	t.Logf("Response: %s", response)
-	
+
 	// 预期：至少应该有一个响应
 	assert.True(t, responseContainsError(response) || responseHasResults(response) || response == "",
 		"Should handle JSON with escaped quotes sticky packet gracefully")
@@ -182,10 +182,10 @@ func TestStickyPacket_ComplexNested(t *testing.T) {
 	// 输入：{"data":{"values":[{"x":1},{"y":2}],"meta":null}}{"method":"status"}
 	// 预期：服务器应该能够正确分离请求
 	stickyData := `{"data":{"values":[{"x":1},{"y":2}],"meta":null}}{"method":"status"}`
-	
+
 	response := sendRawData(t, stickyData)
 	t.Logf("Response: %s", response)
-	
+
 	// 预期：至少应该有一个响应
 	assert.True(t, responseContainsError(response) || responseHasResults(response) || response == "",
 		"Should handle complex nested JSON sticky packet gracefully")
@@ -198,10 +198,10 @@ func TestStickyPacket_IncompleteJSON(t *testing.T) {
 	// 输入：{"method":"search"}{"method":"status"}
 	// 预期：服务器应该能够识别第一个完整的 JSON，并忽略剩余的不完整部分
 	stickyData := `{"method":"search"{"method":"status"}`
-	
+
 	response := sendRawData(t, stickyData)
 	t.Logf("Response: %s", response)
-	
+
 	// 预期：可能会返回错误，因为第一个 JSON 不完整
 	// 但是应该优雅处理，不应该崩溃
 	assert.True(t, responseContainsError(response) || responseHasResults(response) || response == "",
@@ -215,10 +215,10 @@ func TestStickyPacket_LargeJSON(t *testing.T) {
 	// 预期：服务器应该能够正确处理
 	largeData := strings.Repeat("x", 1000)
 	stickyData := `{"data":"` + largeData + `"}{"method":"status"}`
-	
+
 	response := sendRawData(t, stickyData)
 	t.Logf("Response length: %d", len(response))
-	
+
 	// 预期：至少应该有一个响应
 	assert.True(t, responseContainsError(response) || responseHasResults(response) || response == "",
 		"Should handle large JSON sticky packet gracefully")
@@ -232,10 +232,10 @@ func TestStickyPacket_JSONAndFast(t *testing.T) {
 	// 输入：{"method":"status"}method=status\n\n
 	// 预期：服务器应该能够分离这两个请求，并分别处理
 	stickyData := `{"method":"status"}` + "method=status\n\n"
-	
+
 	response := sendRawData(t, stickyData)
 	t.Logf("Response: %s", response)
-	
+
 	// 预期：至少应该有一个响应
 	assert.True(t, responseContainsError(response) || responseHasResults(response) || response == "",
 		"Should handle JSON+Fast sticky packet gracefully")
@@ -247,10 +247,10 @@ func TestStickyPacket_FastAndJSON(t *testing.T) {
 	// 输入：method=status\n\n{"method":"status"}
 	// 预期：服务器应该能够分离这两个请求，并分别处理
 	stickyData := "method=status\n\n" + `{"method":"status"}`
-	
+
 	response := sendRawData(t, stickyData)
 	t.Logf("Response: %s", response)
-	
+
 	// 预期：至少应该有一个响应
 	assert.True(t, responseContainsError(response) || responseHasResults(response) || response == "",
 		"Should handle Fast+JSON sticky packet gracefully")
@@ -262,10 +262,10 @@ func TestStickyPacket_JSONAndFastAndJSONRPC(t *testing.T) {
 	// 输入：{"method":"status"}method=status\n\n{"jsonrpc":"2.0","method":"status","id":1}
 	// 预期：服务器应该能够分离这三个请求，并分别处理
 	stickyData := `{"method":"status"}` + "method=status\n\n" + `{"jsonrpc":"2.0","method":"status","id":1}`
-	
+
 	response := sendRawData(t, stickyData)
 	t.Logf("Response: %s", response)
-	
+
 	// 预期：至少应该有一个响应
 	assert.True(t, responseContainsError(response) || responseHasResults(response) || response == "",
 		"Should handle JSON+Fast+JSON-RPC sticky packet gracefully")
@@ -277,10 +277,10 @@ func TestStickyPacket_FastAndJSONRPC(t *testing.T) {
 	// 输入：method=status\n\n{"jsonrpc":"2.0","method":"status","id":1}
 	// 预期：服务器应该能够分离这两个请求，并分别处理
 	stickyData := "method=status\n\n" + `{"jsonrpc":"2.0","method":"status","id":1}`
-	
+
 	response := sendRawData(t, stickyData)
 	t.Logf("Response: %s", response)
-	
+
 	// 预期：至少应该有一个响应
 	assert.True(t, responseContainsError(response) || responseHasResults(response) || response == "",
 		"Should handle Fast+JSON-RPC sticky packet gracefully")
@@ -292,10 +292,10 @@ func TestStickyPacket_JSONRPCAndFast(t *testing.T) {
 	// 输入：{"jsonrpc":"2.0","method":"status","id":1}method=status\n\n
 	// 预期：服务器应该能够分离这两个请求，并分别处理
 	stickyData := `{"jsonrpc":"2.0","method":"status","id":1}` + "method=status\n\n"
-	
+
 	response := sendRawData(t, stickyData)
 	t.Logf("Response: %s", response)
-	
+
 	// 预期：至少应该有一个响应
 	assert.True(t, responseContainsError(response) || responseHasResults(response) || response == "",
 		"Should handle JSON-RPC+Fast sticky packet gracefully")

@@ -159,7 +159,7 @@ func TestAPI_Status_JsonRPCFormat(t *testing.T) {
 	// JSON-RPC response should have "jsonrpc", "id", and "result" or "error" fields
 	assert.Equal(t, "2.0", result["jsonrpc"], "Should have jsonrpc version")
 	assert.NotNil(t, result["id"], "Should have id")
-	
+
 	// Should have either result or error
 	_, hasResult := result["result"]
 	_, hasError := result["error"]
@@ -184,7 +184,8 @@ func TestAPI_GetConfig_ReturnsConfig(t *testing.T) {
 		return
 	}
 
-	assert.Equal(t, "config", responseType, "Response type should be 'config'")
+	// The worker tags responses with the RPC method name.
+	assert.Equal(t, "get-config", responseType, "Response type should be 'get-config'")
 }
 
 // TestAPI_GetConfig_HasRequiredFields tests that get-config API returns all config fields
@@ -280,7 +281,7 @@ func TestAPI_GetConfig_JsonRPCFormat(t *testing.T) {
 	// JSON-RPC response should have "jsonrpc", "id", and "result" or "error" fields
 	assert.Equal(t, "2.0", result["jsonrpc"], "Should have jsonrpc version")
 	assert.NotNil(t, result["id"], "Should have id")
-	
+
 	// Should have either result or error
 	_, hasResult := result["result"]
 	_, hasError := result["error"]
@@ -478,7 +479,7 @@ func TestAPI_SetConfig_JsonRPCFormat(t *testing.T) {
 	// Send JSON-RPC request with YAML content
 	yamlContent := `directories:\n  - /home\nworker_count: 4`
 	request := `{"jsonrpc":"2.0","method":"set-config","content":"` + yamlContent + `","id":3}`
-	
+
 	_, err := conn.Write([]byte(request + "\n"))
 	require.NoError(t, err, "Should send JSON-RPC request")
 
@@ -496,7 +497,7 @@ func TestAPI_SetConfig_JsonRPCFormat(t *testing.T) {
 	// JSON-RPC response should have "jsonrpc", "id", and "result" or "error" fields
 	assert.Equal(t, "2.0", result["jsonrpc"], "Should have jsonrpc version")
 	assert.NotNil(t, result["id"], "Should have id")
-	
+
 	// Should have either result or error
 	_, hasResult := result["result"]
 	_, hasError := result["error"]

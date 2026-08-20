@@ -11,9 +11,9 @@ import (
 // and mapping each n-gram to the entries that contain it.
 type NGramIndex struct {
 	mu      sync.RWMutex
-	n       int                       // n-gram size (default: 3)
-	index   map[string][]*Entry       // n-gram -> entries
-	entries map[string]bool           // all indexed entry paths
+	n       int                 // n-gram size (default: 3)
+	index   map[string][]*Entry // n-gram -> entries
+	entries map[string]bool     // all indexed entry paths
 }
 
 // NewNGramIndex creates a new n-gram index with the given n-gram size.

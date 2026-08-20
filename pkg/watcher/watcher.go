@@ -66,19 +66,19 @@ func (op Op) String() string {
 type Watcher interface {
 	// Add starts watching the named directory (non-recursive).
 	Add(name string) error
-	
+
 	// AddRecursive starts watching the named directory and all subdirectories.
 	AddRecursive(name string) error
-	
+
 	// Remove stops watching the named directory.
 	Remove(name string) error
-	
+
 	// Close closes the watcher.
 	Close() error
-	
+
 	// Events returns the channel of file system events.
 	Events() <-chan Event
-	
+
 	// Errors returns the channel of errors.
 	Errors() <-chan error
 }
@@ -87,13 +87,13 @@ type Watcher interface {
 type Config struct {
 	// Directories to watch
 	Directories []string
-	
+
 	// IgnorePatterns are glob patterns to ignore
 	IgnorePatterns []string
-	
+
 	// Recursive indicates whether to watch subdirectories
 	Recursive bool
-	
+
 	// FollowSymlinks indicates whether to follow symbolic links
 	FollowSymlinks bool
 }
@@ -105,7 +105,7 @@ func NewWatcher(ctx context.Context, cfg *Config) (Watcher, error) {
 	if cfg == nil {
 		cfg = &Config{}
 	}
-	
+
 	// On Linux, try fanotify first
 	if runtime.GOOS == "linux" {
 		// Check if fanotify is supported
@@ -123,7 +123,7 @@ func NewWatcher(ctx context.Context, cfg *Config) (Watcher, error) {
 		// Fall back to fsnotify
 		return newFsnotifyWatcher(ctx, cfg)
 	}
-	
+
 	// Use fsnotify on other platforms
 	return newFsnotifyWatcher(ctx, cfg)
 }

@@ -30,7 +30,7 @@ type Decoder interface {
 	// It does not need to know the data size in advance.
 	// It reads data in a streaming manner until a complete message is received.
 	Decode(reader io.Reader) (*Request, error)
-	
+
 	// DecodeWithRemainder reads a request from the reader and returns remaining data.
 	// This is used for handling TCP sticky packets.
 	DecodeWithRemainder(reader *bufio.Reader) (*Request, []byte, error)
@@ -54,7 +54,7 @@ func (d *FastDecoder) Decode(reader io.Reader) (*Request, error) {
 	if !ok {
 		bufReader = bufio.NewReader(reader)
 	}
-	
+
 	req, _, err := d.DecodeWithRemainder(bufReader)
 	return req, err
 }
@@ -130,7 +130,7 @@ func (d *JSONDecoder) Decode(reader io.Reader) (*Request, error) {
 	if !ok {
 		bufReader = bufio.NewReader(reader)
 	}
-	
+
 	req, _, err := d.DecodeWithRemainder(bufReader)
 	return req, err
 }
@@ -138,12 +138,18 @@ func (d *JSONDecoder) Decode(reader io.Reader) (*Request, error) {
 // DecodeWithRemainder implements the Decoder interface.
 // It decodes a request and returns remaining data for sticky packet handling.
 func (d *JSONDecoder) DecodeWithRemainder(reader *bufio.Reader) (*Request, []byte, error) {
-	// jsonrpcRequest represents a JSON-RPC request.
+	// jsonrpcRequest represents a JSON-RPC request. The embedded Request
+	// makes TOP-LEVEL search fields work too (e.g. {"method":"search",
+	// "content":"test"}), while an explicit "params" object (JSON-RPC style)
+	// takes precedence when both are present. Note: embedded fields shadowed
+	// by the explicit Jsonrpc/ID/Method/Params declarations are not parsed
+	// from the top level, which is the intended behavior.
 	type jsonrpcRequest struct {
 		Jsonrpc string   `json:"jsonrpc"`
 		ID      any      `json:"id"`
 		Method  string   `json:"method"`
 		Params  *Request `json:"params,omitempty"`
+		Request
 	}
 
 	// Use json.NewDecoder for streaming decode
@@ -153,8 +159,9 @@ func (d *JSONDecoder) DecodeWithRemainder(reader *bufio.Reader) (*Request, []byt
 		return nil, nil, fmt.Errorf("failed to decode JSON-RPC: %w", err)
 	}
 
-	// Convert to unified request
-	var params Request
+	// Convert to unified request: top-level search fields first, explicit
+	// params object (JSON-RPC style) takes precedence.
+	params := req.Request
 	if req.Params != nil {
 		params = *req.Params
 	}
@@ -172,18 +179,28 @@ func (d *JSONDecoder) DecodeWithRemainder(reader *bufio.Reader) (*Request, []byt
 	}
 
 	return &Request{
-		Method:        req.Method,
-		ID:            req.ID,
-		Pattern:       params.Pattern,
-		Content:       params.Content,
-		IgnoreCase:    params.IgnoreCase,
-		Limit:         params.Limit,
-		PatternMode:   params.PatternMode,
-		Basename:      params.Basename,
-		Offset:        params.Offset,
-		SortField:     params.SortField,
-		SortOrder:     params.SortOrder,
-		Config:        params.Config,
+		Method:               req.Method,
+		ID:                   req.ID,
+		Pattern:              params.Pattern,
+		Content:              params.Content,
+		IgnoreCase:           params.IgnoreCase,
+		Limit:                params.Limit,
+		PatternMode:          params.PatternMode,
+		Basename:             params.Basename,
+		Offset:               params.Offset,
+		SortField:            params.SortField,
+		SortOrder:            params.SortOrder,
+		Scope:                params.Scope,
+		Exclude:              params.Exclude,
+		Types:                params.Types,
+		MinSize:              params.MinSize,
+		MaxSize:              params.MaxSize,
+		MtimeAfter:           params.MtimeAfter,
+		MtimeBefore:          params.MtimeBefore,
+		ExcludeHidden:        params.ExcludeHidden,
+		Dedupe:               params.Dedupe,
+		AcceptResponseFormat: params.AcceptResponseFormat,
+		Config:               params.Config,
 	}, remainder, nil
 }
 
@@ -208,14 +225,14 @@ func SelectDecoder(reader io.Reader) (Decoder, *bufio.Reader, error) {
 		if err != nil {
 			return nil, bufReader, fmt.Errorf("failed to peek byte: %w", err)
 		}
-		
+
 		// Check if it's whitespace
 		if b[0] == ' ' || b[0] == '\t' || b[0] == '\n' || b[0] == '\r' {
 			// Consume the whitespace
 			bufReader.ReadByte()
 			continue
 		}
-		
+
 		// Non-whitespace byte found
 		break
 	}
@@ -302,6 +319,32 @@ func parseRequestField(req *Request, key, value string) {
 		req.SortField = value
 	case FieldSortOrder:
 		req.SortOrder = value
+	case FieldScope:
+		req.Scope = value
+	case FieldExclude:
+		req.Exclude = append(req.Exclude, value)
+	case FieldTypes:
+		req.Types = append(req.Types, value)
+	case FieldMinSize:
+		if n, err := strconv.ParseInt(value, 10, 64); err == nil {
+			req.MinSize = n
+		}
+	case FieldMaxSize:
+		if n, err := strconv.ParseInt(value, 10, 64); err == nil {
+			req.MaxSize = n
+		}
+	case FieldMtimeAfter:
+		if n, err := strconv.ParseInt(value, 10, 64); err == nil {
+			req.MtimeAfter = n
+		}
+	case FieldMtimeBefore:
+		if n, err := strconv.ParseInt(value, 10, 64); err == nil {
+			req.MtimeBefore = n
+		}
+	case FieldExcludeHidden:
+		req.ExcludeHidden = value == "true"
+	case FieldDedupe:
+		req.Dedupe = value == "true"
 	case FieldConfig:
 		req.Config = value
 	}

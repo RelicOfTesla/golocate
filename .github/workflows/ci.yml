@@ -17,13 +17,20 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: '1.21'
+        # Root module requires go >= 1.25 (see go.mod).
+        go-version: '1.25.1'
 
     - name: Run tests
-      run: go test -v ./...
+      run: go test ./...
 
     - name: Run go vet
       run: go vet ./...
+
+    - name: Run h5 module tests
+      run: (cd ui/h5 && go test ./...)
+
+    - name: Run h5 module vet
+      run: (cd ui/h5 && go vet ./...)
 
   build:
     name: Build
@@ -39,7 +46,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: '1.21'
+        go-version: '1.25.1'
 
     - name: Build golocated
       run: go build -o bin/golocated ./cmd/golocated/
@@ -48,7 +55,7 @@ jobs:
       run: go build -o bin/golocate ./cmd/golocate/
 
     - name: Build golocate-h5
-      run: go build -o bin/golocate-h5 ./ui/h5/cmd/golocate-h5/
+      run: (cd ui/h5 && go build -o ../../bin/golocate-h5 ./cmd/golocate-h5/)
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v4

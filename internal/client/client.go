@@ -3,6 +3,7 @@ package client
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net"
@@ -193,20 +194,29 @@ func (c *Client) Search(pattern string, opts index.SearchOptions) ([]*index.Entr
 func (c *Client) SearchWithTotal(pattern string, opts index.SearchOptions) (*SearchResult, error) {
 	// 将 pattern 设置到 opts.Pattern
 	opts.Pattern = pattern
-	
+
 	// 构建请求
 	// Pattern = PATH（路径过滤），Content = CONTENT（文件内容搜索）
 	req := &protocol.Request{
-		Method:      "search",
-		Pattern:     opts.Pattern,     // PATH: 路径过滤
-		Content:     "",                // CONTENT: 文件内容搜索（暂不支持）
-		IgnoreCase:  opts.IgnoreCase,
-		PatternMode: string(opts.PatternMode),
-		Basename:    opts.Basename,
-		Limit:       opts.Limit,
-		Offset:      opts.Offset,
-		SortField:   opts.SortField,
-		SortOrder:   opts.SortOrder,
+		Method:        "search",
+		Pattern:       opts.Pattern, // PATH: 路径过滤
+		Content:       "",           // CONTENT: 文件内容搜索（由 SearchContent 设置）
+		IgnoreCase:    opts.IgnoreCase,
+		PatternMode:   string(opts.PatternMode),
+		Basename:      opts.Basename,
+		Limit:         opts.Limit,
+		Offset:        opts.Offset,
+		SortField:     opts.SortField,
+		SortOrder:     opts.SortOrder,
+		Scope:         opts.Scope,
+		Exclude:       opts.Exclude,
+		Types:         opts.Types,
+		MinSize:       opts.MinSize,
+		MaxSize:       opts.MaxSize,
+		MtimeAfter:    opts.MtimeAfter,
+		MtimeBefore:   opts.MtimeBefore,
+		ExcludeHidden: opts.ExcludeHidden,
+		Dedupe:        opts.Dedupe,
 	}
 
 	// 使用统一方法发送请求
@@ -224,6 +234,79 @@ func (c *Client) SearchWithTotal(pattern string, opts index.SearchOptions) (*Sea
 func (c *Client) SearchFast(pattern string, opts index.SearchOptions) (*SearchResult, error) {
 	// Fast protocol is now the default
 	return c.SearchWithTotal(pattern, opts)
+}
+
+// ContentMatch represents a single content search match.
+// Field names match the JSON serialization of pkg/content.SearchResult.
+type ContentMatch struct {
+	Path    string   `json:"Path"`
+	LineNum int      `json:"LineNum"`
+	Line    string   `json:"Line"`
+	Match   string   `json:"Match"`
+	Before  []string `json:"Before"` // context lines before the match
+	After   []string `json:"After"`  // context lines after the match
+}
+
+// ContentSearchResult contains content search results.
+type ContentSearchResult struct {
+	Matches []*ContentMatch
+	Count   int // Number of matches in current page
+	Total   int // Total number of matches
+}
+
+// SearchContent performs a file content search. pattern filters the candidate
+// paths (empty = all indexed files, capped server-side); content is the keyword.
+func (c *Client) SearchContent(pattern, content string, opts index.SearchOptions) (*ContentSearchResult, error) {
+	req := &protocol.Request{
+		Method:        "search",
+		Pattern:       pattern,
+		Content:       content,
+		IgnoreCase:    opts.IgnoreCase,
+		PatternMode:   string(opts.PatternMode),
+		Basename:      opts.Basename,
+		Limit:         opts.Limit,
+		Offset:        opts.Offset,
+		SortField:     opts.SortField,
+		SortOrder:     opts.SortOrder,
+		Scope:         opts.Scope,
+		Exclude:       opts.Exclude,
+		Types:         opts.Types,
+		MinSize:       opts.MinSize,
+		MaxSize:       opts.MaxSize,
+		MtimeAfter:    opts.MtimeAfter,
+		MtimeBefore:   opts.MtimeBefore,
+		ExcludeHidden: opts.ExcludeHidden,
+		Dedupe:        opts.Dedupe,
+	}
+
+	resp, err := c.doRequest(req)
+	if err != nil {
+		return nil, err
+	}
+
+	res := &ContentSearchResult{
+		Count: resp.Count,
+		Total: resp.Total,
+	}
+
+	// The server returns content matches under result["results"].
+	if m, ok := resp.Result.(map[string]any); ok {
+		if raw, ok := m["results"].([]any); ok {
+			for _, item := range raw {
+				data, err := json.Marshal(item)
+				if err != nil {
+					continue
+				}
+				var cm ContentMatch
+				if err := json.Unmarshal(data, &cm); err != nil {
+					continue
+				}
+				res.Matches = append(res.Matches, &cm)
+			}
+		}
+	}
+
+	return res, nil
 }
 
 // Status gets the server status.
@@ -283,10 +366,33 @@ func (c *Client) Build() error {
 	return err
 }
 
+// Stop sends a stop request to the server (asks the daemon to shut down).
+func (c *Client) Stop() error {
+	req := &protocol.Request{
+		Method: "stop",
+	}
+
+	_, err := c.doRequest(req)
+	return err
+}
+
 // ReloadConfig sends a reload-config request to the server.
 func (c *Client) ReloadConfig() error {
 	req := &protocol.Request{
 		Method: "reload-config",
+	}
+
+	_, err := c.doRequest(req)
+	return err
+}
+
+// Open asks the daemon to open a file or directory with the platform's
+// default application. The daemon validates the path against its allowed
+// directories before opening.
+func (c *Client) Open(path string) error {
+	req := &protocol.Request{
+		Method:  "open",
+		Content: path,
 	}
 
 	_, err := c.doRequest(req)
@@ -451,14 +557,14 @@ type Request struct {
 
 // Response represents a server response.
 type Response struct {
-	ID     any    `json:"id,omitempty"`     // Request ID for async response support
+	ID     any    `json:"id,omitempty"` // Request ID for async response support
 	Type   string `json:"type"`
 	Path   string `json:"path,omitempty"`
 	Name   string `json:"name,omitempty"`
-	Size   int64   `json:"size,omitempty"`
-	Count  int     `json:"count,omitempty"`
-	Total  int     `json:"total,omitempty"` // Total results count (for pagination)
-	Paths  any     `json:"paths,omitempty"` // Paths for search results
-	Error  string  `json:"error,omitempty"`
-	Result any     `json:"result,omitempty"`
+	Size   int64  `json:"size,omitempty"`
+	Count  int    `json:"count,omitempty"`
+	Total  int    `json:"total,omitempty"` // Total results count (for pagination)
+	Paths  any    `json:"paths,omitempty"` // Paths for search results
+	Error  string `json:"error,omitempty"`
+	Result any    `json:"result,omitempty"`
 }

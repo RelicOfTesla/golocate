@@ -3,6 +3,7 @@ package database
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/RelicOfTesla/golocate/pkg/index"
 	bolt "go.etcd.io/bbolt"
+	bbolterr "go.etcd.io/bbolt/errors"
 )
 
 // DB wraps BBolt database for index storage.
@@ -258,6 +260,33 @@ func (d *DB) GetMeta(key string) ([]byte, error) {
 	return value, err
 }
 
+// ApplyChanges applies a batch of upserts and deletes in a single
+// transaction. This is the incremental persistence path: the write volume is
+// proportional to the actual changes, not the whole index.
+func (d *DB) ApplyChanges(upserts []*index.Entry, deletes []string) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	return d.db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket(filesBucket)
+		for _, entry := range upserts {
+			data, err := json.Marshal(entry)
+			if err != nil {
+				return fmt.Errorf("failed to marshal entry %s: %w", entry.Path, err)
+			}
+			if err := b.Put([]byte(entry.Path), data); err != nil {
+				return fmt.Errorf("failed to put entry %s: %w", entry.Path, err)
+			}
+		}
+		for _, path := range deletes {
+			if err := b.Delete([]byte(path)); err != nil {
+				return fmt.Errorf("failed to delete entry %s: %w", path, err)
+			}
+		}
+		return nil
+	})
+}
+
 // ReplaceAllEntries atomically replaces all entries in the database.
 // This operation is performed within a single transaction, ensuring atomicity.
 // If the operation fails, the database remains unchanged.
@@ -269,7 +298,7 @@ func (d *DB) ReplaceAllEntries(entries []*index.Entry) error {
 		// Clear existing entries by deleting and recreating the bucket
 		// Note: BBolt doesn't have a "clear bucket" operation,
 		// so we delete and recreate the bucket
-		if err := tx.DeleteBucket(filesBucket); err != nil && err != bolt.ErrBucketNotFound {
+		if err := tx.DeleteBucket(filesBucket); err != nil && !errors.Is(err, bbolterr.ErrBucketNotFound) {
 			return fmt.Errorf("failed to delete files bucket: %w", err)
 		}
 

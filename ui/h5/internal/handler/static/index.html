@@ -3,866 +3,203 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>golocate - 快速文件搜索</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { 
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
-            background: #1a1a1a; 
-            color: #e0e0e0; 
-        }
-        .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
-        
-        /* Header */
-        .header { 
-            display: flex; 
-            justify-content: space-between; 
-            align-items: center; 
-            margin-bottom: 20px;
-            padding-bottom: 10px;
-            border-bottom: 2px solid #333;
-        }
-        .header h1 { color: #4CAF50; font-size: 24px; }
-        .header-buttons { display: flex; gap: 10px; }
-        
-        /* Search Box */
-        .search-box { display: flex; gap: 10px; margin-bottom: 15px; }
-        input[type="text"] { 
-            flex: 1; 
-            padding: 12px; 
-            border: 1px solid #333; 
-            border-radius: 4px; 
-            background: #2a2a2a; 
-            color: #e0e0e0; 
-            font-size: 16px; 
-        }
-        input[type="text"]:focus { outline: none; border-color: #4CAF50; }
-        button { 
-            padding: 12px 24px; 
-            background: #4CAF50; 
-            color: white; 
-            border: none; 
-            border-radius: 4px; 
-            cursor: pointer; 
-            font-size: 16px; 
-            transition: background 0.2s;
-        }
-        button:hover { background: #45a049; }
-        button.secondary { background: #555; }
-        button.secondary:hover { background: #666; }
-        
-        /* Advanced Options */
-        .advanced-options { 
-            display: flex; 
-            gap: 15px; 
-            margin-bottom: 15px; 
-            flex-wrap: wrap; 
-            align-items: center; 
-        }
-        .advanced-options label { 
-            display: flex; 
-            align-items: center; 
-            gap: 5px; 
-            cursor: pointer; 
-            font-size: 14px;
-        }
-        .advanced-options input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
-        .advanced-options input[type="number"] { 
-            width: 80px; 
-            padding: 5px; 
-            border: 1px solid #333; 
-            border-radius: 4px; 
-            background: #2a2a2a; 
-            color: #e0e0e0; 
-        }
-        
-        /* Search History */
-        .search-history { margin-bottom: 15px; }
-        .search-history-title { color: #888; font-size: 0.9em; margin-bottom: 5px; }
-        .search-history-items { display: flex; gap: 8px; flex-wrap: wrap; }
-        .search-history-item { 
-            padding: 4px 10px; 
-            background: #333; 
-            border-radius: 12px; 
-            font-size: 0.85em; 
-            cursor: pointer; 
-            transition: background 0.2s; 
-        }
-        .search-history-item:hover { background: #444; }
-        
-        /* Results Header */
-        .results-header { 
-            display: flex; 
-            justify-content: space-between; 
-            align-items: center; 
-            margin-bottom: 10px; 
-        }
-        .results-count { color: #888; font-size: 14px; }
-        .export-buttons { display: flex; gap: 8px; }
-        .export-buttons button { padding: 6px 12px; font-size: 0.85em; background: #555; }
-        .export-buttons button:hover { background: #666; }
-        
-        /* Results Table */
-        .results-table-container {
-            background: #2a2a2a;
-            border-radius: 4px;
-            overflow: hidden;
-            border: 1px solid #333;
-        }
-        
-        table.results-table {
-            width: 100%;
-            border-collapse: collapse;
-            table-layout: fixed;
-        }
-        
-        table.results-table thead {
-            background: #333;
-            position: sticky;
-            top: 0;
-        }
-        
-        table.results-table th {
-            padding: 12px 10px;
-            text-align: left;
-            font-weight: 600;
-            color: #e0e0e0;
-            cursor: pointer;
-            user-select: none;
-            border-bottom: 2px solid #4CAF50;
-            transition: background 0.2s;
-        }
-        
-        table.results-table th:hover {
-            background: #444;
-        }
-        
-        table.results-table th.sortable::after {
-            content: ' ↕';
-            color: #666;
-            font-size: 12px;
-        }
-        
-        table.results-table th.sort-asc::after {
-            content: ' ↑';
-            color: #4CAF50;
-        }
-        
-        table.results-table th.sort-desc::after {
-            content: ' ↓';
-            color: #4CAF50;
-        }
-        
-        /* Column widths */
-        table.results-table th.col-name { width: 25%; }
-        table.results-table th.col-path { width: 45%; }
-        table.results-table th.col-size { width: 15%; }
-        table.results-table th.col-modtime { width: 15%; }
-        
-        table.results-table td {
-            padding: 10px;
-            border-bottom: 1px solid #333;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-        
-        table.results-table tbody tr {
-            transition: background 0.2s;
-            cursor: pointer;
-        }
-        
-        table.results-table tbody tr:hover {
-            background: #333;
-        }
-        
-        table.results-table tbody tr:last-child td {
-            border-bottom: none;
-        }
-        
-        td.col-name { color: #e0e0e0; font-weight: 500; }
-        td.col-path { color: #4CAF50; font-family: monospace; font-size: 13px; }
-        td.col-size { color: #888; font-size: 13px; text-align: right; }
-        td.col-modtime { color: #888; font-size: 13px; }
-        
-        /* Pagination */
-        .pagination {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            gap: 10px;
-            margin: 15px 0;
-        }
-        .pagination button { padding: 6px 16px; }
-        .pagination button:disabled { opacity: 0.4; cursor: not-allowed; }
-        .pagination span { color: #888; font-size: 14px; }
-        
-        /* Empty State */
-        .empty-state {
-            padding: 40px;
-            text-align: center;
-            color: #888;
-        }
-        
-        /* Status & Error */
-        .status { color: #888; font-size: 0.9em; padding: 20px; text-align: center; }
-        .error { color: #f44336; padding: 20px; text-align: center; }
-        
-        /* Settings Panel */
-        .settings-panel { 
-            display: none; 
-            background: #2a2a2a; 
-            padding: 20px; 
-            border-radius: 4px; 
-            margin-bottom: 15px;
-            border: 1px solid #333;
-        }
-        .settings-panel h3 { margin-bottom: 15px; color: #4CAF50; }
-        .settings-panel label { 
-            display: flex; 
-            justify-content: space-between; 
-            align-items: center; 
-            margin-bottom: 10px;
-        }
-        .settings-panel input, .settings-panel select { 
-            padding: 5px; 
-            background: #1a1a1a; 
-            border: 1px solid #333; 
-            color: #e0e0e0; 
-            border-radius: 4px; 
-        }
-        
-        /* Responsive */
-        @media (max-width: 768px) {
-            .container { padding: 10px; }
-            .header h1 { font-size: 20px; }
-            table.results-table th, table.results-table td { padding: 8px 5px; font-size: 12px; }
-            .advanced-options { flex-direction: column; align-items: flex-start; }
-        }
-        
-        /* Light theme */
-        body.light-theme {
-            background: #f5f5f5;
-            color: #333;
-        }
-        body.light-theme input[type="text"],
-        body.light-theme input[type="number"],
-        body.light-theme select {
-            background: #fff;
-            color: #333;
-            border-color: #ccc;
-        }
-        body.light-theme .results-table-container,
-        body.light-theme .settings-panel {
-            background: #fff;
-            border-color: #ccc;
-        }
-        body.light-theme table.results-table thead {
-            background: #eee;
-        }
-        body.light-theme table.results-table th,
-        body.light-theme table.results-table td {
-            color: #333;
-            border-color: #ddd;
-        }
-        body.light-theme table.results-table tbody tr:hover {
-            background: #f0f0f0;
-        }
-        body.light-theme .search-history-item {
-            background: #e0e0e0;
-            color: #333;
-        }
-        body.light-theme .search-history-item:hover {
-            background: #d0d0d0;
-        }
-    </style>
+    <title data-i18n="appTitle">golocate - 快速文件搜索</title>
+    <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
     <div class="container">
         <!-- Header -->
         <div class="header">
-            <h1>🔍 golocate - 快速文件搜索</h1>
+            <h1>🔍 <span data-i18n="appTitle">golocate - 快速文件搜索</span></h1>
             <div class="header-buttons">
-                <button class="secondary" onclick="toggleSettings()">⚙️ 设置</button>
+                <button class="secondary" onclick="toggleLang()" id="langBtn">🌐 EN</button>
+                <button class="secondary" onclick="refreshStatus()" data-i18n="btnStatus">📊 状态</button>
             </div>
         </div>
+
         
-        <!-- Settings Panel -->
-        <div class="settings-panel" id="settingsPanel">
-            <h3>设置</h3>
+        <!-- Top tabs: single-page switching between the panels -->
+        <div class="panel-tabs" id="panelTabs">
+            <button class="tab secondary" data-target="favPanel" onclick="switchPanel('favPanel')" data-i18n="favorites">⭐ 收藏</button>
+            <button class="tab secondary" data-target="settingsPanel" onclick="switchPanel('settingsPanel')" data-i18n="btnSettings">⚙️ 设置</button>
+            <button class="tab secondary" data-target="serverPanel" onclick="switchPanel('serverPanel')" data-i18n="btnServer">🛠️ 服务器</button>
+        </div>
+        
+        <!-- Server Status -->
+        <div class="status-bar" id="statusBar" style="display: none;">
+            <span id="statusText"></span>
+        </div>
+        
+        <!-- Settings Panel (client preferences) -->
+        <div class="settings-panel" id="settingsPanel" style="display:none;">
+            <h3 data-i18n="settingsTitle">设置</h3>
             <label>
-                <span>默认最大结果数:</span>
+                <span data-i18n="labelDefaultLimit">默认最大结果数:</span>
                 <input type="number" id="defaultLimit" value="100" min="1" max="10000" style="width: 100px;">
             </label>
             <label>
-                <span>默认忽略大小写:</span>
+                <span data-i18n="labelDefaultIgnoreCase">默认忽略大小写:</span>
                 <input type="checkbox" id="defaultIgnoreCase" checked>
             </label>
             <label>
-                <span>主题:</span>
+                <span data-i18n="labelTheme">主题:</span>
                 <select id="themeSelect" style="width: 100px;">
                     <option value="dark">暗色</option>
                     <option value="light">亮色</option>
                 </select>
             </label>
             <label>
-                <span>搜索防抖延迟(ms):</span>
-                <input type="number" id="debounceDelay" value="2500" min="100" max="10000" step="100" style="width: 100px;">
+                <span data-i18n="labelDebounce">搜索防抖延迟(ms):</span>
+                <input type="number" id="debounceDelay" value="300" min="100" max="10000" step="100" style="width: 100px;">
             </label>
-            <button onclick="saveSettings()" style="margin-top: 10px;">保存设置</button>
+            <button onclick="saveSettings()" style="margin-top: 10px;" data-i18n="btnSaveSettings">保存设置</button>
+        </div>
+        
+        <!-- Server Panel (operations: dirs, rebuild, config) -->
+        <div class="settings-panel" id="serverPanel" style="display:none;">
+            <h3 data-i18n="dirMgmtTitle">索引目录管理</h3>
+            <div id="dirList" style="margin-bottom:8px;"></div>
+            <div style="display:flex; gap:6px;">
+                <input type="text" id="newDirInput" placeholder="/home/user/projects" style="flex:1;" data-i18n-placeholder="dirInputPlaceholder">
+                <button onclick="addDir()" style="padding:6px 12px;" data-i18n="btnAddDir">添加</button>
+                <button onclick="applyDirsToConfig()" class="secondary" style="padding:6px 12px;" data-i18n="btnApplyDirs">应用到配置</button>
+            </div>
+            <div style="color:#888; font-size:0.8em; margin-top:4px;" data-i18n="dirMgmtHint">「应用到配置」会把上面的目录列表写进下方配置的 directories，再点「保存配置」生效。</div>
             <hr style="border-color:#444; margin:10px 0;">
-            <h3>服务器配置</h3>
-            <button onclick="loadServerConfig()" style="margin-bottom: 5px;">加载配置</button>
-            <textarea id="serverConfigArea" rows="10" style="width:100%; background:#1a1a1a; color:#e0e0e0; border:1px solid #333; font-family:monospace; font-size:12px; resize:vertical;" placeholder="点击「加载配置」读取当前配置，编辑后点「保存配置」"></textarea>
-            <button onclick="saveServerConfig()" style="margin-top: 5px;">保存配置</button>
+            <h3 data-i18n="indexOps">索引操作</h3>
+            <button onclick="rebuildIndex()" style="margin-top: 2px;" data-i18n="btnRebuild">🔄 重建索引</button>
+            <div style="color:#888; font-size:0.8em; margin-top:6px;" data-i18n="indexOpsHint">重新扫描全部索引目录并热替换索引（后台执行，可在状态栏查看进度）。</div>
+            <hr style="border-color:#444; margin:10px 0;">
+            <h3 data-i18n="serverConfigTitle">服务器配置</h3>
+            <button onclick="loadServerConfig()" style="margin-bottom: 5px;" data-i18n="btnLoadConfig">加载配置</button>
+            <textarea id="serverConfigArea" rows="10" style="width:100%; background:#1a1a1a; color:#e0e0e0; border:1px solid #333; font-family:monospace; font-size:12px; resize:vertical;" placeholder="点击「加载配置」读取当前配置，编辑后点「保存配置」" data-i18n-placeholder="cfgAreaPlaceholder"></textarea>
+            <button onclick="saveServerConfig()" style="margin-top: 5px;" data-i18n="btnSaveConfig">保存配置</button>
         </div>
         
-        <!-- Search Box -->
+        <!-- Favorites Panel -->
+        <div class="settings-panel" id="favPanel" style="display:none;">
+            <h3 data-i18n="favorites">收藏</h3>
+            <div id="favList"></div>
+            <h3 style="margin-top:12px;" data-i18n="recent">最近打开</h3>
+            <div id="recentList"></div>
+        </div>
+        
+        <!-- Search Card: box + advanced options + history -->
+        <div class="search-card">
+        <div class="search-card-header">
+            <span class="search-card-title">🔍 <span data-i18n="searchTitle">搜索</span></span>
+            <button class="secondary small" onclick="toggleAdvanced()" id="advToggleBtn" data-i18n="btnAdvanced">高级选项</button>
+        </div>
         <div class="search-box">
-            <input type="text" id="searchInput" placeholder="搜索文件..." autofocus>
-            <button onclick="search()">搜索</button>
+            <input type="text" id="searchInput" placeholder="搜索文件名/路径" autofocus data-i18n-placeholder="searchPlaceholder">
+            <input type="text" id="contentInput" placeholder="搜索内容(可选)" data-i18n-placeholder="contentPlaceholder" style="max-width:260px;">
+            <button onclick="search()" data-i18n="btnSearch">搜索</button>
         </div>
         
-        <!-- Advanced Options -->
-        <div class="advanced-options">
-            <label>
-                <input type="checkbox" id="ignoreCase" checked> 忽略大小写
+        <!-- Advanced Options (collapsed; toggle with the header button) -->
+        <div class="advanced-options" id="advancedOptions" style="display:none;">            <span class="opt-group" data-i18n="grpMatch">匹配</span>
+            <div class="opt-row">
+    <label>
+                <input type="checkbox" id="ignoreCase" checked> <span data-i18n="labelIgnoreCase">忽略大小写</span>
             </label>
-            <label>
-                <input type="checkbox" id="regexMode"> 正则表达式
+    <label>
+                <input type="checkbox" id="basenameMode"> <span data-i18n="labelBasename">仅文件名</span>
             </label>
-            <label>
-                最大结果数: <input type="number" id="maxResults" value="100" min="1" max="10000">
+    <label>
+                <span data-i18n="labelMode">模式:</span>
+                <select id="patternMode" style="width: 100px; background:#2a2a2a; color:#e0e0e0; border:1px solid #333; border-radius:4px; padding:5px;">
+                    <option value="" data-i18n="modeNormal">普通</option>
+                    <option value="regex" data-i18n="modeRegex">正则</option>
+                    <option value="wildcard" data-i18n="modeWildcard">通配符</option>
+                    <option value="terms" data-i18n="modeTerms">多词(terms)</option>
+                </select>
+            </label>            </div>
+            <span class="opt-group" data-i18n="grpFilter">过滤</span>
+            <div class="opt-row">
+    <label>
+                <span data-i18n="labelScope">目录范围:</span>
+                <input type="text" id="scopeInput" placeholder="/home/user/proj" style="width:140px;">
             </label>
-        </div>
+    <label>
+                <span data-i18n="labelTypes">类型:</span>
+                <input type="text" id="typeInput" placeholder="go,md" style="width:80px;">
+            </label>
+    <label>
+                <span data-i18n="labelExclude">排除:</span>
+                <input type="text" id="excludeInput" placeholder="*_test.go" style="width:100px;">
+            </label>
+    <label>
+                <span data-i18n="labelMinSize">最小大小(B):</span>
+                <input type="number" id="minSizeInput" min="0" style="width:70px;">
+            </label>
+    <label>
+                <span data-i18n="labelMaxSize">最大大小(B):</span>
+                <input type="number" id="maxSizeInput" min="0" style="width:70px;">
+            </label>
+            </div>
+            <span class="opt-group" data-i18n="grpResult">结果</span>
+            <div class="opt-row">
+        <label>
+                <input type="checkbox" id="dedupeMode"> <span data-i18n="labelDedupe">去重（硬链接）</span>
+            </label>
+    <label>
+                <span data-i18n="labelMaxResults">最大结果数:</span> <input type="number" id="maxResults" value="100" min="1" max="10000">
+            </label>
+            </div>
+</div>
         
         <!-- Search History -->
         <div class="search-history" id="searchHistoryContainer" style="display: none;">
             <div class="search-history-title">最近搜索:</div>
             <div class="search-history-items" id="searchHistoryItems"></div>
         </div>
+        </div><!-- /search-card -->
         
-        <!-- Results Header -->
-        <div class="results-header">
-            <div class="results-count" id="resultsCount"></div>
-            <div class="export-buttons" id="exportButtons" style="display: none;">
-                <button onclick="exportResults('json')">导出 JSON</button>
-                <button onclick="exportResults('csv')">导出 CSV</button>
-                <button onclick="exportResults('txt')">导出 TXT</button>
-            </div>
-        </div>
-        
-        <!-- Results Table -->
+        <!-- Results Table (count bar + table merged in one card) -->
         <div class="results-table-container" id="resultsContainer">
+            <div class="results-header">
+                <div class="results-count" id="resultsCount"></div>
+                <div class="export-buttons" id="exportButtons" style="display: none;">
+                    <button onclick="exportResults('json')" data-i18n="exportJson">导出 JSON</button>
+                    <button onclick="exportResults('csv')" data-i18n="exportCsv">导出 CSV</button>
+                    <button onclick="exportResults('txt')" data-i18n="exportTxt">导出 TXT</button>
+                </div>
+            </div>
             <table class="results-table" id="resultsTable">
                 <thead>
                     <tr>
-                        <th class="col-name sortable" data-sort="Name">文件名</th>
-                        <th class="col-path sortable" data-sort="Path">路径</th>
-                        <th class="col-size sortable" data-sort="Size">大小</th>
-                        <th class="col-modtime sortable" data-sort="ModTime">修改时间</th>
+                        <th class="col-name sortable" data-sort="Name" data-i18n="thName">文件名</th>
+                        <th class="col-path sortable" data-sort="Path" data-i18n="thPath">路径</th>
+                        <th class="col-size sortable" data-sort="Size" data-i18n="thSize">大小</th>
+                        <th class="col-modtime sortable" data-sort="ModTime" data-i18n="thMtime">修改时间</th>
+                        <th class="col-match" data-i18n="thMatch">匹配内容</th>
+                        <th class="col-actions" data-i18n="thActions">操作</th>
                     </tr>
                 </thead>
                 <tbody id="resultsBody">
-                    <tr><td colspan="4" class="empty-state">开始输入以搜索...</td></tr>
+                    <tr><td colspan="6" class="empty-state" data-i18n="emptyStart">开始输入以搜索...</td></tr>
                 </tbody>
             </table>
         </div>
         
         <!-- Pagination -->
         <div class="pagination" id="paginationControls" style="display: none;">
-            <button id="firstPageBtn" onclick="goFirstPage()">首页</button>
-            <button id="prevPageBtn" onclick="prevPage()">上一页</button>
+            <button id="firstPageBtn" onclick="goFirstPage()" data-i18n="firstPage">首页</button>
+            <button id="prevPageBtn" onclick="prevPage()" data-i18n="prevPage">上一页</button>
             <span id="pageInfo">第 1/1 页</span>
-            <button id="nextPageBtn" onclick="nextPage()">下一页</button>
-            <button id="lastPageBtn" onclick="goLastPage()">末页</button>
+            <button id="nextPageBtn" onclick="nextPage()" data-i18n="nextPage">下一页</button>
+            <button id="lastPageBtn" onclick="goLastPage()" data-i18n="lastPage">末页</button>
             <label>
                 跳转 <input type="number" id="pageJump" min="1" style="width: 60px;">
             </label>
-            <button onclick="jumpToPage()">GO</button>
+            <button onclick="jumpToPage()" data-i18n="goBtn">GO</button>
         </div>
     </div>
     
-    <script>
-        const searchInput = document.getElementById('searchInput');
-        const resultsBody = document.getElementById('resultsBody');
-        const resultsCount = document.getElementById('resultsCount');
-        const exportButtons = document.getElementById('exportButtons');
-        const searchHistoryContainer = document.getElementById('searchHistoryContainer');
-        const searchHistoryItems = document.getElementById('searchHistoryItems');
-        
-        let debounceTimer = null;
-        let debounceDelay = 2500; // 按键防抖延迟(ms)，可在设置中调整
-        let currentResults = [];
-        let currentSort = { field: null, direction: 'asc' };
-        let currentPage = 1;
-        let lastQuery = '';
-        let currentTotal = 0;
-        
-        // Initialize
-        document.addEventListener('DOMContentLoaded', () => {
-            loadSearchHistory();
-            loadSettings();
-            initSortHandlers();
-        });
-        
-        // Settings Functions
-        function toggleSettings() {
-            const panel = document.getElementById('settingsPanel');
-            panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
-        }
-        
-        function saveSettings() {
-            const settings = {
-                defaultLimit: document.getElementById('defaultLimit').value,
-                defaultIgnoreCase: document.getElementById('defaultIgnoreCase').checked,
-                theme: document.getElementById('themeSelect').value,
-                debounceDelay: document.getElementById('debounceDelay').value
-            };
-            localStorage.setItem('golocateSettings', JSON.stringify(settings));
-            alert('设置已保存');
-            applySettings(settings);
-        }
-        
-        function loadSettings() {
-            const settings = JSON.parse(localStorage.getItem('golocateSettings') || '{}');
-            if (settings.defaultLimit) {
-                document.getElementById('defaultLimit').value = settings.defaultLimit;
-                document.getElementById('maxResults').value = settings.defaultLimit;
-            }
-            if (settings.defaultIgnoreCase !== undefined) {
-                document.getElementById('defaultIgnoreCase').checked = settings.defaultIgnoreCase;
-                document.getElementById('ignoreCase').checked = settings.defaultIgnoreCase;
-            }
-            if (settings.theme) {
-                document.getElementById('themeSelect').value = settings.theme;
-                applySettings(settings);
-            }
-            if (settings.debounceDelay) {
-                document.getElementById('debounceDelay').value = settings.debounceDelay;
-                debounceDelay = parseInt(settings.debounceDelay) || 2500;
-            }
-        }
-        
-        function applySettings(settings) {
-            if (settings.theme === 'light') {
-                document.body.classList.add('light-theme');
-            } else {
-                document.body.classList.remove('light-theme');
-            }
-        }
-        
-        // Sort Functions
-        function initSortHandlers() {
-            const headers = document.querySelectorAll('th.sortable');
-            headers.forEach(th => {
-                th.addEventListener('click', () => {
-                    const field = th.dataset.sort;
-                    sortResults(field);
-                });
-            });
-        }
-        
-        function sortResults(field) {
-            if (!currentResults || currentResults.length === 0) return;
-            
-            // Toggle direction
-            if (currentSort.field === field) {
-                currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
-            } else {
-                currentSort.field = field;
-                currentSort.direction = 'asc';
-            }
-            
-            // Sort results
-            currentResults.sort((a, b) => {
-                let aVal = a[field];
-                let bVal = b[field];
-                
-                // Handle different types
-                if (field === 'Size') {
-                    aVal = aVal || 0;
-                    bVal = bVal || 0;
-                } else if (field === 'ModTime') {
-                    aVal = new Date(aVal || 0).getTime();
-                    bVal = new Date(bVal || 0).getTime();
-                } else {
-                    aVal = (aVal || '').toString().toLowerCase();
-                    bVal = (bVal || '').toString().toLowerCase();
-                }
-                
-                if (aVal < bVal) return currentSort.direction === 'asc' ? -1 : 1;
-                if (aVal > bVal) return currentSort.direction === 'asc' ? 1 : -1;
-                return 0;
-            });
-            
-            // Update UI
-            updateSortIndicators();
-            renderResults();
-        }
-        
-        function updateSortIndicators() {
-            // Remove all sort classes
-            document.querySelectorAll('th.sortable').forEach(th => {
-                th.classList.remove('sort-asc', 'sort-desc');
-            });
-            
-            // Add current sort class
-            if (currentSort.field) {
-                const th = document.querySelector(`th[data-sort="${currentSort.field}"]`);
-                if (th) {
-                    th.classList.add(`sort-${currentSort.direction}`);
-                }
-            }
-        }
-        
-        // Keyboard Shortcuts
-        document.addEventListener('keydown', (e) => {
-            const target = e.target;
-            const typing = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
-            if (typing) {
-                if (e.key === 'Escape') {
-                    target.blur();
-                    searchInput.focus();
-                    e.preventDefault();
-                }
-                return;
-            }
-            switch (e.key) {
-                case '/':
-                    searchInput.focus();
-                    e.preventDefault();
-                    break;
-                case 'PageDown':
-                    if (!document.getElementById('nextPageBtn').disabled) nextPage();
-                    e.preventDefault();
-                    break;
-                case 'PageUp':
-                    if (!document.getElementById('prevPageBtn').disabled) prevPage();
-                    e.preventDefault();
-                    break;
-                case 'Home':
-                    if (!document.getElementById('firstPageBtn').disabled) goFirstPage();
-                    break;
-                case 'End':
-                    if (!document.getElementById('lastPageBtn').disabled) goLastPage();
-                    break;
-                case 'g':
-                    document.getElementById('pageJump').focus();
-                    break;
-            }
-        });
-        
-        // Search Functions
-        searchInput.addEventListener('input', () => {
-            clearTimeout(debounceTimer);
-            debounceTimer = setTimeout(() => {
-                search();
-            }, debounceDelay);
-        });
-        
-        searchInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                clearTimeout(debounceTimer);
-                search();
-            }
-        });
-        
-        async function search() {
-            const query = searchInput.value.trim();
-            if (!query) {
-                resultsBody.innerHTML = '<tr><td colspan="4" class="empty-state">开始输入以搜索...</td></tr>';
-                resultsCount.textContent = '';
-                exportButtons.style.display = 'none';
-                document.getElementById('paginationControls').style.display = 'none';
-                currentResults = [];
-                currentPage = 1;
-                return;
-            }
-            
-            // New query resets to page 1
-            if (query !== lastQuery) {
-                lastQuery = query;
-                currentPage = 1;
-            }
-            
-            resultsBody.innerHTML = '<tr><td colspan="4" class="status">搜索中...</td></tr>';
-            
-            const ignoreCase = document.getElementById('ignoreCase').checked;
-            const regexMode = document.getElementById('regexMode').checked;
-            const maxResults = document.getElementById('maxResults').value;
-            const pageSize = parseInt(maxResults) || 100;
-            const offset = (currentPage - 1) * pageSize;
-            
-            try {
-                const response = await fetch('/api/search?q=' + encodeURIComponent(query) + 
-                    '&ignore_case=' + ignoreCase + '&regex=' + regexMode + '&limit=' + pageSize + '&offset=' + offset);
-                const data = await response.json();
-                
-                if (data.error) {
-                    resultsBody.innerHTML = '<tr><td colspan="4" class="error">错误: ' + escapeHtml(data.error) + '</td></tr>';
-                    resultsCount.textContent = '';
-                    exportButtons.style.display = 'none';
-                    currentResults = [];
-                    return;
-                }
-                
-                if (!data.results || data.results.length === 0) {
-                    resultsBody.innerHTML = '<tr><td colspan="4" class="empty-state">未找到结果</td></tr>';
-                    resultsCount.textContent = '无结果';
-                    exportButtons.style.display = 'none';
-                    document.getElementById('paginationControls').style.display = 'none';
-                    currentResults = [];
-                    return;
-                }
-                
-                // Save to search history
-                saveSearchHistory(query);
-                
-                // Store results for export and sorting
-                currentResults = data.results;
-                currentTotal = data.total || data.results.length;
-                
-                // Reset sort
-                currentSort = { field: null, direction: 'asc' };
-                updateSortIndicators();
-                
-                // Render results
-                renderResults();
-                resultsCount.textContent = `找到 ${data.results.length} 个结果（共 ${currentTotal} 个）`;
-                exportButtons.style.display = 'flex';
-                updatePagination();
-            } catch (err) {
-                resultsBody.innerHTML = '<tr><td colspan="4" class="error">错误: ' + escapeHtml(err.message) + '</td></tr>';
-                resultsCount.textContent = '';
-                exportButtons.style.display = 'none';
-                currentResults = [];
-            }
-        }
-        
-        // Pagination Functions
-        function updatePagination() {
-            const pageSize = parseInt(document.getElementById('maxResults').value) || 100;
-            const totalPages = currentTotal > 0 ? Math.ceil(currentTotal / pageSize) : 1;
-            const controls = document.getElementById('paginationControls');
-            if (currentTotal === 0) {
-                controls.style.display = 'none';
-                return;
-            }
-            controls.style.display = 'flex';
-            document.getElementById('pageInfo').textContent = `第 ${currentPage}/${totalPages} 页`;
-            document.getElementById('firstPageBtn').disabled = currentPage <= 1;
-            document.getElementById('prevPageBtn').disabled = currentPage <= 1;
-            document.getElementById('nextPageBtn').disabled = currentPage >= totalPages;
-            document.getElementById('lastPageBtn').disabled = currentPage >= totalPages;
-        }
-        
-        function goFirstPage() {
-            if (currentPage <= 1) return;
-            currentPage = 1;
-            search();
-        }
-        
-        function goLastPage() {
-            const pageSize = parseInt(document.getElementById('maxResults').value) || 100;
-            const totalPages = currentTotal > 0 ? Math.ceil(currentTotal / pageSize) : 1;
-            if (currentPage >= totalPages) return;
-            currentPage = totalPages;
-            search();
-        }
-        
-        function jumpToPage() {
-            const pageSize = parseInt(document.getElementById('maxResults').value) || 100;
-            const totalPages = currentTotal > 0 ? Math.ceil(currentTotal / pageSize) : 1;
-            const n = parseInt(document.getElementById('pageJump').value);
-            if (!n || n < 1 || n > totalPages) return;
-            if (n === currentPage) return;
-            currentPage = n;
-            search();
-        }
-        
-        function prevPage() {
-            if (currentPage <= 1) return;
-            currentPage--;
-            search();
-        }
-        
-        function nextPage() {
-            currentPage++;
-            search();
-        }
-        
-        function renderResults() {
-            if (!currentResults || currentResults.length === 0) return;
-            
-            let html = '';
-            currentResults.forEach(result => {
-                const modTime = result.ModTime ? formatDate(result.ModTime) : '-';
-                const size = result.Size ? formatSize(result.Size) : '-';
-                
-                html += '<tr>';
-                html += '<td class="col-name" title="' + escapeHtml(result.Name || '') + '">' + escapeHtml(result.Name || '-') + '</td>';
-                html += '<td class="col-path" title="' + escapeHtml(result.Path || '') + '">' + escapeHtml(result.Path || '-') + '</td>';
-                html += '<td class="col-size">' + size + '</td>';
-                html += '<td class="col-modtime">' + modTime + '</td>';
-                html += '</tr>';
-            });
-            
-            resultsBody.innerHTML = html;
-        }
-        
-        // Search History Functions
-        function saveSearchHistory(query) {
-            const history = JSON.parse(localStorage.getItem('searchHistory') || '[]');
-            const filtered = history.filter(item => item.query !== query);
-            filtered.unshift({ query: query, timestamp: Date.now() });
-            const trimmed = filtered.slice(0, 20);
-            localStorage.setItem('searchHistory', JSON.stringify(trimmed));
-            loadSearchHistory();
-        }
-        
-        function loadSearchHistory() {
-            const history = JSON.parse(localStorage.getItem('searchHistory') || '[]');
-            
-            if (history.length === 0) {
-                searchHistoryContainer.style.display = 'none';
-                return;
-            }
-            
-            searchHistoryContainer.style.display = 'block';
-            searchHistoryItems.innerHTML = '';
-            
-            history.slice(0, 10).forEach(item => {
-                const div = document.createElement('div');
-                div.className = 'search-history-item';
-                div.textContent = item.query;
-                div.onclick = () => {
-                    searchInput.value = item.query;
-                    search();
-                };
-                searchHistoryItems.appendChild(div);
-            });
-        }
-        
-        // Export Functions
-        function exportResults(format) {
-            if (!currentResults || currentResults.length === 0) {
-                alert('无结果可导出');
-                return;
-            }
-            
-            let content, filename, mimeType;
-            
-            switch (format) {
-                case 'json':
-                    content = JSON.stringify(currentResults, null, 2);
-                    filename = 'search_results.json';
-                    mimeType = 'application/json';
-                    break;
-                case 'csv':
-                    content = '文件名,路径,大小,修改时间\n' + currentResults.map(r => 
-                        `"${r.Name || ''}","${r.Path || ''}","${formatSize(r.Size)}","${formatDate(r.ModTime)}"`
-                    ).join('\n');
-                    filename = 'search_results.csv';
-                    mimeType = 'text/csv';
-                    break;
-                case 'txt':
-                    content = currentResults.map(r => r.Path).join('\n');
-                    filename = 'search_results.txt';
-                    mimeType = 'text/plain';
-                    break;
-            }
-            
-            const blob = new Blob([content], { type: mimeType });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = filename;
-            a.click();
-            URL.revokeObjectURL(url);
-        }
-        
-        // Utility Functions
-        function formatSize(bytes) {
-            if (!bytes || bytes === 0) return '0 B';
-            if (bytes < 1024) return bytes + ' B';
-            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-            if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
-            return (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' GB';
-        }
-        
-        function formatDate(dateStr) {
-            if (!dateStr) return '-';
-            try {
-                const date = new Date(dateStr);
-                if (isNaN(date.getTime())) return '-';
-                // 零值时间（文件不存在或 stat 失败时 ModTime 为 0001 年）显示为 -
-                if (date.getFullYear() < 1000) return '-';
-                
-                const year = date.getFullYear();
-                const month = String(date.getMonth() + 1).padStart(2, '0');
-                const day = String(date.getDate()).padStart(2, '0');
-                const hour = String(date.getHours()).padStart(2, '0');
-                const minute = String(date.getMinutes()).padStart(2, '0');
-                
-                return `${year}-${month}-${day} ${hour}:${minute}`;
-            } catch (e) {
-                return '-';
-            }
-        }
-        
-        function escapeHtml(text) {
-            if (!text) return '';
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
-        
-        // Server configuration edit
-        function toSimpleYaml(obj) {
-            let out = '';
-            for (const k in obj) {
-                const v = obj[k];
-                if (Array.isArray(v)) {
-                    out += k + ':';
-                    if (v.length === 0) { out += ' []\n'; continue; }
-                    out += '\n';
-                    v.forEach(x => { out += '  - ' + x + '\n'; });
-                } else {
-                    out += k + ': ' + v + '\n';
-                }
-            }
-            return out;
-        }
-        
-        async function loadServerConfig() {
-            try {
-                const r = await fetch('/api/config');
-                const cfg = await r.json();
-                document.getElementById('serverConfigArea').value = toSimpleYaml(cfg);
-            } catch (err) {
-                alert('加载配置失败: ' + err.message);
-            }
-        }
-        
-        async function saveServerConfig() {
-            const yaml = document.getElementById('serverConfigArea').value;
-            if (!yaml.trim()) { alert('配置为空'); return; }
-            try {
-                const r = await fetch('/api/config', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ yaml: yaml })
-                });
-                if (!r.ok) {
-                    alert('保存失败: ' + (await r.text()));
-                    return;
-                }
-                alert('配置已保存');
-            } catch (err) {
-                alert('保存失败: ' + err.message);
-            }
-        }
-    </script>
+    
+    <script src="/static/i18n.js"></script>
+    <script src="/static/core.js"></script>
+    <script src="/static/favorites.js"></script>
+    <script src="/static/settings.js"></script>
 </body>
 </html>

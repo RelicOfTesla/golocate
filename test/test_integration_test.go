@@ -3,11 +3,10 @@ package test
 import (
 	"testing"
 
+	"github.com/RelicOfTesla/golocate/pkg/index"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/RelicOfTesla/golocate/pkg/index"
 )
-
 
 // ========== 第一部分：基础搜索参数测试 ==========
 
@@ -43,7 +42,6 @@ func TestSearch_Path_Existing(t *testing.T) {
 	require.NoError(t, err, "Search should not return error")
 	assert.NotEmpty(t, results, "Expected to find server.go in internal/")
 }
-
 
 func TestSearch_IgnoreCase_False(t *testing.T) {
 	c := getTestClient(t)
@@ -110,7 +108,7 @@ func TestSearch_Regex_Basic(t *testing.T) {
 
 	results, err := c.Search(".*\\.go$", index.SearchOptions{
 		PatternMode: index.PatternModeRegex,
-		Limit: 10,
+		Limit:       10,
 	})
 
 	require.NoError(t, err, "Search should not return error")
@@ -122,7 +120,7 @@ func TestSearch_Regex_Invalid(t *testing.T) {
 
 	_, err := c.Search("[invalid(", index.SearchOptions{
 		PatternMode: index.PatternModeRegex,
-		Limit: 5,
+		Limit:       5,
 	})
 
 	assert.Error(t, err, "Expected error for invalid regex")
@@ -133,8 +131,8 @@ func TestSearch_ExtendedRegex(t *testing.T) {
 	c := getTestClient(t)
 
 	results, err := c.Search("[a-z]+\\.go", index.SearchOptions{
-		PatternMode:   index.PatternModeExtendedRegex,
-		Limit:         10,
+		PatternMode: index.PatternModeExtendedRegex,
+		Limit:       10,
 	})
 
 	require.NoError(t, err, "Search should not return error")
@@ -146,8 +144,8 @@ func TestSearch_Regex_IgnoreCase(t *testing.T) {
 
 	results, err := c.Search("MAIN", index.SearchOptions{
 		PatternMode: index.PatternModeRegex,
-		IgnoreCase: true,
-		Limit:      5,
+		IgnoreCase:  true,
+		Limit:       5,
 	})
 
 	require.NoError(t, err, "Search should not return error")
@@ -160,9 +158,9 @@ func TestSearch_Sort_ByName(t *testing.T) {
 	c := getTestClient(t)
 
 	results, err := c.Search("*.go", index.SearchOptions{
-		SortField:  "name",
-		SortOrder:  "asc",
-		Limit:      10,
+		SortField: "name",
+		SortOrder: "asc",
+		Limit:     10,
 	})
 
 	require.NoError(t, err, "Search should not return error")
@@ -173,9 +171,9 @@ func TestSearch_Sort_BySize(t *testing.T) {
 	c := getTestClient(t)
 
 	results, err := c.Search("*.go", index.SearchOptions{
-		SortField:  "size",
-		SortOrder:  "desc",
-		Limit:      10,
+		SortField: "size",
+		SortOrder: "desc",
+		Limit:     10,
 	})
 
 	require.NoError(t, err, "Search should not return error")
@@ -186,9 +184,9 @@ func TestSearch_Sort_ByTime(t *testing.T) {
 	c := getTestClient(t)
 
 	results, err := c.Search("*.go", index.SearchOptions{
-		SortField:  "time",
-		SortOrder:  "desc",
-		Limit:      10,
+		SortField: "time",
+		SortOrder: "desc",
+		Limit:     10,
 	})
 
 	require.NoError(t, err, "Search should not return error")
@@ -199,9 +197,9 @@ func TestSearch_Sort_ByPath(t *testing.T) {
 	c := getTestClient(t)
 
 	results, err := c.Search("*.go", index.SearchOptions{
-		SortField:  "path",
-		SortOrder:  "asc",
-		Limit:      10,
+		SortField: "path",
+		SortOrder: "asc",
+		Limit:     10,
 	})
 
 	require.NoError(t, err, "Search should not return error")
@@ -238,9 +236,9 @@ func TestSearch_Combined_PathSortFieldSortOrder(t *testing.T) {
 	c := getTestClient(t)
 
 	results, err := c.Search("*.go", index.SearchOptions{
-		SortField:  "name",
-		SortOrder:  "asc",
-		Limit:      10,
+		SortField: "name",
+		SortOrder: "asc",
+		Limit:     10,
 	})
 
 	require.NoError(t, err, "Search should not return error")
@@ -310,7 +308,7 @@ func TestSearch_MainGo(t *testing.T) {
 
 	require.NoError(t, err, "Search should not return error")
 	assert.NotEmpty(t, results, "Expected to find main.go")
-	
+
 	// Verify the result contains main.go
 	found := false
 	for _, r := range results {
@@ -351,8 +349,8 @@ func TestSearch_InvalidSortField(t *testing.T) {
 	c := getTestClient(t)
 
 	results, err := c.Search("test", index.SearchOptions{
-		SortField:  "invalid_field",
-		Limit:      5,
+		SortField: "invalid_field",
+		Limit:     5,
 	})
 
 	// Invalid sort field might be ignored or return error
@@ -368,8 +366,8 @@ func TestSearch_InvalidSortOrder(t *testing.T) {
 	c := getTestClient(t)
 
 	results, err := c.Search("test", index.SearchOptions{
-		SortOrder:  "invalid_order",
-		Limit:      5,
+		SortOrder: "invalid_order",
+		Limit:     5,
 	})
 
 	// Invalid sort order might be ignored or return error
@@ -459,8 +457,8 @@ func TestSearch_Combined_RegexIgnoreCaseLimit(t *testing.T) {
 
 	results, err := c.Search("MAIN", index.SearchOptions{
 		PatternMode: index.PatternModeRegex,
-		IgnoreCase: true,
-		Limit:      5,
+		IgnoreCase:  true,
+		Limit:       5,
 	})
 
 	require.NoError(t, err, "Search should not return error")
@@ -471,10 +469,10 @@ func TestSearch_Combined_BasenameSortFieldSortOrderLimit(t *testing.T) {
 	c := getTestClient(t)
 
 	results, err := c.Search("config", index.SearchOptions{
-		Basename:   true,
-		SortField:  "name",
-		SortOrder:  "desc",
-		Limit:      5,
+		Basename:  true,
+		SortField: "name",
+		SortOrder: "desc",
+		Limit:     5,
 	})
 
 	require.NoError(t, err, "Search should not return error")
