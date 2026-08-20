@@ -305,6 +305,11 @@ func createMainWindow(app *gtk.Application) {
 	searchEntry.SetPlaceholderText("搜索文件…")
 	searchEntry.SetHExpand(true)
 	searchBox.Append(searchEntry)
+	// 内容搜索框：与文件名搜索同行（AND；为空则普通路径搜索）
+	contentEntry = gtk.NewEntry()
+	contentEntry.SetPlaceholderText("内容(可选)")
+	contentEntry.SetWidthChars(14)
+	searchBox.Append(contentEntry)
 	entry := searchEntry
 
 	// Search history completion
@@ -325,28 +330,32 @@ func createMainWindow(app *gtk.Application) {
 
 	// 高级区（默认收起）：搜索过滤 + 全局操作（状态/配置/重建/收藏列表/导出）。
 	// 行级操作（打开/打开目录/复制/收藏）统一收进右键菜单。
-	advancedBox := gtk.NewBox(gtk.OrientationHorizontal, 10)
+	advancedBox := gtk.NewBox(gtk.OrientationVertical, 8)
 	advancedBox.SetVisible(false) // 默认收起：主要内容是结果表
+	filtersRow := gtk.NewBox(gtk.OrientationHorizontal, 10)
+	actionsRow := gtk.NewBox(gtk.OrientationHorizontal, 8)
+	advancedBox.Append(filtersRow)
+	advancedBox.Append(actionsRow)
 
 	statusBtn := gtk.NewButtonWithLabel("状态")
-	advancedBox.Append(statusBtn)
+	actionsRow.Append(statusBtn)
 
 	configBtn := gtk.NewButtonWithLabel("配置")
-	advancedBox.Append(configBtn)
+	actionsRow.Append(configBtn)
 
 	rebuildBtn := gtk.NewButtonWithLabel("重建索引")
 	rebuildBtn.SetTooltipText("请求服务端重建索引")
-	advancedBox.Append(rebuildBtn)
+	actionsRow.Append(rebuildBtn)
 
 	openFavBtn = gtk.NewButtonWithLabel("打开收藏")
 	openFavBtn.SetTooltipText("从收藏中打开")
 	openFavBtn.Connect("clicked", showFavoritesDialog)
-	advancedBox.Append(openFavBtn)
+	actionsRow.Append(openFavBtn)
 
 	openRecentBtn = gtk.NewButtonWithLabel("最近打开")
 	openRecentBtn.SetTooltipText("从最近打开中快速打开")
 	openRecentBtn.Connect("clicked", showRecentsDialog)
-	advancedBox.Append(openRecentBtn)
+	actionsRow.Append(openRecentBtn)
 
 	advToggleBtn = gtk.NewToggleButtonWithLabel("高级选项 ▾")
 	advToggleBtn.SetTooltipText("展开/收起高级搜索选项")
@@ -364,73 +373,67 @@ func createMainWindow(app *gtk.Application) {
 
 	ignoreCaseBtn = gtk.NewCheckButtonWithLabel("忽略大小写")
 	ignoreCaseBtn.SetActive(false)
-	advancedBox.Append(ignoreCaseBtn)
+	filtersRow.Append(ignoreCaseBtn)
 
 	basenameBtn = gtk.NewCheckButtonWithLabel("仅文件名")
 	basenameBtn.SetActive(false)
-	advancedBox.Append(basenameBtn)
+	filtersRow.Append(basenameBtn)
 
 	modeDropDown = gtk.NewDropDownFromStrings([]string{"普通", "正则", "通配符", "多词"})
 	modeDropDown.SetSelected(0)
 	modeDropDown.SetTooltipText("搜索匹配模式")
 	// GtkDropDown 提供整块点击区域且弹层响应快（替代 ComboBoxText 的
 	// 窄点击区/慢 popover，解决“很难弹出、必须精确点文字”问题）。
-	advancedBox.Append(modeDropDown)
-
-	// 内容关键词输入（可选）：与 searchEntry 的路径过滤做 AND（为空则普通路径搜索）
-	contentEntry = gtk.NewEntry()
-	contentEntry.SetPlaceholderText("内容(可选)")
-	contentEntry.SetWidthChars(14)
-	advancedBox.Append(contentEntry)
+	filtersRow.Append(modeDropDown)
 
 	// 文件类型/目录范围/排除/大小过滤与去重（跟随 H5 高级过滤）
 	typesEntry = gtk.NewEntry()
 	typesEntry.SetPlaceholderText("类型(如 go,md)")
 	typesEntry.SetWidthChars(10)
-	advancedBox.Append(typesEntry)
+	filtersRow.Append(typesEntry)
 
 	scopeEntry = gtk.NewEntry()
 	scopeEntry.SetPlaceholderText("仅目录(可选)")
 	scopeEntry.SetWidthChars(12)
-	advancedBox.Append(scopeEntry)
+	filtersRow.Append(scopeEntry)
 
 	excludeEntry = gtk.NewEntry()
 	excludeEntry.SetPlaceholderText("排除(可选)")
 	excludeEntry.SetWidthChars(10)
-	advancedBox.Append(excludeEntry)
+	filtersRow.Append(excludeEntry)
 
 	minSizeEntry = gtk.NewEntry()
 	minSizeEntry.SetPlaceholderText("最小B")
 	minSizeEntry.SetWidthChars(6)
-	advancedBox.Append(minSizeEntry)
+	filtersRow.Append(minSizeEntry)
 
 	maxSizeEntry = gtk.NewEntry()
 	maxSizeEntry.SetPlaceholderText("最大B")
 	maxSizeEntry.SetWidthChars(6)
-	advancedBox.Append(maxSizeEntry)
+	filtersRow.Append(maxSizeEntry)
 
 	mtimeAfterEntry = gtk.NewEntry()
 	mtimeAfterEntry.SetPlaceholderText("改时于此日后")
 	mtimeAfterEntry.SetWidthChars(12)
-	advancedBox.Append(mtimeAfterEntry)
+	filtersRow.Append(mtimeAfterEntry)
 
 	mtimeBeforeEntry = gtk.NewEntry()
 	mtimeBeforeEntry.SetPlaceholderText("改时于此前")
 	mtimeBeforeEntry.SetWidthChars(12)
-	advancedBox.Append(mtimeBeforeEntry)
+	filtersRow.Append(mtimeBeforeEntry)
 
 	dedupeBtn = gtk.NewCheckButtonWithLabel("去重(硬链接)")
 	dedupeBtn.SetActive(false)
-	advancedBox.Append(dedupeBtn)
+	filtersRow.Append(dedupeBtn)
 
 	// Export results button (saves current page as CSV)
 	exportBtn = gtk.NewButtonWithLabel("导出 CSV")
 	exportBtn.Connect("clicked", func() { exportResults("csv") })
-	advancedBox.Append(exportBtn)
+	actionsRow.Append(exportBtn)
 
 	exportJsonBtn = gtk.NewButtonWithLabel("导出 JSON")
 	exportJsonBtn.Connect("clicked", func() { exportResults("json") })
-	advancedBox.Append(exportJsonBtn)
+	actionsRow.Append(exportJsonBtn)
 
 	mainBox.Append(searchBox)
 	mainBox.Append(advancedBox)
