@@ -263,6 +263,9 @@ func createMainWindow(app *gtk.Application) {
 	modeCombo.AppendText("多词")
 	modeCombo.SetActive(0)
 	modeCombo.SetTooltipText("搜索匹配模式")
+	// GTK4 popover 类控件默认 focus-on-click 为关：首次点击只获得焦点而不
+	// 弹列表（显得“很难弹出”）。开启后单击即弹出。
+	modeCombo.SetFocusOnClick(true)
 	advancedBox.Append(modeCombo)
 
 	contentBtn = gtk.NewCheckButtonWithLabel("内容搜索")
