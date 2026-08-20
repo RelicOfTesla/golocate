@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"time"
 
 	svc "github.com/RelicOfTesla/golocate/internal/svc"
 	cliclient "github.com/RelicOfTesla/golocate/pkg/cli"
@@ -42,10 +43,11 @@ var (
 	flagRegex      bool
 
 	// Index flags
-	flagBuild    bool
-	flagSchedule string
-	flagStrategy string
-	flagSort     string
+	flagBuild       bool
+	flagSchedule    string
+	flagStrategy    string
+	flagIdleTimeout string
+	flagSort        string
 
 	// Config flags
 	flagConfig      string
@@ -95,6 +97,7 @@ With --service flag, it starts the background service that maintains file indexe
 	rootCmd.Flags().BoolVar(&flagBuild, "build", false, "request index rebuild")
 	rootCmd.Flags().StringVar(&flagSchedule, "schedule", "", "schedule periodic index rebuild (e.g., '2h', '30m')")
 	rootCmd.Flags().StringVar(&flagStrategy, "strategy", "", "index update strategy: 'replace', 'merge', or 'auto' (default: auto)")
+	rootCmd.Flags().StringVar(&flagIdleTimeout, "idle-timeout", "", "auto-exit after this long without any request (e.g. '1h'; empty = never)")
 
 	// Config flags
 	rootCmd.Flags().StringVarP(&flagConfig, "config", "c", "", "config file path")
@@ -577,7 +580,16 @@ func runAsServer(cfg *config.Config) {
 	}
 
 	// Run the service
-	err := svc.Run(cfg, configPath)
+	idle := time.Duration(0)
+	if flagIdleTimeout != "" {
+		dur, derr := time.ParseDuration(flagIdleTimeout)
+		if derr != nil {
+			slog.Error("invalid --idle-timeout", "error", derr, "value", flagIdleTimeout)
+			os.Exit(1)
+		}
+		idle = dur
+	}
+	err := svc.Run(cfg, configPath, idle)
 	if err != nil {
 		slog.Error("failed to run daemon", "error", err)
 		os.Exit(1)

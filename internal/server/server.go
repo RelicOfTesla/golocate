@@ -101,6 +101,9 @@ type Server struct {
 	contentSearchCount atomic.Int64
 	openCount          atomic.Int64
 	buildCount         atomic.Int64
+	// lastActivity records the last client activity (UnixNano) for the daemon's
+	// idle auto-exit (--idle-timeout).
+	lastActivity atomic.Int64
 
 	// sorted-page cache: path searches with a sort field remember the
 	// filtered+sorted result list so subsequent pages (e.g. CLI streaming)
@@ -314,6 +317,7 @@ func (s *Server) handleConnection(conn net.Conn) {
 		s.sendLegacyError(conn, fmt.Sprintf("failed to parse message: %v", err))
 		return
 	}
+	s.Touch() // a request was received — counts as activity (idle auto-exit)
 
 	slog.Debug("message parsed", "id", msg.ID(), "method", msg.Method())
 
@@ -359,6 +363,26 @@ func (s *Server) sendLegacyError(conn net.Conn, errMsg string) {
 }
 
 // ========== 方法处理器（实现 MethodHandler 接口） ==========
+
+// Touch records client activity (called when a connection is accepted).
+func (s *Server) Touch() { s.lastActivity.Store(time.Now().UnixNano()) }
+
+// LastActivity returns the last client activity time as nanoseconds since the
+// Unix epoch (0 if never contacted).
+func (s *Server) LastActivity() int64 { return s.lastActivity.Load() }
+
+// IdleDuration returns how long the server has been idle (no request
+// received). With no request ever received it counts from server start.
+func (s *Server) IdleDuration() time.Duration {
+	last := s.lastActivity.Load()
+	if last <= 0 {
+		if s.startTime.IsZero() {
+			return 0
+		}
+		return time.Since(s.startTime)
+	}
+	return time.Since(time.Unix(0, last))
+}
 
 // handleSearchHandler 处理搜索请求（Message 接口）
 func (s *Server) handleSearchHandler(ctx context.Context, msg message.Message) (any, error) {

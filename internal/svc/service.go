@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -23,16 +24,17 @@ import (
 
 // DaemonService implements service.Interface for cross-platform service management.
 type DaemonService struct {
-	cfg        *config.Config
-	configPath string // 配置文件路径
-	db         *database.DB
-	persister  persist.Strategy // pluggable persistence component
-	watcher    watcher.Watcher
-	updater    *index.Updater
-	server     *server.Server
-	scheduler  *scheduler.Scheduler
-	ctx        context.Context
-	cancel     context.CancelFunc
+	cfg         *config.Config
+	configPath  string // 配置文件路径
+	db          *database.DB
+	persister   persist.Strategy // pluggable persistence component
+	watcher     watcher.Watcher
+	updater     *index.Updater
+	server      *server.Server
+	scheduler   *scheduler.Scheduler
+	ctx         context.Context
+	cancel      context.CancelFunc
+	idleTimeout time.Duration // >0: auto-exit after this long without any request
 
 	// ignoreMatcher filters watcher events for ignored paths so the index
 	// stays consistent with the builder's ignore patterns.
@@ -659,9 +661,13 @@ func Stop() error {
 	return nil
 }
 
-// Run runs the service (called by service manager).
-func Run(cfg *config.Config, configPath string) error {
+// Run runs the service (called by service manager). idleTimeout > 0 makes the
+// daemon exit automatically after that long without receiving any request
+// (0 = never; default).
+func Run(cfg *config.Config, configPath string, idleTimeout time.Duration) error {
 	d := NewDaemonService(cfg, configPath)
+	d.idleTimeout = idleTimeout
+	go d.idleWatch()
 	svcConfig := ServiceConfig()
 	svc, err := service.New(d, svcConfig)
 	if err != nil {
@@ -669,6 +675,54 @@ func Run(cfg *config.Config, configPath string) error {
 	}
 
 	return svc.Run()
+}
+
+// idleWatch periodically checks whether the server has been idle (no request)
+// for >= idleTimeout and, if so, cleans up and exits. 0/absent timeout disables it.
+func (d *DaemonService) idleWatch() {
+	if d.idleTimeout <= 0 {
+		return
+	}
+	tk := time.NewTicker(30 * time.Second)
+	defer tk.Stop()
+	for {
+		select {
+		case <-d.ctx.Done():
+			return
+		case <-tk.C:
+		}
+		if d.server == nil {
+			continue
+		}
+		dur := d.server.IdleDuration()
+		if dur > 0 && dur >= d.idleTimeout {
+			slog.Info("idle timeout reached, auto-exiting daemon",
+				"idle_timeout", d.idleTimeout.String(), "idle_for", dur.Round(time.Second).String())
+			d.idleExit()
+			return
+		}
+	}
+}
+
+// idleExit performs a graceful cleanup (flush persistence, stop watcher,
+// scheduler, server) and exits the process.
+func (d *DaemonService) idleExit() {
+	if d.scheduler != nil {
+		d.scheduler.Stop()
+	}
+	if d.persister != nil {
+		if fl, ok := d.persister.(interface{ Flush() error }); ok {
+			_ = fl.Flush()
+		}
+	}
+	if d.watcher != nil {
+		d.watcher.Close()
+	}
+	d.cancel()
+	if d.server != nil {
+		d.server.Stop()
+	}
+	os.Exit(0)
 }
 
 // Status returns the service status.
