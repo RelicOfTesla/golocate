@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -91,13 +92,31 @@ var (
 // Advanced search options
 var (
 	ignoreCaseBtn *gtk.CheckButton
+	basenameBtn   *gtk.CheckButton // 仅文件名（跟随 H5）
 	contentBtn    *gtk.CheckButton
-	contentEntry  *gtk.Entry        // 独立内容关键词（与 searchEntry 路径过滤 AND，跟随 H5）
-	typesEntry    *gtk.Entry        // 类型过滤（逗号/空格分隔，可选）
-	dedupeBtn     *gtk.CheckButton  // 硬链接去重
-	modeDropDown  *gtk.DropDown // 搜索模式（普通/正则/通配符/多词）——GTK4 DropDown 整块可点、弹出响应快
+	contentEntry  *gtk.Entry       // 独立内容关键词（与 searchEntry 路径过滤 AND，跟随 H5）
+	typesEntry    *gtk.Entry       // 类型过滤（逗号/空格分隔，可选）
+	scopeEntry    *gtk.Entry       // 目录范围（可选）
+	excludeEntry  *gtk.Entry       // 排除（逗号/空格分隔，可选）
+	minSizeEntry  *gtk.Entry       // 最小大小(B)，可选
+	maxSizeEntry  *gtk.Entry       // 最大大小(B)，可选
+	dedupeBtn     *gtk.CheckButton // 硬链接去重
+	modeDropDown  *gtk.DropDown    // 搜索模式（普通/正则/通配符/多词）
 	exportBtn     *gtk.Button
+	copyBtn       *gtk.Button // 复制选中路径（跟随 H5）
 )
+
+// parseSizeValue parses an optional byte-size filter from an entry (empty -> 0).
+func parseSizeValue(e *gtk.Entry) int64 {
+	if e == nil {
+		return 0
+	}
+	v, err := strconv.ParseInt(strings.TrimSpace(e.Text()), 10, 64)
+	if err != nil || v < 0 {
+		return 0
+	}
+	return v
+}
 
 // parseTypeList splits a comma/space separated type filter (e.g. "go, md").
 func parseTypeList(s string) []string {
@@ -249,12 +268,21 @@ func createMainWindow(app *gtk.Application) {
 	openDirBtn.SetTooltipText("打开选中文件所在的目录")
 	toolBox.Append(openDirBtn)
 
+	copyBtn = gtk.NewButtonWithLabel("复制路径")
+	copyBtn.SetTooltipText("复制选中文件的完整路径")
+	copyBtn.Connect("clicked", copySelectedPath)
+	toolBox.Append(copyBtn)
+
 	// 第三行：高级搜索选项
 	advancedBox := gtk.NewBox(gtk.OrientationHorizontal, 10)
 
 	ignoreCaseBtn = gtk.NewCheckButtonWithLabel("忽略大小写")
 	ignoreCaseBtn.SetActive(false)
 	advancedBox.Append(ignoreCaseBtn)
+
+	basenameBtn = gtk.NewCheckButtonWithLabel("仅文件名")
+	basenameBtn.SetActive(false)
+	advancedBox.Append(basenameBtn)
 
 	modeDropDown = gtk.NewDropDownFromStrings([]string{"普通", "正则", "通配符", "多词"})
 	modeDropDown.SetSelected(0)
@@ -273,11 +301,31 @@ func createMainWindow(app *gtk.Application) {
 	contentEntry.SetWidthChars(14)
 	advancedBox.Append(contentEntry)
 
-	// 文件类型过滤与硬链接去重（跟随 H5 高级过滤）
+	// 文件类型/目录范围/排除/大小过滤与去重（跟随 H5 高级过滤）
 	typesEntry = gtk.NewEntry()
 	typesEntry.SetPlaceholderText("类型(如 go,md)")
-	typesEntry.SetWidthChars(12)
+	typesEntry.SetWidthChars(10)
 	advancedBox.Append(typesEntry)
+
+	scopeEntry = gtk.NewEntry()
+	scopeEntry.SetPlaceholderText("仅目录(可选)")
+	scopeEntry.SetWidthChars(12)
+	advancedBox.Append(scopeEntry)
+
+	excludeEntry = gtk.NewEntry()
+	excludeEntry.SetPlaceholderText("排除(可选)")
+	excludeEntry.SetWidthChars(10)
+	advancedBox.Append(excludeEntry)
+
+	minSizeEntry = gtk.NewEntry()
+	minSizeEntry.SetPlaceholderText("最小B")
+	minSizeEntry.SetWidthChars(6)
+	advancedBox.Append(minSizeEntry)
+
+	maxSizeEntry = gtk.NewEntry()
+	maxSizeEntry.SetPlaceholderText("最大B")
+	maxSizeEntry.SetWidthChars(6)
+	advancedBox.Append(maxSizeEntry)
 
 	dedupeBtn = gtk.NewCheckButtonWithLabel("去重(硬链接)")
 	dedupeBtn.SetActive(false)
@@ -527,6 +575,25 @@ func selectedResultPath() (string, bool) {
 	return p, true
 }
 
+// copySelectedPath copies the selected row's path to the system clipboard.
+func copySelectedPath() {
+	p, ok := selectedResultPath()
+	if !ok {
+		resultsInfoLabel.SetText("请先选择一行")
+		return
+	}
+	disp := gdk.DisplayGetDefault()
+	if disp == nil {
+		return
+	}
+	clip := disp.Clipboard()
+	if clip == nil {
+		return
+	}
+	clip.SetText(p)
+	resultsInfoLabel.SetText("已复制: " + p)
+}
+
 // openWithSystemApp opens the given file/directory with the platform's
 // default application (xdg-open on Linux, open on macOS, explorer on Windows).
 func openWithSystemApp(p string) {
@@ -697,6 +764,17 @@ func performSearch(c *client.Client, query string) {
 		types = parseTypeList(typesEntry.Text())
 	}
 	dedupe := dedupeBtn != nil && dedupeBtn.Active()
+	basename := basenameBtn != nil && basenameBtn.Active()
+	scopeText := ""
+	if scopeEntry != nil {
+		scopeText = strings.TrimSpace(scopeEntry.Text())
+	}
+	exclude := parseTypeList("")
+	if excludeEntry != nil {
+		exclude = parseTypeList(excludeEntry.Text())
+	}
+	minSize := parseSizeValue(minSizeEntry)
+	maxSize := parseSizeValue(maxSizeEntry)
 
 	var entries []*index.Entry
 	var matches []*client.ContentMatch
@@ -721,6 +799,11 @@ func performSearch(c *client.Client, query string) {
 			PatternMode: modeFromUI(),
 			Types:       types,
 			Dedupe:      dedupe,
+			Basename:    basename,
+			Scope:       scopeText,
+			Exclude:     exclude,
+			MinSize:     minSize,
+			MaxSize:     maxSize,
 		})
 		if err == nil {
 			matches = cres.Matches
@@ -748,6 +831,11 @@ func performSearch(c *client.Client, query string) {
 			PatternMode: modeFromUI(),
 			Types:       types,
 			Dedupe:      dedupe,
+			Basename:    basename,
+			Scope:       scopeText,
+			Exclude:     exclude,
+			MinSize:     minSize,
+			MaxSize:     maxSize,
 			SortField:   sortField, // 服务端全局排序，翻页一致
 			SortOrder:   sortOrder,
 		})
@@ -925,6 +1013,17 @@ func exportResults() {
 		types = parseTypeList(typesEntry.Text())
 	}
 	dedupe := dedupeBtn != nil && dedupeBtn.Active()
+	basename := basenameBtn != nil && basenameBtn.Active()
+	scopeText := ""
+	if scopeEntry != nil {
+		scopeText = strings.TrimSpace(scopeEntry.Text())
+	}
+	exclude := parseTypeList("")
+	if excludeEntry != nil {
+		exclude = parseTypeList(excludeEntry.Text())
+	}
+	minSize := parseSizeValue(minSizeEntry)
+	maxSize := parseSizeValue(maxSizeEntry)
 
 	dir, err := os.UserHomeDir()
 	if err != nil {
@@ -953,6 +1052,11 @@ func exportResults() {
 				PatternMode: modeFromUI(),
 				Types:       types,
 				Dedupe:      dedupe,
+				Basename:    basename,
+				Scope:       scopeText,
+				Exclude:     exclude,
+				MinSize:     minSize,
+				MaxSize:     maxSize,
 				SortField:   sortField,
 				SortOrder:   sortOrder,
 			}
