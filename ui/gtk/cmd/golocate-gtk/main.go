@@ -225,63 +225,66 @@ func createMainWindow(app *gtk.Application) {
 	searchBtn := gtk.NewButtonWithLabel("Search")
 	searchBox.Append(searchBtn)
 
-	// Create status button
+	// 第二行：结果操作与工具按钮
+	toolBox := gtk.NewBox(gtk.OrientationHorizontal, 8)
+
 	statusBtn := gtk.NewButtonWithLabel("Status")
-	searchBox.Append(statusBtn)
+	toolBox.Append(statusBtn)
 
-	// Create config button
 	configBtn := gtk.NewButtonWithLabel("Config")
-	searchBox.Append(configBtn)
+	toolBox.Append(configBtn)
 
-	// Rebuild index button
 	rebuildBtn := gtk.NewButtonWithLabel("重建索引")
 	rebuildBtn.SetTooltipText("请求服务端重建索引")
-	searchBox.Append(rebuildBtn)
+	toolBox.Append(rebuildBtn)
 
-	// Open buttons (operate on the selected result row)
 	openBtn := gtk.NewButtonWithLabel("打开")
 	openBtn.SetTooltipText("打开选中的文件 (双击结果行亦可)")
-	searchBox.Append(openBtn)
+	toolBox.Append(openBtn)
 
 	openDirBtn := gtk.NewButtonWithLabel("打开目录")
 	openDirBtn.SetTooltipText("打开选中文件所在的目录")
-	searchBox.Append(openDirBtn)
+	toolBox.Append(openDirBtn)
 
-	// Advanced search options
+	// 第三行：高级搜索选项
+	advancedBox := gtk.NewBox(gtk.OrientationHorizontal, 10)
+
 	ignoreCaseBtn = gtk.NewCheckButtonWithLabel("忽略大小写")
 	ignoreCaseBtn.SetActive(false)
-	searchBox.Append(ignoreCaseBtn)
+	advancedBox.Append(ignoreCaseBtn)
 
 	regexBtn = gtk.NewCheckButtonWithLabel("正则")
 	regexBtn.SetActive(false)
-	searchBox.Append(regexBtn)
+	advancedBox.Append(regexBtn)
 
 	contentBtn = gtk.NewCheckButtonWithLabel("内容搜索")
 	contentBtn.SetActive(false)
-	searchBox.Append(contentBtn)
+	advancedBox.Append(contentBtn)
 
 	// 内容关键词输入（可选）：与 searchEntry 的路径过滤做 AND
 	contentEntry = gtk.NewEntry()
 	contentEntry.SetPlaceholderText("内容(可选)")
 	contentEntry.SetWidthChars(14)
-	searchBox.Append(contentEntry)
+	advancedBox.Append(contentEntry)
 
 	// 文件类型过滤与硬链接去重（跟随 H5 高级过滤）
 	typesEntry = gtk.NewEntry()
 	typesEntry.SetPlaceholderText("类型(如 go,md)")
 	typesEntry.SetWidthChars(12)
-	searchBox.Append(typesEntry)
+	advancedBox.Append(typesEntry)
 
 	dedupeBtn = gtk.NewCheckButtonWithLabel("去重(硬链接)")
 	dedupeBtn.SetActive(false)
-	searchBox.Append(dedupeBtn)
+	advancedBox.Append(dedupeBtn)
 
 	// Export results button (saves current page as CSV)
 	exportBtn = gtk.NewButtonWithLabel("导出 CSV")
 	exportBtn.Connect("clicked", exportResults)
-	searchBox.Append(exportBtn)
+	toolBox.Append(exportBtn)
 
 	mainBox.Append(searchBox)
+	mainBox.Append(toolBox)
+	mainBox.Append(advancedBox)
 
 	// Create results info label
 	resultsInfoLabel = gtk.NewLabel("")
