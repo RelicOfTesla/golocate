@@ -547,6 +547,18 @@ func createMainWindow(app *gtk.Application) {
 		return false
 	})
 
+	// 右键菜单：在右键位置弹出 打开/打开目录/复制路径/收藏
+	gesture := gtk.NewGestureClick()
+	gesture.SetButton(3)
+	gesture.ConnectPressed(func(_ int, x, y float64) {
+		px, py := int(x), int(y)
+		if tp, _, _, _, ok := resultsTree.PathAtPos(px, py); ok {
+			resultsTree.SetCursor(tp, nil, false)
+		}
+		showRowContextMenu(px, py)
+	})
+	resultsTree.AddController(gesture)
+
 	scrolled.SetChild(resultsTree)
 
 	mainBox.Append(scrolled)
@@ -864,13 +876,38 @@ func showFavoritesDialog() { showPathsDialog("收藏", loadFavorites()) }
 // showRecentsDialog lists recently-opened paths for quick open.
 func showRecentsDialog() { showPathsDialog("最近打开", loadRecents()) }
 
-// copySelectedPath copies the selected row's path to the system clipboard.
-func copySelectedPath() {
-	p, ok := selectedResultPath()
-	if !ok {
-		resultsInfoLabel.SetText("请先选择一行")
-		return
+// isFavoritePath reports whether a path is in the favorites list.
+func isFavoritePath(p string) bool {
+	for _, f := range loadFavorites() {
+		if f == p {
+			return true
+		}
 	}
+	return false
+}
+
+// toggleFavoritePath toggles a path in the favorites list (no UI state side effects).
+func toggleFavoritePath(p string) {
+	favs := loadFavorites()
+	idx := -1
+	for i, f := range favs {
+		if f == p {
+			idx = i
+			break
+		}
+	}
+	if idx >= 0 {
+		favs = append(favs[:idx], favs[idx+1:]...)
+		resultsInfoLabel.SetText("已取消收藏: " + p)
+	} else {
+		favs = append([]string{p}, favs...)
+		resultsInfoLabel.SetText("已收藏: " + p)
+	}
+	saveFavorites(favs)
+}
+
+// copyPathToClipboard copies a path to the system clipboard.
+func copyPathToClipboard(p string) {
 	disp := gdk.DisplayGetDefault()
 	if disp == nil {
 		return
@@ -881,6 +918,55 @@ func copySelectedPath() {
 	}
 	clip.SetText(p)
 	resultsInfoLabel.SetText("已复制: " + p)
+}
+
+// showRowContextMenu shows the right-click menu at (x, y) on the results tree.
+func showRowContextMenu(x, y int) {
+	p, ok := selectedResultPath()
+	if !ok {
+		return
+	}
+	pop := gtk.NewPopover()
+	box := gtk.NewBox(gtk.OrientationVertical, 2)
+	box.SetMarginTop(6)
+	box.SetMarginBottom(6)
+	box.SetMarginStart(10)
+	box.SetMarginEnd(10)
+
+	addItem := func(label string, fn func()) {
+		b := gtk.NewButtonWithLabel(label)
+		b.SetHAlign(gtk.AlignStart)
+		b.Connect("clicked", func() {
+			fn()
+			pop.Popdown()
+		})
+		box.Append(b)
+	}
+
+	addItem("打开", func() { openWithSystemApp(p) })
+	addItem("打开目录", func() { openWithSystemApp(filepath.Dir(p)) })
+	addItem("复制路径", func() { copyPathToClipboard(p) })
+	if isFavoritePath(p) {
+		addItem("取消收藏", func() { toggleFavoritePath(p) })
+	} else {
+		addItem("收藏", func() { toggleFavoritePath(p) })
+	}
+
+	pop.SetChild(box)
+	pop.SetPosition(gtk.PosRight)
+	rect := gdk.NewRectangle(x, y, 1, 1)
+	pop.SetPointingTo(&rect)
+	pop.Popup()
+}
+
+// copySelectedPath copies the selected row's path to the system clipboard.
+func copySelectedPath() {
+	p, ok := selectedResultPath()
+	if !ok {
+		resultsInfoLabel.SetText("请先选择一行")
+		return
+	}
+	copyPathToClipboard(p)
 }
 
 // openWithSystemApp opens the given file/directory with the platform's
