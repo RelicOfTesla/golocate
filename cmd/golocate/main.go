@@ -2,11 +2,14 @@
 package main
 
 import (
+	"bufio"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"time"
 
 	cliclient "github.com/RelicOfTesla/golocate/pkg/cli"
 	errpkg "github.com/RelicOfTesla/golocate/pkg/errors"
@@ -40,6 +43,7 @@ var (
 	flagScope        string
 	flagExclude      []string
 	flagTerms        bool
+	flagJSON         bool
 	flagTypes        []string
 	flagMinSize      string
 	flagMaxSize      string
@@ -121,6 +125,7 @@ func init() {
 	rootCmd.Flags().StringVar(&flagScope, "scope", "", "only search under this directory")
 	rootCmd.Flags().StringSliceVar(&flagExclude, "exclude", nil, "exclude paths matching glob (repeatable)")
 	rootCmd.Flags().BoolVar(&flagTerms, "terms", false, "multi-term mode: space-separated terms are ANDed, '-term' excludes")
+	rootCmd.Flags().BoolVar(&flagJSON, "json", false, "output structured JSON (path results or content matches)")
 
 	// Metadata filters
 	rootCmd.Flags().StringSliceVarP(&flagTypes, "type", "t", nil, "only files with these extensions, e.g. 'go,md' (repeatable)")
@@ -312,6 +317,16 @@ func searchIndex(pattern string, args []string) {
 		opts.MtimeBefore = n
 	}
 
+	// --json: structured machine-readable output.
+	if flagJSON {
+		if opts.Content != "" {
+			jsonContent(opts)
+		} else {
+			jsonStream(opts)
+		}
+		return
+	}
+
 	// --count: fetch only the total (Limit=1) instead of pulling the whole
 	// result set just to count it (docs/PERFORMANCE.md C1).
 	if flagCount && opts.Content == "" && !flagOpen && !flagOpenDir && !flagCopy {
@@ -387,6 +402,99 @@ func searchIndex(pattern string, args []string) {
 	if results.Count == 0 {
 		os.Exit(1)
 	}
+}
+
+// jsonStream prints path search results as a JSON array, streaming page-by-page
+// (bounded memory, server-side sort preserved).
+func jsonStream(opts cliclient.SearchOptions) {
+	const batch = 5000
+	if opts.Sort == "" {
+		opts.Sort = "path:asc" // stable order so paging is seamless
+	}
+	w := bufio.NewWriter(os.Stdout)
+	defer w.Flush()
+	fmt.Fprintln(w, "[")
+	wrote := false
+	total, hasTotal := 0, false
+
+	for offset := 0; ; offset += batch {
+		page := opts
+		page.Limit = batch
+		page.Offset = int64(offset)
+		res, err := cliclient.Search(page)
+		if err != nil {
+			errpkg.PrintFriendlyError(err)
+			slog.Error("json search failed", "offset", offset)
+			fmt.Fprintln(w, "]")
+			os.Exit(1)
+		}
+		if !hasTotal {
+			total, hasTotal = res.Total, true
+		}
+		for _, e := range res.Entries {
+			if wrote {
+				fmt.Fprint(w, ",\n")
+			}
+			b, _ := json.Marshal(map[string]any{
+				"name":     e.Name,
+				"path":     e.Path,
+				"size":     e.Size,
+				"mod_time": fmtModTime(e.ModTime),
+			})
+			fmt.Fprintf(w, "  %s", b)
+			wrote = true
+		}
+		if hasTotal && total > 0 && offset+batch >= total {
+			break
+		}
+		if res.Count < batch && !hasTotal {
+			break
+		}
+	}
+	if wrote {
+		fmt.Fprintln(w)
+	}
+	fmt.Fprintln(w, "]")
+	if !wrote {
+		os.Exit(1)
+	}
+}
+
+// jsonContent prints content-search matches as a JSON array.
+func jsonContent(opts cliclient.SearchOptions) {
+	res, err := cliclient.Search(opts)
+	if err != nil {
+		errpkg.PrintFriendlyError(err)
+		slog.Error("content search failed")
+		os.Exit(1)
+	}
+	arr := make([]map[string]any, 0, len(res.Matches))
+	for _, m := range res.Matches {
+		ctx := make([]string, 0, len(m.Before)+len(m.After))
+		ctx = append(ctx, m.Before...)
+		ctx = append(ctx, m.After...)
+		arr = append(arr, map[string]any{
+			"path":     m.Path,
+			"line_num": m.LineNum,
+			"line":     m.Line,
+			"match":    m.Match,
+			"context":  ctx,
+		})
+	}
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	_ = enc.Encode(arr)
+	if len(arr) == 0 {
+		os.Exit(1)
+	}
+}
+
+// fmtModTime formats a modtime for JSON output (RFC3339, empty if zero).
+func fmtModTime(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.Format(time.RFC3339)
 }
 
 // streamSearch fetches a path search page-by-page (streamBatch per page) and
