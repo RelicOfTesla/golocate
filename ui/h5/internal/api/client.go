@@ -115,24 +115,28 @@ type SearchParams struct {
 	Types       []string // file extension filters (e.g. "go")
 	MinSize     int64    // min file size in bytes
 	MaxSize     int64    // max file size in bytes
+	MtimeAfter  int64    // unix seconds; only entries modified after
+	MtimeBefore int64    // unix seconds; only entries modified before
 }
 
 // searchOptions converts HTTP-level search params into index.SearchOptions.
 // Pure function, unit-testable without a socket.
 func searchOptions(p SearchParams) index.SearchOptions {
 	opts := index.SearchOptions{
-		IgnoreCase: p.IgnoreCase,
-		Basename:   p.Basename,
-		Dedupe:     p.Dedupe,
-		Limit:      p.Limit,
-		Offset:     p.Offset,
-		SortField:  p.SortField,
-		SortOrder:  p.SortOrder,
-		Scope:      p.Scope,
-		Exclude:    p.Exclude,
-		Types:      p.Types,
-		MinSize:    p.MinSize,
-		MaxSize:    p.MaxSize,
+		IgnoreCase:  p.IgnoreCase,
+		Basename:    p.Basename,
+		Dedupe:      p.Dedupe,
+		Limit:       p.Limit,
+		Offset:      p.Offset,
+		SortField:   p.SortField,
+		SortOrder:   p.SortOrder,
+		Scope:       p.Scope,
+		Exclude:     p.Exclude,
+		Types:       p.Types,
+		MinSize:     p.MinSize,
+		MaxSize:     p.MaxSize,
+		MtimeAfter:  p.MtimeAfter,
+		MtimeBefore: p.MtimeBefore,
 	}
 	if p.Regex {
 		opts.PatternMode = index.PatternModeExtendedRegex

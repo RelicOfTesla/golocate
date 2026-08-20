@@ -91,19 +91,21 @@ var (
 
 // Advanced search options
 var (
-	ignoreCaseBtn *gtk.CheckButton
-	basenameBtn   *gtk.CheckButton // 仅文件名（跟随 H5）
-	contentBtn    *gtk.CheckButton
-	contentEntry  *gtk.Entry       // 独立内容关键词（与 searchEntry 路径过滤 AND，跟随 H5）
-	typesEntry    *gtk.Entry       // 类型过滤（逗号/空格分隔，可选）
-	scopeEntry    *gtk.Entry       // 目录范围（可选）
-	excludeEntry  *gtk.Entry       // 排除（逗号/空格分隔，可选）
-	minSizeEntry  *gtk.Entry       // 最小大小(B)，可选
-	maxSizeEntry  *gtk.Entry       // 最大大小(B)，可选
-	dedupeBtn     *gtk.CheckButton // 硬链接去重
-	modeDropDown  *gtk.DropDown    // 搜索模式（普通/正则/通配符/多词）
-	exportBtn     *gtk.Button
-	copyBtn       *gtk.Button // 复制选中路径（跟随 H5）
+	ignoreCaseBtn    *gtk.CheckButton
+	basenameBtn      *gtk.CheckButton // 仅文件名（跟随 H5）
+	contentBtn       *gtk.CheckButton
+	contentEntry     *gtk.Entry       // 独立内容关键词（与 searchEntry 路径过滤 AND，跟随 H5）
+	typesEntry       *gtk.Entry       // 类型过滤（逗号/空格分隔，可选）
+	scopeEntry       *gtk.Entry       // 目录范围（可选）
+	excludeEntry     *gtk.Entry       // 排除（逗号/空格分隔，可选）
+	minSizeEntry     *gtk.Entry       // 最小大小(B)，可选
+	maxSizeEntry     *gtk.Entry       // 最大大小(B)，可选
+	mtimeAfterEntry  *gtk.Entry       // 修改时间在此之后(YYYY-MM-DD[ HH:MM])，可选
+	mtimeBeforeEntry *gtk.Entry       // 修改时间在此之前(YYYY-MM-DD[ HH:MM])，可选
+	dedupeBtn        *gtk.CheckButton // 硬链接去重
+	modeDropDown     *gtk.DropDown    // 搜索模式（普通/正则/通配符/多词）
+	exportBtn        *gtk.Button
+	copyBtn          *gtk.Button // 复制选中路径（跟随 H5）
 )
 
 // parseSizeValue parses an optional byte-size filter from an entry (empty -> 0).
@@ -116,6 +118,24 @@ func parseSizeValue(e *gtk.Entry) int64 {
 		return 0
 	}
 	return v
+}
+
+// parseMtimeValue parses an optional mtime filter (YYYY-MM-DD[ HH:MM]) to
+// Unix seconds; empty/invalid -> 0 (no filter).
+func parseMtimeValue(e *gtk.Entry) int64 {
+	if e == nil {
+		return 0
+	}
+	v := strings.TrimSpace(e.Text())
+	if v == "" {
+		return 0
+	}
+	for _, layout := range []string{"2006-01-02 15:04", "2006-01-02"} {
+		if t, err := time.Parse(layout, v); err == nil {
+			return t.Unix()
+		}
+	}
+	return 0
 }
 
 // parseTypeList splits a comma/space separated type filter (e.g. "go, md").
@@ -370,6 +390,16 @@ func createMainWindow(app *gtk.Application) {
 	maxSizeEntry.SetPlaceholderText("最大B")
 	maxSizeEntry.SetWidthChars(6)
 	advancedBox.Append(maxSizeEntry)
+
+	mtimeAfterEntry = gtk.NewEntry()
+	mtimeAfterEntry.SetPlaceholderText("改时于此日后")
+	mtimeAfterEntry.SetWidthChars(12)
+	advancedBox.Append(mtimeAfterEntry)
+
+	mtimeBeforeEntry = gtk.NewEntry()
+	mtimeBeforeEntry.SetPlaceholderText("改时于此前")
+	mtimeBeforeEntry.SetWidthChars(12)
+	advancedBox.Append(mtimeBeforeEntry)
 
 	dedupeBtn = gtk.NewCheckButtonWithLabel("去重(硬链接)")
 	dedupeBtn.SetActive(false)
@@ -840,6 +870,8 @@ func performSearch(c *client.Client, query string) {
 	}
 	minSize := parseSizeValue(minSizeEntry)
 	maxSize := parseSizeValue(maxSizeEntry)
+	mtimeAfter := parseMtimeValue(mtimeAfterEntry)
+	mtimeBefore := parseMtimeValue(mtimeBeforeEntry)
 
 	var entries []*index.Entry
 	var matches []*client.ContentMatch
@@ -869,6 +901,8 @@ func performSearch(c *client.Client, query string) {
 			Exclude:     exclude,
 			MinSize:     minSize,
 			MaxSize:     maxSize,
+			MtimeAfter:  mtimeAfter,
+			MtimeBefore: mtimeBefore,
 		})
 		if err == nil {
 			matches = cres.Matches
@@ -901,6 +935,8 @@ func performSearch(c *client.Client, query string) {
 			Exclude:     exclude,
 			MinSize:     minSize,
 			MaxSize:     maxSize,
+			MtimeAfter:  mtimeAfter,
+			MtimeBefore: mtimeBefore,
 			SortField:   sortField, // 服务端全局排序，翻页一致
 			SortOrder:   sortOrder,
 		})
@@ -1089,6 +1125,8 @@ func exportResults() {
 	}
 	minSize := parseSizeValue(minSizeEntry)
 	maxSize := parseSizeValue(maxSizeEntry)
+	mtimeAfter := parseMtimeValue(mtimeAfterEntry)
+	mtimeBefore := parseMtimeValue(mtimeBeforeEntry)
 
 	dir, err := os.UserHomeDir()
 	if err != nil {
@@ -1122,6 +1160,8 @@ func exportResults() {
 				Exclude:     exclude,
 				MinSize:     minSize,
 				MaxSize:     maxSize,
+				MtimeAfter:  mtimeAfter,
+				MtimeBefore: mtimeBefore,
 				SortField:   sortField,
 				SortOrder:   sortOrder,
 			}

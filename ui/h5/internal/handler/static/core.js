@@ -367,6 +367,8 @@
             const minSize = document.getElementById('minSizeInput').value;
             const maxSize = document.getElementById('maxSizeInput').value;
             const maxResults = document.getElementById('maxResults').value;
+            const mtimeAfter = document.getElementById('mtimeAfter') ? document.getElementById('mtimeAfter').value.trim() : '';
+            const mtimeBefore = document.getElementById('mtimeBefore') ? document.getElementById('mtimeBefore').value.trim() : '';
             const pageSize = parseInt(maxResults) || 100;
             const offset = (currentPage - 1) * pageSize;
             
@@ -380,6 +382,7 @@
                     '&type=' + encodeURIComponent(types) +
                     '&exclude=' + encodeURIComponent(exclude) +
                     '&min_size=' + minSize + '&max_size=' + maxSize +
+                    '&mtime_after=' + encodeURIComponent(mtimeAfter) + '&mtime_before=' + encodeURIComponent(mtimeBefore) +
                     '&limit=' + pageSize + '&offset=' + offset;
                 if (contentMode) {
                     url += '&content=' + encodeURIComponent(content);
@@ -678,6 +681,7 @@
                     '&type=' + encodeURIComponent(types) +
                     '&exclude=' + encodeURIComponent(exclude) +
                     '&min_size=' + minSize + '&max_size=' + maxSize +
+                    '&mtime_after=' + encodeURIComponent(mtimeAfter) + '&mtime_before=' + encodeURIComponent(mtimeBefore) +
                     (contentMode ? '&content=' + encodeURIComponent(contentKw) : '');
 
             // Stream the export page-by-page (paths only; content search is

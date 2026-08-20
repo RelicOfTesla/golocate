@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/RelicOfTesla/golocate/ui/h5/internal/api"
 )
@@ -141,6 +142,15 @@ func (h *Handler) Search(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// mtime ranges (YYYY-MM-DD[ HH:MM]) -> unix seconds
+	var mtimeAfter, mtimeBefore int64
+	if v := r.URL.Query().Get("mtime_after"); v != "" {
+		mtimeAfter = parseMtimeQuery(v)
+	}
+	if v := r.URL.Query().Get("mtime_before"); v != "" {
+		mtimeBefore = parseMtimeQuery(v)
+	}
+
 	// Call API client with parsed parameters
 	resp, err := h.client.Search(api.SearchParams{
 		Pattern:     params.Pattern,
@@ -159,6 +169,8 @@ func (h *Handler) Search(w http.ResponseWriter, r *http.Request) {
 		Types:       types,
 		MinSize:     minSize,
 		MaxSize:     maxSize,
+		MtimeAfter:  mtimeAfter,
+		MtimeBefore: mtimeBefore,
 	})
 	if err != nil {
 		slog.Error("search error", "error", err)
@@ -314,6 +326,20 @@ func (h *Handler) SetConfig(w http.ResponseWriter, r *http.Request) {
 }
 
 // splitCSV splits a comma-separated list, trimming spaces and dropping empties.
+// parseMtimeQuery parses "YYYY-MM-DD[ HH:MM]" into unix seconds (0 on error/empty).
+func parseMtimeQuery(v string) int64 {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return 0
+	}
+	for _, layout := range []string{"2006-01-02 15:04", "2006-01-02"} {
+		if t, err := time.Parse(layout, v); err == nil {
+			return t.Unix()
+		}
+	}
+	return 0
+}
+
 func splitCSV(s string) []string {
 	if s == "" {
 		return nil
