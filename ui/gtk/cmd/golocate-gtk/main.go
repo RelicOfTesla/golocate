@@ -92,8 +92,24 @@ var (
 	ignoreCaseBtn *gtk.CheckButton
 	regexBtn      *gtk.CheckButton
 	contentBtn    *gtk.CheckButton
+	contentEntry  *gtk.Entry       // 独立内容关键词（与 searchEntry 路径过滤 AND，跟随 H5）
+	typesEntry    *gtk.Entry       // 类型过滤（逗号/空格分隔，可选）
+	dedupeBtn     *gtk.CheckButton // 硬链接去重
 	exportBtn     *gtk.Button
 )
+
+// parseTypeList splits a comma/space separated type filter (e.g. "go, md").
+func parseTypeList(s string) []string {
+	var out []string
+	for _, f := range strings.FieldsFunc(s, func(r rune) bool {
+		return r == ',' || r == ' ' || r == '\t'
+	}) {
+		if f != "" {
+			out = append(out, f)
+		}
+	}
+	return out
+}
 
 // historyFile returns the path of the search-history file.
 func historyFile() string {
@@ -243,6 +259,22 @@ func createMainWindow(app *gtk.Application) {
 	contentBtn = gtk.NewCheckButtonWithLabel("内容搜索")
 	contentBtn.SetActive(false)
 	searchBox.Append(contentBtn)
+
+	// 内容关键词输入（可选）：与 searchEntry 的路径过滤做 AND
+	contentEntry = gtk.NewEntry()
+	contentEntry.SetPlaceholderText("内容(可选)")
+	contentEntry.SetWidthChars(14)
+	searchBox.Append(contentEntry)
+
+	// 文件类型过滤与硬链接去重（跟随 H5 高级过滤）
+	typesEntry = gtk.NewEntry()
+	typesEntry.SetPlaceholderText("类型(如 go,md)")
+	typesEntry.SetWidthChars(12)
+	searchBox.Append(typesEntry)
+
+	dedupeBtn = gtk.NewCheckButtonWithLabel("去重(硬链接)")
+	dedupeBtn.SetActive(false)
+	searchBox.Append(dedupeBtn)
 
 	// Export results button (saves current page as CSV)
 	exportBtn = gtk.NewButtonWithLabel("导出 CSV")
@@ -639,7 +671,18 @@ func performSearch(c *client.Client, query string) {
 	// Calculate offset
 	offset := int64((pagination.currentPage - 1) * pagination.pageSize)
 
-	contentMode := contentBtn != nil && contentBtn.Active()
+	// 内容搜索词：优先取独立内容输入框（与路径词 AND 跟随 H5）；否则兼容旧 contentBtn。
+	contentKeyword := ""
+	if contentEntry != nil {
+		contentKeyword = strings.TrimSpace(contentEntry.Text())
+	}
+	contentMode := (contentBtn != nil && contentBtn.Active()) || contentKeyword != ""
+
+	types := parseTypeList("")
+	if typesEntry != nil {
+		types = parseTypeList(typesEntry.Text())
+	}
+	dedupe := dedupeBtn != nil && dedupeBtn.Active()
 
 	var entries []*index.Entry
 	var matches []*client.ContentMatch
@@ -647,13 +690,23 @@ func performSearch(c *client.Client, query string) {
 	var err error
 
 	if contentMode {
-		// Content search: keyword = query, no path pre-filter
+		// Content search：keyword = 内容词；有独立内容输入框时 pattern = 路径过滤（AND），
+		// 只有旧 contentBtn 勾选（无内容词）时保持纯内容搜索（pattern 为空）。
+		kw := contentKeyword
+		pattern := ""
+		if kw == "" {
+			kw = query // 旧 contentBtn 模式：直接用查询词
+		} else {
+			pattern = query
+		}
 		var cres *client.ContentSearchResult
-		cres, err = c.SearchContent("", query, index.SearchOptions{
+		cres, err = c.SearchContent(pattern, kw, index.SearchOptions{
 			Limit:       pagination.pageSize,
 			Offset:      offset,
 			IgnoreCase:  ignoreCaseBtn.Active(),
 			PatternMode: modeFromUI(),
+			Types:       types,
+			Dedupe:      dedupe,
 		})
 		if err == nil {
 			matches = cres.Matches
@@ -673,6 +726,8 @@ func performSearch(c *client.Client, query string) {
 			Offset:      offset,
 			IgnoreCase:  ignoreCaseBtn.Active(),
 			PatternMode: modeFromUI(),
+			Types:       types,
+			Dedupe:      dedupe,
 		})
 		if err == nil {
 			entries = result.Entries
