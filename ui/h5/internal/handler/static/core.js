@@ -115,6 +115,55 @@
         document.addEventListener('mousemove', colResizeMove);
         document.addEventListener('mouseup', colResizeEnd);
 
+        // ---- Right-click context menu on result rows ----
+        function hideCtxMenu() {
+            const m = document.getElementById('ctxMenu');
+            if (m) m.style.display = 'none';
+        }
+        function showRowContextMenu(i, x, y) {
+            const menu = document.getElementById('ctxMenu');
+            if (!menu) return;
+            const path = resultPathAt(i) || '';
+            let items = '';
+            if (openEnabled) {
+                items += '<button class="ctx-item" data-act="open">' + t('open') + '</button>';
+                items += '<button class="ctx-item" data-act="opendir">' + t('openDir') + '</button>';
+            }
+            items += '<button class="ctx-item" data-act="copy">' + t('copy') + '</button>';
+            const favNow = typeof isFavorite === 'function' && isFavorite(path);
+            items += '<button class="ctx-item" data-act="fav">' + (favNow ? '★ ' + t('unfav') : '☆ ' + t('favorite')) + '</button>';
+            menu.innerHTML = items;
+            menu.style.display = 'block';
+            const w = menu.offsetWidth, h = menu.offsetHeight;
+            menu.style.left = Math.max(4, Math.min(x, window.innerWidth - w - 8)) + 'px';
+            menu.style.top = Math.max(4, Math.min(y, window.innerHeight - h - 8)) + 'px';
+            menu.dataset.index = i;
+        }
+        document.addEventListener('contextmenu', (e) => {
+            const tr = e.target && e.target.closest ? e.target.closest('tr[data-index]') : null;
+            if (!tr || !resultsBody.contains(tr)) return;
+            e.preventDefault();
+            showRowContextMenu(parseInt(tr.dataset.index, 10), e.clientX, e.clientY);
+        });
+        document.addEventListener('click', (e) => {
+            if (!e.target || !e.target.closest || !e.target.closest('#ctxMenu')) hideCtxMenu();
+        }, true);
+        window.addEventListener('scroll', hideCtxMenu, true);
+        document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hideCtxMenu(); });
+        const ctxMenuEl = document.getElementById('ctxMenu');
+        if (ctxMenuEl) {
+            ctxMenuEl.addEventListener('click', (e) => {
+                const act = e.target && e.target.dataset ? e.target.dataset.act : null;
+                if (!act) return;
+                const idx = parseInt(ctxMenuEl.dataset.index, 10);
+                if (act === 'open') openResult(idx);
+                else if (act === 'opendir') openDirResult(idx);
+                else if (act === 'copy') copyResult(idx);
+                else if (act === 'fav') toggleFavorite(idx);
+                hideCtxMenu();
+            });
+        }
+
         
         // Server Status & Index Rebuild
         async function refreshStatus() {
@@ -523,7 +572,7 @@
                     matchTitle = ctx.join('\n');
                 }
                 
-                html += '<tr>';
+                html += '<tr data-index="' + i + '">';
                 html += '<td class="col-name" title="' + escapeHtml(dispName) + '">' + escapeHtml(dispName || '-') + '</td>';
                 html += '<td class="col-path" title="' + escapeHtml(dispPath) + '">' + highlightMatch(dispPath || '-', searchInput.value.trim()) + '</td>';
                 html += '<td class="col-size">' + size + '</td>';
