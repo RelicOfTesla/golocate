@@ -13,6 +13,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/RelicOfTesla/golocate/pkg/ignore"
 	"github.com/RelicOfTesla/golocate/pkg/security"
@@ -52,10 +54,6 @@ type Entry struct {
 	// can be deduplicated. Zero on platforms where they are unavailable.
 	Dev uint64
 	Ino uint64
-	// nameLower is the precomputed lowercase name for case-insensitive search
-	nameLower string
-	// pathLower is the precomputed lowercase path for case-insensitive search
-	pathLower string
 }
 
 // maxRecentEntries caps the in-memory "most recently modified" candidate set
@@ -97,10 +95,6 @@ func (idx *Index) Add(entry *Entry) {
 
 // addLocked adds an entry to the index without locking (caller must hold lock).
 func (idx *Index) addLocked(entry *Entry) {
-	// Precompute lowercase strings for case-insensitive search
-	entry.nameLower = strings.ToLower(entry.Name)
-	entry.pathLower = strings.ToLower(entry.Path)
-
 	// Remove old entry if exists
 	if old, exists := idx.entries[entry.Path]; exists {
 		idx.removeFromNameIndexLocked(old)
@@ -238,15 +232,51 @@ func (idx *Index) Search(opts SearchOptions) []*Entry {
 	return results
 }
 
+// containsFold reports whether sub occurs in s, ignoring case. It is
+// allocation-free (searches fold runes on the fly), so case-insensitive
+// matching does not need per-entry lower-case caches (docs/PERFORMANCE.md S1).
+func containsFold(s, sub string) bool {
+	if sub == "" {
+		return true
+	}
+	if len(sub) > len(s) {
+		return false
+	}
+	for sStart := 0; ; {
+		r, size := utf8.DecodeRuneInString(s[sStart:])
+		if r == utf8.RuneError && size == 0 {
+			break // end of s
+		}
+		si, ni := sStart, 0
+		for ni < len(sub) {
+			tr, tsize := utf8.DecodeRuneInString(s[si:])
+			if tsize == 0 {
+				break
+			}
+			sr, ssize := utf8.DecodeRuneInString(sub[ni:])
+			_ = ssize
+			if unicode.ToLower(tr) != unicode.ToLower(sr) {
+				break
+			}
+			si += tsize
+			ni += utf8.RuneLen(sr)
+		}
+		if ni >= len(sub) {
+			return true
+		}
+		sStart += size
+	}
+	return false
+}
+
 // searchNormal performs a normal substring search.
 func (idx *Index) searchNormal(query string, opts SearchOptions) []*Entry {
 	var results []*Entry
-	queryLower := strings.ToLower(query)
 
 	if opts.Basename {
 		for name, entries := range idx.byName {
 			if opts.IgnoreCase {
-				if len(entries) > 0 && strings.Contains(entries[0].nameLower, queryLower) {
+				if len(entries) > 0 && containsFold(name, query) {
 					results = append(results, entries...)
 				}
 			} else if strings.Contains(name, query) {
@@ -259,7 +289,7 @@ func (idx *Index) searchNormal(query string, opts SearchOptions) []*Entry {
 	} else {
 		for path, entry := range idx.entries {
 			if opts.IgnoreCase {
-				if strings.Contains(entry.pathLower, queryLower) {
+				if containsFold(path, query) {
 					results = append(results, entry)
 				}
 			} else if strings.Contains(path, query) {
@@ -466,28 +496,14 @@ func (idx *Index) searchTerms(query string, opts SearchOptions) []*Entry {
 		return results
 	}
 
-	lower := func(s string) string {
-		if opts.IgnoreCase {
-			return strings.ToLower(s)
-		}
-		return s
-	}
-	for i := range positive {
-		positive[i] = lower(positive[i])
-	}
-	for i := range negative {
-		negative[i] = lower(negative[i])
-	}
-
 	matchesAll := func(s string) bool {
-		s = lower(s)
 		for _, t := range positive {
-			if !strings.Contains(s, t) {
+			if !containsFold(s, t) {
 				return false
 			}
 		}
 		for _, t := range negative {
-			if strings.Contains(s, t) {
+			if containsFold(s, t) {
 				return false
 			}
 		}
@@ -701,7 +717,7 @@ func (idx *Index) Count(query string, opts SearchOptions) int {
 			return err == nil && matched
 		default:
 			if opts.IgnoreCase {
-				return strings.Contains(strings.ToLower(s), strings.ToLower(query))
+				return containsFold(s, query)
 			}
 			return strings.Contains(s, query)
 		}
