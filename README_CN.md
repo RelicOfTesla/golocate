@@ -18,12 +18,14 @@
 - 🔄 **实时索引** - 自动文件系统监控和索引更新
 - 💾 **可插拔持久化** - incremental（默认，低写量）/ snapshot / none，重启秒开
 - 🔌 **多协议支持** - 快速协议、JSON 和 JSON-RPC；status 带协议版本号便于兼容检查
-- 🌐 **Web 界面** - 内置 H5：中英切换、目录管理、排序、导出、打开/复制路径、离线提示、/healthz
-- 🖥️ **GTK 图形界面** - 原生桌面应用
-- ⌨️ **CLI 完备** - locate 兼容（-0/-e/退出码）、--open/--open-dir/--copy、--long 长格式、shell 补全、开机自启
-- 📊 **运维能力** - 构建进度/统计（含按目录与历史）、日志落盘与轮转、崩溃自愈
+- 🌐 **Web 界面（H5）** - 中英切换、右键菜单、文件名⇄内容 AND 搜索、mtime 过滤、多 Tab（收藏/设置/服务器/状态）、列宽拖拽+持久化、分页全量导出（csv/json）、打开能力感知、单行紧凑头部
+- 🖥️ **GTK 图形界面** - 右键菜单（打开/打开目录/复制文件名/复制完整路径/收藏）、收藏与最近打开对话框、模式下拉、完整过滤（仅文件名/类型/范围/排除/大小/mtime/去重）、服务端排序+分页、列宽拖拽+持久化、全量导出（CSV/JSON）、高级选项默认折叠、窗口装饰
+- ⌨️ **CLI 完备** - locate 兼容（-0/-e/退出码）、--open/--open-dir/--copy、--long 长格式、结构化 **--json** 输出、流式预取（批间不卡顿）、shell 补全、开机自启
+- 🔌 **自动拉起守护进程** - cli/gtk/h5 检测连不上时自动启动单一共享 golocated（`--auto-start-server=none|child|background`，跨进程防并发）
+- ⏱ **空闲自动退出** - `golocated --idle-timeout 1h` 在无任何请求达该时长后自动退出（默认不退）；`golocated --stop` 现可用 socket 停止自动拉起的进程
+- 📊 **运维能力** - 构建进度/统计（含按目录与历史）、每请求耗时日志 + 慢请求阈值（`slow_request_ms`）、日志落盘与轮转、崩溃自愈
 - 🔒 **安全可靠** - Unix socket 权限控制 + 路径白名单校验
-- 📦 **轻量级** - 最小的内存占用和依赖
+- 📦 **轻量且快** - 排序结果缓存 + 流式流水线，大结果集流畅；最小内存占用与依赖
 
 ---
 
@@ -101,10 +103,22 @@ golocate --copy main.go              # 复制路径到剪贴板（xclip/xsel/pbc
 golocate -0 main.go | xargs -0 ls -l # NUL 分隔
 golocate -e main.go                  # 仅显示仍存在的文件（0=找到 / 1=未找到）
 
+# 结构化输出（路径结果或内容 matches）
+golocate --json '*.go'
+golocate --json --content 关键词
+
+# 连不上时自动启动（cli/gtk/h5 均支持）
+golocate --auto-start-server=none     # 不自动启动（默认：child）
+golocate --auto-start-server=child    # 以子进程启动；所有客户端共享
+golocate --auto-start-server=background   # 后台分离守护，持续运行
+
 # 守护进程管理
 golocated --autostart                # 开机自启（用户级）
 golocated --no-autostart             # 移除自启条目
 golocated --service-status           # 查看服务状态（含构建进度/统计）
+golocated --stop                     # 停止（优先 socket，能停自动拉起的进程）
+golocated --idle-timeout 1h          # 无任何请求达到 1 小时后自动退出
+golocated --idle-timeout=900s        # 同上，秒形式
 ```
 
 ### 运维端点（golocate-h5 提供）

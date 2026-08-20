@@ -22,12 +22,14 @@ A high-performance file location tool, written in Go. **golocate** provides inst
 - 🔄 **Real-time Index** - Automatic file system monitoring and index updates
 - 💾 **Pluggable Persistence** - incremental (default, low-write) / snapshot / none, instant startup on reboot
 - 🔌 **Multiple Protocols** - Fast, JSON, and JSON-RPC; protocol version exposed via status
-- 🌐 **Web UI** - Built-in H5: zh/en toggle, directory management, server-side sorting, export, open/copy paths, offline banner, /healthz
-- 🖥️ **GTK GUI** - Native desktop application
-- ⌨️ **Complete CLI** - locate-compatible (-0/-e/exit codes), --open/--open-dir/--copy, --long format, shell completion, user autostart
-- 📊 **Ops** - Build progress/stats (per-directory & history), log file with rotation, crash self-healing
+- 🌐 **Web UI (H5)** - zh/en toggle, right-click context menu, name⇄content AND search, mtime filter, tab pages (favorites/settings/server/status), column resize + drag persistence, paged full export (csv/json), open-capability aware buttons, compact one-row header
+- 🖥️ **GTK GUI** - Right-click context menu (open / open-dir / copy file-name / copy full-path / favorite), favorites + recent-opened dialogs, pattern dropdown, full filters (basename/type/scope/exclude/size/mtime/dedupe), server-side sort with paging, column drag + persistence, full export (CSV/JSON), collapsed advanced options, window decorations
+- ⌨️ **Complete CLI** - locate-compatible (-0/-e/exit codes), --open/--open-dir/--copy, --long format, structured **--json** output, streaming with prefetch (no batch pauses), shell completion, user autostart
+- 🔌 **Auto-start daemon** - cli/gtk/h5 auto-start the single shared golocated when unreachable (`--auto-start-server=none|child|background`, cross-process lock)
+- ⏱ **Idle auto-exit** - `golocated --idle-timeout 1h` exits after that long without any request (default: never)
+- 📊 **Ops** - Build progress/stats (per-directory & history), per-request latency logs + slow-request threshold (`slow_request_ms`), log rotation, crash self-healing
 - 🔒 **Secure** - Unix socket permissions + path whitelist validation
-- 📦 **Lightweight** - Minimal memory footprint and dependencies
+- 📦 **Lightweight & Fast** - sort-result cache + streaming pipeline for big result sets; minimal memory footprint
 
 ---
 
@@ -111,10 +113,22 @@ golocate --copy main.go              # copy the path to the clipboard
 golocate -0 main.go | xargs -0 ls -l # NUL-separated output
 golocate -e main.go                  # only existing files (exit 0=found / 1=none)
 
+# Structured machine-readable output (path results or content matches)
+golocate --json '*.go'
+golocate --json --content keyword
+
+# Auto-start the daemon when unreachable (cli/gtk/h5 all support this)
+golocate --auto-start-server=none    # never auto-start (default: child)
+golocate --auto-start-server=child   # spawn as our child; shared by all clients
+golocate --auto-start-server=background   # detached daemon, keeps running
+
 # Daemon management
 golocated --autostart                # install a user autostart entry
 golocated --no-autostart             # remove the autostart entry
 golocated --service-status           # status incl. build progress/stats
+golocated --stop                     # stop (socket-first; also stops auto-started daemons)
+golocated --idle-timeout 1h          # auto-exit after 1h without any request
+golocated --idle-timeout=900s        # same, seconds form
 ```
 
 ### Ops Endpoints (served by golocate-h5)
