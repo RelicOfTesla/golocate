@@ -2,6 +2,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
@@ -105,6 +106,7 @@ var (
 	dedupeBtn        *gtk.CheckButton // 硬链接去重
 	modeDropDown     *gtk.DropDown    // 搜索模式（普通/正则/通配符/多词）
 	exportBtn        *gtk.Button
+	exportJsonBtn    *gtk.Button
 	copyBtn          *gtk.Button       // 复制选中路径（跟随 H5）
 	favBtn           *gtk.ToggleButton // 收藏/取消收藏选中项
 	openFavBtn       *gtk.Button       // 打开收藏列表
@@ -425,8 +427,12 @@ func createMainWindow(app *gtk.Application) {
 
 	// Export results button (saves current page as CSV)
 	exportBtn = gtk.NewButtonWithLabel("导出 CSV")
-	exportBtn.Connect("clicked", exportResults)
+	exportBtn.Connect("clicked", func() { exportResults("csv") })
 	toolBox.Append(exportBtn)
+
+	exportJsonBtn = gtk.NewButtonWithLabel("导出 JSON")
+	exportJsonBtn.Connect("clicked", func() { exportResults("json") })
+	toolBox.Append(exportJsonBtn)
 
 	mainBox.Append(searchBox)
 	mainBox.Append(toolBox)
@@ -1265,7 +1271,7 @@ func applySort() {
 // exportResults exports the FULL result set (server-side pagination loop) to
 // a CSV file in Downloads, re-using the current filters and server sort
 // (对齐 H5 全量导出)。
-func exportResults() {
+func exportResults(format string) {
 	if len(currentEntries) == 0 {
 		resultsInfoLabel.SetText("没有可导出的结果")
 		return
@@ -1300,21 +1306,51 @@ func exportResults() {
 	mtimeAfter := parseMtimeValue(mtimeAfterEntry)
 	mtimeBefore := parseMtimeValue(mtimeBeforeEntry)
 
+	ext := "csv"
+	if format == "json" {
+		ext = "json"
+	}
 	dir, err := os.UserHomeDir()
 	if err != nil {
 		dir = os.TempDir()
 	}
 	dir = filepath.Join(dir, "Downloads")
 	_ = os.MkdirAll(dir, 0755)
-	path := filepath.Join(dir, fmt.Sprintf("golocate_export_%s.csv", time.Now().Format("20060102_150405")))
+	path := filepath.Join(dir, fmt.Sprintf("golocate_export_%s.%s", time.Now().Format("20060102_150405"), ext))
 
+	isJSON := format == "json"
 	resultsInfoLabel.SetText("导出中…")
 	go func() {
 		var sb strings.Builder
-		if contentMode {
-			sb.WriteString("文件名,路径,行号,匹配内容,上下文\n")
+		if !isJSON {
+			if contentMode {
+				sb.WriteString("文件名,路径,行号,匹配内容,上下文\n")
+			} else {
+				sb.WriteString("文件名,路径,大小,修改时间\n")
+			}
 		} else {
-			sb.WriteString("文件名,路径,大小,修改时间\n")
+			sb.WriteString("[\n")
+		}
+
+		wrote := 0
+		// CSV json append helper: json needs ", " separators between objects.
+		appendRow := func(row string) {
+			if isJSON {
+				if wrote > 0 {
+					sb.WriteString(",\n")
+				}
+				sb.WriteString(row)
+			} else {
+				sb.WriteString(row + "\n")
+			}
+			wrote++
+		}
+		rowJSON := func(v any) string {
+			b, err := json.Marshal(v)
+			if err != nil {
+				return "{}"
+			}
+			return string(b)
 		}
 
 		total := 0
@@ -1355,10 +1391,17 @@ func exportResults() {
 					ctx := make([]string, 0, len(m.Before)+len(m.After))
 					ctx = append(ctx, m.Before...)
 					ctx = append(ctx, m.After...)
-					sb.WriteString(fmt.Sprintf("%s,%s,%d,\"%s\",\"%s\"\n",
-						filepath.Base(m.Path), m.Path, m.LineNum,
-						strings.ReplaceAll(m.Line, "\"", "\"\""),
-						strings.ReplaceAll(strings.Join(ctx, " | "), "\"", "\"\"")))
+					if isJSON {
+						appendRow(rowJSON(map[string]any{
+							"name": filepath.Base(m.Path), "path": m.Path,
+							"line": m.Line, "match": m.Match, "context": ctx,
+						}))
+					} else {
+						appendRow(fmt.Sprintf("%s,%s,%d,\"%s\",\"%s\"",
+							filepath.Base(m.Path), m.Path, m.LineNum,
+							strings.ReplaceAll(m.Line, "\"", "\"\""),
+							strings.ReplaceAll(strings.Join(ctx, " | "), "\"", "\"\"")))
+					}
 				}
 				break // 内容搜索为单页（服务端不分页 matches）
 			}
@@ -1371,8 +1414,14 @@ func exportResults() {
 				total = res.Total
 			}
 			for _, r := range res.Entries {
-				sb.WriteString(fmt.Sprintf("%s,%s,%s,%s\n",
-					r.Name, r.Path, formatSize(r.Size), formatModTime(r.ModTime)))
+				if isJSON {
+					appendRow(rowJSON(map[string]any{
+						"name": r.Name, "path": r.Path, "size": r.Size, "mod_time": r.ModTime,
+					}))
+				} else {
+					appendRow(fmt.Sprintf("%s,%s,%s,%s",
+						r.Name, r.Path, formatSize(r.Size), formatModTime(r.ModTime)))
+				}
 			}
 			if total > 0 && offset+pageSize >= total {
 				break
@@ -1380,6 +1429,9 @@ func exportResults() {
 			if len(res.Entries) < pageSize {
 				break
 			}
+		}
+		if isJSON {
+			sb.WriteString("\n]\n")
 		}
 
 		if err := os.WriteFile(path, []byte(sb.String()), 0644); err != nil {
