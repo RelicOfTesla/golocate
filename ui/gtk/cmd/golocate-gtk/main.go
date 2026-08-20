@@ -832,12 +832,17 @@ func formatModTime(t time.Time) string {
 // Empty means auto-detect on the server (wildcard vs substring).
 func modeFromUI() index.PatternMode {
 	// 优先级：通配符 > 多词 > 正则 > 普通（同时勾选时取较特定的一种）。
-	switch {
-	case modeCombo != nil && modeCombo.GetActive() == 1:
+	// ComboBoxText item index -> pattern mode. (gotk4 exposes the combo's
+	// "active" property getter as Active(); there is no GetActive().)
+	if modeCombo == nil {
+		return index.PatternMode("")
+	}
+	switch modeCombo.Active() {
+	case 1:
 		return index.PatternModeExtendedRegex
-	case modeCombo != nil && modeCombo.GetActive() == 2:
+	case 2:
 		return index.PatternModeWildcard
-	case modeCombo != nil && modeCombo.GetActive() == 3:
+	case 3:
 		return index.PatternModeTerms
 	default:
 		return index.PatternMode("")
