@@ -66,7 +66,7 @@ func NewDaemonService(cfg *config.Config, configPath string) *DaemonService {
 		configPath:    configPath,
 		ctx:           ctx,
 		cancel:        cancel,
-		ignoreMatcher: ignore.NewMatcher(cfg.IgnorePatterns),
+		ignoreMatcher: ignore.NewMatcher(buildWatchPatterns(cfg)),
 	}
 }
 
@@ -192,7 +192,7 @@ func (d *DaemonService) Start(s service.Service) error {
 	// Create watcher after the index is ready, so events update a live index
 	w, err := watcher.NewWatcher(d.ctx, &watcher.Config{
 		Directories:    d.cfg.Directories,
-		IgnorePatterns: d.cfg.IgnorePatterns,
+		IgnorePatterns: buildWatchPatterns(d.cfg),
 		Recursive:      true,
 		FollowSymlinks: d.cfg.FollowSymlinks,
 	})
@@ -215,6 +215,36 @@ func (d *DaemonService) Start(s service.Service) error {
 	return nil
 }
 
+// daemonOwnPatterns returns the daemon's own output files (db/socket/log/pid)
+// as ignore patterns (exact path + temporary siblings), so the watcher never
+// re-indexes — and thus never re-persists / re-builds on — its own writes.
+// Without this, placing the db/log/socket inside a monitored directory feeds a
+// self-triggering event→persist→event loop that keeps the daemon busy (CPU).
+func daemonOwnPatterns(cfg *config.Config) []string {
+	var pats []string
+	add := func(p string) {
+		if p == "" {
+			return
+		}
+		pats = append(pats, p, p+"*") // exact + "<path>.tmp"-style siblings
+	}
+	add(cfg.DatabasePath)
+	add(cfg.SocketPath)
+	add(cfg.LogFile)
+	add(cfg.PIDFile)
+	return pats
+}
+
+// buildWatchPatterns combines user ignore patterns with the daemon's own
+// outputs, for both the watcher and the ignore matcher.
+func buildWatchPatterns(cfg *config.Config) []string {
+	owns := daemonOwnPatterns(cfg)
+	if len(owns) == 0 {
+		return cfg.IgnorePatterns
+	}
+	return append(append([]string{}, cfg.IgnorePatterns...), owns...)
+}
+
 // buildInBackground builds the index with throttled IO and hot-swaps it once
 // complete. Runs when no usable snapshot exists at startup. Within the boot
 // throttle window the scan is low-IO; the first search request lifts it.
@@ -228,7 +258,7 @@ func (d *DaemonService) buildInBackground() {
 	}()
 
 	builder := index.NewBuilder(index.BuilderOptions{
-		IgnorePatterns: d.cfg.IgnorePatterns,
+		IgnorePatterns: buildWatchPatterns(d.cfg),
 		WorkerCount:    d.cfg.WorkerCount,
 	})
 	builder.SetProgressCallback(func(scanned int64) {
@@ -373,7 +403,7 @@ func (d *DaemonService) applyConfig(cfg *config.Config) {
 
 	d.mu.Lock()
 	d.cfg = cfg
-	d.ignoreMatcher = ignore.NewMatcher(cfg.IgnorePatterns)
+	d.ignoreMatcher = ignore.NewMatcher(buildWatchPatterns(cfg))
 	if d.server != nil {
 		d.server.SetConfig(cfg)
 	}
@@ -390,7 +420,7 @@ func (d *DaemonService) applyConfig(cfg *config.Config) {
 	}
 	w, err := watcher.NewWatcher(d.ctx, &watcher.Config{
 		Directories:    cfg.Directories,
-		IgnorePatterns: cfg.IgnorePatterns,
+		IgnorePatterns: buildWatchPatterns(cfg),
 		Recursive:      true,
 		FollowSymlinks: cfg.FollowSymlinks,
 	})
