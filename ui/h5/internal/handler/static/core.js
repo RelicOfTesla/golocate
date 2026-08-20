@@ -172,52 +172,36 @@
         
         // Server Status & Index Rebuild
         async function refreshStatus() {
-            const bar = document.getElementById('statusBar');
-            const text = document.getElementById('statusText');
+            // 运行状态只展示在「📊 状态」tab 面板中（无顶部 status-bar）。
+            const body = document.getElementById('statusPanelBody');
+            if (!body) return;
+            function row(k, v) {
+                return '<div class="stat-row"><span>' + escapeHtml(String(k)) + '</span><b>' + escapeHtml(String(v)) + '</b></div>';
+            }
             try {
                 const r = await fetch('/api/status');
                 const data = await r.json();
-                bar.style.display = 'flex';
+                if (data && data.open_supported !== undefined) openEnabled = !!data.open_supported;
                 if (data.error) {
-                    bar.innerHTML = '<span class="dot off"></span><span>' + t('offline') + ': ' + escapeHtml(data.error) + '</span>';
+                    body.innerHTML = row(t('offline'), data.error);
                     return;
                 }
-                if (data && data.open_supported !== undefined) openEnabled = !!data.open_supported;
-                const dotClass = data.is_building ? 'building' : (data.running ? 'on' : 'off');
-                let building = data.is_building ? t('statusBuilding') : '';
-                if (data.is_building) {
-                    if (data.build_scanned) building += t('statusScanned') + ' ' + data.build_scanned;
-                    building += '...';
-                }
-                text.innerHTML = '<span class="dot ' + dotClass + '"></span>' +
-                    '<span class="stat">' + t('statusRunning') + ': <b>' + (data.running ? t('yes') : t('no')) + '</b></span>' +
-                    '<span class="stat">' + t('statusIndexFiles') + ': <b>' + (data.index_size || 0) + '</b></span>' +
-                    '<span class="stat">' + t('statusIndexed') + ': <b>' + (data.indexed_file_count || 0) + '</b></span>' +
-                    '<span class="stat">' + t('statusLastBuild') + ': <b>' + escapeHtml(data.last_build_time ? data.last_build_time.replace('T', ' ').slice(0, 19) : '-') + '</b></span>' +
-                    '<span class="stat">' + t('statusUptime') + ': <b>' + escapeHtml(data.uptime || '-') + '</b></span>' + building;
-
-                // Detail panel (status tab)
-                const body = document.getElementById('statusPanelBody');
-                if (body) {
-                    const stats = data.stats || {};
-                    body.innerHTML =
-                        row(t('statusRunning'), (data.running ? t('yes') : t('no')) + (data.is_building ? ' · ' + t('statusBuilding') : '')) +
-                        row(t('statusIndexFiles'), data.index_size || 0) +
-                        row(t('statusIndexed'), data.indexed_file_count || 0) +
-                        row(t('statusLastBuild'), data.last_build_time ? data.last_build_time.replace('T', ' ').slice(0, 19) : '-') +
-                        row(t('statusUptime'), data.uptime || '-') +
-                        row(t('statusProtocol'), data.protocol_version || '-') +
-                        row(t('statusPid'), data.pid || '-') +
-                        (data.is_building ? row(t('statusBuilding'), (data.build_scanned || 0) + (data.build_history ? ' · ' + t('metaBuilds') + ': ' + (data.build_history || 0) : '')) : '') +
-                        (stats.searches ? row(t('statusSearches'), stats.searches) : '') +
-                        (stats.content_searches ? row(t('statusContentSearches'), stats.content_searches) : '') +
-                        (stats.builds ? row(t('statusBuilds'), stats.builds) : '') +
-                        (stats.opens ? row(t('statusOpens'), stats.opens) : '');
-                    function row(k, v) { return '<div class="stat-row"><span>' + escapeHtml(String(k)) + '</span><b>' + escapeHtml(String(v)) + '</b></div>'; }
-                }
+                const stats = data.stats || {};
+                body.innerHTML =
+                    row(t('statusRunning'), (data.running ? t('yes') : t('no')) + (data.is_building ? ' · ' + t('statusBuilding') : '')) +
+                    row(t('statusIndexFiles'), data.index_size || 0) +
+                    row(t('statusIndexed'), data.indexed_file_count || 0) +
+                    row(t('statusLastBuild'), data.last_build_time ? data.last_build_time.replace('T', ' ').slice(0, 19) : '-') +
+                    row(t('statusUptime'), data.uptime || '-') +
+                    row(t('statusProtocol'), data.protocol_version || '-') +
+                    row(t('statusPid'), data.pid || '-') +
+                    (data.is_building ? row(t('statusBuilding'), (data.build_scanned || 0) + (data.build_history ? ' · ' + t('metaBuilds') + ': ' + (data.build_history || 0) : '')) : '') +
+                    (stats.searches ? row(t('statusSearches'), stats.searches) : '') +
+                    (stats.content_searches ? row(t('statusContentSearches'), stats.content_searches) : '') +
+                    (stats.builds ? row(t('statusBuilds'), stats.builds) : '') +
+                    (stats.opens ? row(t('statusOpens'), stats.opens) : '');
             } catch (err) {
-                bar.style.display = 'flex';
-                bar.innerHTML = '<span class="dot off"></span><span>' + t('statusFail') + ': ' + escapeHtml(err.message) + '</span>';
+                body.innerHTML = row(t('statusFail'), err.message);
             }
         }
         
