@@ -131,6 +131,50 @@ func parseTypeList(s string) []string {
 	return out
 }
 
+// columnsFile returns the path of the persistent result-column-widths file.
+func columnsFile() string {
+	base, err := os.UserCacheDir()
+	if err != nil {
+		base = os.TempDir()
+	}
+	return base + "/golocate/columns.conf"
+}
+
+// loadColumnWidths reads persisted column widths (name=width lines).
+func loadColumnWidths() map[string]int {
+	out := map[string]int{}
+	data, err := os.ReadFile(columnsFile())
+	if err != nil {
+		return nil
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		kv := strings.SplitN(strings.TrimSpace(line), "=", 2)
+		if len(kv) != 2 {
+			continue
+		}
+		if w, err := strconv.Atoi(strings.TrimSpace(kv[1])); err == nil && w > 0 {
+			out[strings.TrimSpace(kv[0])] = w
+		}
+	}
+	return out
+}
+
+// saveColumnWidths persists column widths for the next launch.
+func saveColumnWidths(widths map[string]int) {
+	if len(widths) == 0 {
+		return
+	}
+	var sb strings.Builder
+	for name, w := range widths {
+		if w > 0 {
+			sb.WriteString(name + "=" + strconv.Itoa(w) + "\n")
+		}
+	}
+	if err := os.WriteFile(columnsFile(), []byte(sb.String()), 0600); err != nil {
+		slog.Warn("failed to save column widths", "error", err)
+	}
+}
+
 // historyFile returns the path of the search-history file.
 func historyFile() string {
 	base, err := os.UserCacheDir()
@@ -409,6 +453,27 @@ func createMainWindow(app *gtk.Application) {
 	matchCol.SetSizing(gtk.TreeViewColumnFixed)
 	matchCol.SetFixedWidth(300)
 	resultsTree.AppendColumn(matchCol)
+
+	// 结果列宽持久化（对齐 H5）：恢复上次拖拽宽度；窗口关闭时保存。
+	resultColumns := map[string]*gtk.TreeViewColumn{
+		"name": nameCol, "path": pathCol, "size": sizeCol, "time": timeCol, "match": matchCol,
+	}
+	if saved := loadColumnWidths(); saved != nil {
+		for name, col := range resultColumns {
+			if w := saved[name]; w > 40 && w < 2000 {
+				col.SetSizing(gtk.TreeViewColumnFixed)
+				col.SetFixedWidth(w)
+			}
+		}
+	}
+	win.Connect("close-request", func() bool {
+		saved := make(map[string]int, len(resultColumns))
+		for name, col := range resultColumns {
+			saved[name] = col.Width()
+		}
+		saveColumnWidths(saved)
+		return false
+	})
 
 	scrolled.SetChild(resultsTree)
 
