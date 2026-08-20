@@ -85,6 +85,7 @@ var (
 	searchHistory []string
 	historyStore  *gtk.ListStore
 	searchEntry   *gtk.Entry
+	mainClient    *client.Client // for header-click (server-side sort) re-searches
 )
 
 // Advanced search options
@@ -95,6 +96,8 @@ var (
 	contentEntry  *gtk.Entry       // 独立内容关键词（与 searchEntry 路径过滤 AND，跟随 H5）
 	typesEntry    *gtk.Entry       // 类型过滤（逗号/空格分隔，可选）
 	dedupeBtn     *gtk.CheckButton // 硬链接去重
+	wildcardBtn   *gtk.CheckButton // 通配符模式
+	termsBtn      *gtk.CheckButton // 多词(terms)模式
 	exportBtn     *gtk.Button
 )
 
@@ -207,7 +210,7 @@ func createMainWindow(app *gtk.Application) {
 
 	// Create search entry
 	searchEntry = gtk.NewEntry()
-	searchEntry.SetPlaceholderText("Search files...")
+	searchEntry.SetPlaceholderText("搜索文件…")
 	searchEntry.SetHExpand(true)
 	searchBox.Append(searchEntry)
 	entry := searchEntry
@@ -222,16 +225,16 @@ func createMainWindow(app *gtk.Application) {
 	entry.SetCompletion(completion)
 
 	// Create search button
-	searchBtn := gtk.NewButtonWithLabel("Search")
+	searchBtn := gtk.NewButtonWithLabel("搜索")
 	searchBox.Append(searchBtn)
 
 	// 第二行：结果操作与工具按钮
 	toolBox := gtk.NewBox(gtk.OrientationHorizontal, 8)
 
-	statusBtn := gtk.NewButtonWithLabel("Status")
+	statusBtn := gtk.NewButtonWithLabel("状态")
 	toolBox.Append(statusBtn)
 
-	configBtn := gtk.NewButtonWithLabel("Config")
+	configBtn := gtk.NewButtonWithLabel("配置")
 	toolBox.Append(configBtn)
 
 	rebuildBtn := gtk.NewButtonWithLabel("重建索引")
@@ -256,6 +259,14 @@ func createMainWindow(app *gtk.Application) {
 	regexBtn = gtk.NewCheckButtonWithLabel("正则")
 	regexBtn.SetActive(false)
 	advancedBox.Append(regexBtn)
+
+	wildcardBtn = gtk.NewCheckButtonWithLabel("通配符")
+	wildcardBtn.SetActive(false)
+	advancedBox.Append(wildcardBtn)
+
+	termsBtn = gtk.NewCheckButtonWithLabel("多词")
+	termsBtn.SetActive(false)
+	advancedBox.Append(termsBtn)
 
 	contentBtn = gtk.NewCheckButtonWithLabel("内容搜索")
 	contentBtn.SetActive(false)
@@ -373,6 +384,7 @@ func createMainWindow(app *gtk.Application) {
 	if socketPath != "" {
 		c.SetSocketPath(socketPath)
 	}
+	mainClient = c
 
 	// Setup keyboard shortcuts
 	setupKeyboardShortcuts(win, entry)
@@ -733,6 +745,8 @@ func performSearch(c *client.Client, query string) {
 			PatternMode: modeFromUI(),
 			Types:       types,
 			Dedupe:      dedupe,
+			SortField:   sortField, // 服务端全局排序，翻页一致
+			SortOrder:   sortOrder,
 		})
 		if err == nil {
 			entries = result.Entries
@@ -765,9 +779,7 @@ func performSearch(c *client.Client, query string) {
 
 	currentEntries = entries
 	currentMatches = matches
-	if sortField != "" {
-		applySort()
-	}
+	// 排序由服务端全局执行（跨页一致）；不再对当前页做本地排序。
 	populateTable(resultsStore, currentEntries, matchTexts(currentMatches))
 
 	// Update pagination state
@@ -820,6 +832,13 @@ func formatModTime(t time.Time) string {
 // modeFromUI maps the regex checkbox to a search pattern mode.
 // Empty means auto-detect on the server (wildcard vs substring).
 func modeFromUI() index.PatternMode {
+	// 优先级：通配符 > 多词 > 正则 > 普通（同时勾选时取较特定的一种）。
+	if wildcardBtn != nil && wildcardBtn.Active() {
+		return index.PatternModeWildcard
+	}
+	if termsBtn != nil && termsBtn.Active() {
+		return index.PatternModeTerms
+	}
 	if regexBtn != nil && regexBtn.Active() {
 		return index.PatternModeExtendedRegex
 	}
@@ -844,7 +863,8 @@ func populateTable(store *gtk.ListStore, entries []*index.Entry, matches []strin
 	}
 }
 
-// toggleSort toggles field/order on header click and re-renders.
+// toggleSort toggles field/order on header click and re-runs the search from
+// page 1 with server-side global sorting, so pagination stays consistent.
 func toggleSort(field string) {
 	if sortField == field {
 		if sortOrder == "asc" {
@@ -856,7 +876,11 @@ func toggleSort(field string) {
 		sortField = field
 		sortOrder = "asc"
 	}
-	applySort()
+	updateSortHeader()
+	pagination.currentPage = 1
+	if mainClient != nil {
+		performSearch(mainClient, searchEntry.Text())
+	}
 }
 
 // applySort sorts the current page entries in place and repopulates the table.
