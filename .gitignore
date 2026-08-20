@@ -50,3 +50,4 @@ cmd/memory-analyze
 # Local Go tool caches (created by sandboxed builds)
 .gocache/
 .gopath/
+/.auto-test/

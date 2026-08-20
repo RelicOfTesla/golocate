@@ -8,6 +8,7 @@ import (
 	"os"
 
 	"github.com/RelicOfTesla/golocate/internal/socket"
+	"github.com/RelicOfTesla/golocate/pkg/autostart"
 	"github.com/RelicOfTesla/golocate/pkg/config"
 	"github.com/RelicOfTesla/golocate/ui/h5/internal/api"
 	"github.com/RelicOfTesla/golocate/ui/h5/internal/handler"
@@ -17,7 +18,8 @@ var (
 	flagAddr    string
 	flagVerbose bool
 	flagSocket  string
-	flagVersion bool
+	flagVersion     bool
+	flagAutoStart   string
 )
 
 // version is overridable at build time via -ldflags "-X main.version=...".
@@ -28,6 +30,7 @@ func main() {
 	flag.BoolVar(&flagVerbose, "verbose", false, "verbose output")
 	flag.StringVar(&flagSocket, "socket", "", "socket path or named pipe name (default: system default)")
 	flag.BoolVar(&flagVersion, "version", false, "print version and exit")
+	flag.StringVar(&flagAutoStart, "auto-start-server", "child", "auto-start golocated when unreachable: none, child (default), background")
 	flag.Parse()
 
 	if flagVersion {
@@ -39,6 +42,19 @@ func main() {
 	client := api.NewClient()
 	if flagSocket != "" {
 		client.SetSocketPath(flagSocket)
+	}
+
+	// Auto-start golocated if needed (single shared daemon; not killed here).
+	if mode, err := autostart.ParseMode(flagAutoStart); err != nil {
+		slog.Warn("invalid --auto-start-server", "error", err)
+	} else if mode != autostart.None {
+		sock := flagSocket
+		if sock == "" {
+			sock = config.GetDefaultSocketPath()
+		}
+		if _, err := (&autostart.Launcher{SocketPath: sock, Mode: mode}).Ensure(); err != nil {
+			slog.Warn("auto-start golocated failed", "error", err)
+		}
 	}
 
 	// Check if golocated is running

@@ -11,7 +11,9 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/RelicOfTesla/golocate/pkg/autostart"
 	cliclient "github.com/RelicOfTesla/golocate/pkg/cli"
+	"github.com/RelicOfTesla/golocate/pkg/config"
 	errpkg "github.com/RelicOfTesla/golocate/pkg/errors"
 	"github.com/RelicOfTesla/golocate/pkg/message/protocol"
 	"github.com/spf13/cobra"
@@ -44,6 +46,7 @@ var (
 	flagExclude      []string
 	flagTerms        bool
 	flagJSON         bool
+	flagAutoStart    string
 	flagTypes        []string
 	flagMinSize      string
 	flagMaxSize      string
@@ -126,6 +129,7 @@ func init() {
 	rootCmd.Flags().StringSliceVar(&flagExclude, "exclude", nil, "exclude paths matching glob (repeatable)")
 	rootCmd.Flags().BoolVar(&flagTerms, "terms", false, "multi-term mode: space-separated terms are ANDed, '-term' excludes")
 	rootCmd.Flags().BoolVar(&flagJSON, "json", false, "output structured JSON (path results or content matches)")
+	rootCmd.Flags().StringVar(&flagAutoStart, "auto-start-server", "child", "auto-start golocated when the server is unreachable: none, child (default), background")
 
 	// Metadata filters
 	rootCmd.Flags().StringSliceVarP(&flagTypes, "type", "t", nil, "only files with these extensions, e.g. 'go,md' (repeatable)")
@@ -148,8 +152,43 @@ func main() {
 	}
 }
 
+// exitError exits with the given code. The auto-started golocated is a single
+// shared daemon reused by all CLI/GTK/H5 clients, so it is intentionally NOT
+// killed when one client exits.
+func exitError(code int) {
+	os.Exit(code)
+}
+
+// ensureAutoStart triggers autostart when the server is unreachable, unless
+// the user set --auto-start-server=none.
+func ensureAutoStart() {
+	mode, err := autostart.ParseMode(flagAutoStart)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "Error:", err)
+		exitError(2)
+	}
+	if mode == autostart.None {
+		return
+	}
+	sock := flagSocket
+	if sock == "" {
+		sock = config.GetDefaultSocketPath()
+	}
+	child, err := (&autostart.Launcher{SocketPath: sock, Mode: mode}).Ensure()
+	if err != nil {
+		slog.Warn("auto-start golocated failed", "error", err)
+		return
+	}
+	if child != nil {
+		// Spawned as our child, but it is a shared daemon: keep it running for
+		// all clients (single instance).
+		slog.Debug("golocated auto-started and will keep running (shared)")
+	}
+}
+
 func runSearch(cmd *cobra.Command, args []string) {
 	initSlog(flagVerbose, flagVerboseType)
+	ensureAutoStart()
 
 	// Handle status
 	if flagStatus {
@@ -174,7 +213,7 @@ func runSearch(cmd *cobra.Command, args []string) {
 		if err := cliclient.ReloadConfig(flagSocket); err != nil {
 			errpkg.PrintFriendlyError(err)
 			slog.Error("failed to reload config")
-			os.Exit(1)
+			exitError(1)
 		}
 		fmt.Println("Configuration reloaded successfully")
 		return
@@ -222,7 +261,7 @@ func buildIndex() {
 	if err := cliclient.Build(flagSocket); err != nil {
 		errpkg.PrintFriendlyError(err)
 		slog.Error("failed to request index build")
-		os.Exit(1)
+		exitError(1)
 	}
 
 	slog.Debug("index build request sent successfully")
@@ -235,7 +274,7 @@ func stopServer() {
 	if err := cliclient.Stop(flagSocket); err != nil {
 		errpkg.PrintFriendlyError(err)
 		slog.Error("failed to stop server")
-		os.Exit(1)
+		exitError(1)
 	}
 
 	fmt.Println("Stop request sent to server")
@@ -286,7 +325,7 @@ func searchIndex(pattern string, args []string) {
 		n, err := cliclient.ParseSize(flagMinSize)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			exitError(1)
 		}
 		opts.MinSize = n
 	}
@@ -294,7 +333,7 @@ func searchIndex(pattern string, args []string) {
 		n, err := cliclient.ParseSize(flagMaxSize)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			exitError(1)
 		}
 		opts.MaxSize = n
 	}
@@ -304,7 +343,7 @@ func searchIndex(pattern string, args []string) {
 		n, err := cliclient.ParseMtime(flagMtimeAfter)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			exitError(1)
 		}
 		opts.MtimeAfter = n
 	}
@@ -312,7 +351,7 @@ func searchIndex(pattern string, args []string) {
 		n, err := cliclient.ParseMtime(flagMtimeBefore)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			exitError(1)
 		}
 		opts.MtimeBefore = n
 	}
@@ -336,7 +375,7 @@ func searchIndex(pattern string, args []string) {
 		if err != nil {
 			errpkg.PrintFriendlyError(err)
 			slog.Error("count failed")
-			os.Exit(1)
+			exitError(1)
 		}
 		total := res.Total
 		if total <= 0 {
@@ -344,7 +383,7 @@ func searchIndex(pattern string, args []string) {
 		}
 		fmt.Println(total)
 		if total == 0 {
-			os.Exit(1)
+			exitError(1)
 		}
 		return
 	}
@@ -357,14 +396,14 @@ func searchIndex(pattern string, args []string) {
 		if streamSearch(opts) {
 			return
 		}
-		os.Exit(1)
+		exitError(1)
 	}
 
 	results, err := cliclient.Search(opts)
 	if err != nil {
 		errpkg.PrintFriendlyError(err)
 		slog.Error("search failed")
-		os.Exit(1)
+		exitError(1)
 	}
 
 	// --open / --open-dir / --copy: act on the first match instead of
@@ -373,13 +412,13 @@ func searchIndex(pattern string, args []string) {
 		target := firstResultPath(results)
 		if target == "" {
 			fmt.Fprintln(os.Stderr, "Error: no match to open")
-			os.Exit(1)
+			exitError(1)
 		}
 		switch {
 		case flagCopy:
 			if err := cliclient.CopyPathToClipboard(target); err != nil {
 				fmt.Fprintf(os.Stderr, "Error: failed to copy %s: %v\n", target, err)
-				os.Exit(1)
+				exitError(1)
 			}
 			fmt.Printf("Copied: %s\n", target)
 		default:
@@ -388,7 +427,7 @@ func searchIndex(pattern string, args []string) {
 			}
 			if err := cliclient.OpenInDefaultApp(target); err != nil {
 				fmt.Fprintf(os.Stderr, "Error: failed to open %s: %v\n", target, err)
-				os.Exit(1)
+				exitError(1)
 			}
 			fmt.Printf("Opened: %s\n", target)
 		}
@@ -400,7 +439,7 @@ func searchIndex(pattern string, args []string) {
 
 	// locate-compatible exit codes: 0 = matches found, 1 = no matches
 	if results.Count == 0 {
-		os.Exit(1)
+		exitError(1)
 	}
 }
 
@@ -426,7 +465,7 @@ func jsonStream(opts cliclient.SearchOptions) {
 			errpkg.PrintFriendlyError(err)
 			slog.Error("json search failed", "offset", offset)
 			fmt.Fprintln(w, "]")
-			os.Exit(1)
+			exitError(1)
 		}
 		if !hasTotal {
 			total, hasTotal = res.Total, true
@@ -456,7 +495,7 @@ func jsonStream(opts cliclient.SearchOptions) {
 	}
 	fmt.Fprintln(w, "]")
 	if !wrote {
-		os.Exit(1)
+		exitError(1)
 	}
 }
 
@@ -466,7 +505,7 @@ func jsonContent(opts cliclient.SearchOptions) {
 	if err != nil {
 		errpkg.PrintFriendlyError(err)
 		slog.Error("content search failed")
-		os.Exit(1)
+		exitError(1)
 	}
 	arr := make([]map[string]any, 0, len(res.Matches))
 	for _, m := range res.Matches {
@@ -485,7 +524,7 @@ func jsonContent(opts cliclient.SearchOptions) {
 	enc.SetIndent("", "  ")
 	_ = enc.Encode(arr)
 	if len(arr) == 0 {
-		os.Exit(1)
+		exitError(1)
 	}
 }
 
@@ -563,7 +602,7 @@ func getStatus() {
 	if err != nil {
 		errpkg.PrintFriendlyError(err)
 		slog.Error("failed to get server status")
-		os.Exit(1)
+		exitError(1)
 	}
 
 	// Display server status
@@ -669,7 +708,7 @@ func getConfig() {
 	if err != nil {
 		errpkg.PrintFriendlyError(err)
 		slog.Error("failed to get server configuration")
-		os.Exit(1)
+		exitError(1)
 	}
 
 	// Display configuration
@@ -761,7 +800,7 @@ func getConfig() {
 func setConfig(arg string) {
 	if arg == "" {
 		fmt.Fprintln(os.Stderr, "Error: --set-config requires an argument")
-		os.Exit(1)
+		exitError(1)
 	}
 
 	slog.Debug("setting server configuration")
@@ -773,7 +812,7 @@ func setConfig(arg string) {
 		data, err := io.ReadAll(os.Stdin)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: failed to read from stdin: %v\n", err)
-			os.Exit(1)
+			exitError(1)
 		}
 		yamlContent = string(data)
 	} else if idx := findEqualSign(arg); idx >= 0 {
@@ -790,7 +829,7 @@ func setConfig(arg string) {
 	if err := cliclient.SetConfig(flagSocket, yamlContent); err != nil {
 		errpkg.PrintFriendlyError(err)
 		slog.Error("failed to set server configuration")
-		os.Exit(1)
+		exitError(1)
 	}
 
 	fmt.Println("Configuration updated successfully")

@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"github.com/RelicOfTesla/golocate/internal/client"
+	"github.com/RelicOfTesla/golocate/pkg/autostart"
+	"github.com/RelicOfTesla/golocate/pkg/config"
 	"github.com/RelicOfTesla/golocate/pkg/errors"
 	"github.com/RelicOfTesla/golocate/pkg/index"
 	"github.com/RelicOfTesla/golocate/pkg/search"
@@ -25,7 +27,10 @@ import (
 )
 
 // Socket path for the client connection
-var socketPath string
+var (
+	socketPath    string
+	autoStartMode = "child" // none | child | background
+)
 
 // mainWindow is the top-level application window, used as dialog parent
 // (gotk4's NewMessageDialog requires a non-nil parent Window).
@@ -254,18 +259,35 @@ func refreshHistoryModel() {
 func main() {
 	app := gtk.NewApplication("com.github.golocate", 0)
 
-	// Add --socket option
+	// Add --socket and --auto-start-server options
 	app.AddMainOption("socket", 's', glib.OptionFlagNone, glib.OptionArgString, "Socket path or named pipe name", "PATH")
+	app.AddMainOption("auto-start-server", 0, glib.OptionFlagNone, glib.OptionArgString,
+		"auto-start golocated when the server is unreachable: none, child (default), background", "MODE")
 
 	// Handle command-line options
 	app.ConnectHandleLocalOptions(func(options *glib.VariantDict) int {
 		if v := options.LookupValue("socket", nil); v != nil {
 			socketPath = v.String()
 		}
+		if v := options.LookupValue("auto-start-server", nil); v != nil {
+			autoStartMode = v.String()
+		}
 		return -1 // Continue with default handling
 	})
 
 	app.Connect("activate", func() {
+		// Auto-start a single shared golocated daemon if unreachable.
+		if mode, err := autostart.ParseMode(autoStartMode); err != nil {
+			slog.Warn("invalid --auto-start-server", "error", err)
+		} else if mode != autostart.None {
+			sock := socketPath
+			if sock == "" {
+				sock = config.GetDefaultSocketPath()
+			}
+			if _, err := (&autostart.Launcher{SocketPath: sock, Mode: mode}).Ensure(); err != nil {
+				slog.Warn("auto-start golocated failed", "error", err)
+			}
+		}
 		createMainWindow(app)
 	})
 
