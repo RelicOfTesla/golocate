@@ -501,13 +501,15 @@ func selectedResultPath() (string, bool) {
 	if sel == nil {
 		return "", false
 	}
-	_, iter := sel.Selected()
+	// gotk4 v0.3.1: Selected() returns (iter, model, ok) — keep iter only.
+	iter, _, _ := sel.Selected()
 	if iter == nil {
 		return "", false
 	}
 	v := resultsStore.Value(iter, 1) // column 1 = path
-	p, ok := v.String()
-	if !ok || p == "" {
+	// glib.Value.String() returns a single value (no ok).
+	p := v.String()
+	if p == "" {
 		return "", false
 	}
 	return p, true
