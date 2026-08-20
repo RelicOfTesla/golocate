@@ -96,12 +96,14 @@ func (l *Launcher) Ensure() (ChildCmd, error) {
 	switch l.Mode {
 	case Child:
 		cmd = exec.Command(gd, args...)
+		cmd.Stderr = os.Stderr
 		if err := cmd.Start(); err != nil {
 			return nil, err
 		}
 		go cmd.Wait() // reap zombie while caller keeps the reference
 	case Background:
 		cmd = exec.Command(gd, args...)
+		cmd.Stderr = os.Stderr
 		cmd.SysProcAttr = detachAttr()
 		if err := cmd.Start(); err != nil {
 			return nil, err

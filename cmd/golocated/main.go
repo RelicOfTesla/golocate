@@ -254,13 +254,23 @@ func startService(cfg *config.Config) {
 }
 
 func stopService(cfg *config.Config) {
-	fmt.Println("Stopping golocated service...")
+	// Prefer a socket-level stop: golocated started directly by the CLI/GTK/H5
+	// autostart (or by hand) is not registered with the system service manager,
+	// so svc.Stop() cannot touch it. Only fall back to the service manager for
+	// installed services.
+	sock := cfg.SocketPath
+	err := cliclient.Stop(sock)
+	if err == nil {
+		fmt.Println("Stop request sent to server")
+		return
+	}
+	slog.Warn("socket stop failed, trying service manager", "error", err)
 
-	err := svc.Stop()
-	if err != nil {
+	if err := svc.Stop(); err != nil {
 		slog.Error("failed to stop service", "error", err)
 		os.Exit(1)
 	}
+	fmt.Println("Service stopped")
 }
 
 func showStatus(cfg *config.Config) {
