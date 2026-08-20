@@ -272,28 +272,6 @@ td.col-actions button:hover {
 .status { color: var(--text-2); font-size: 0.9em; padding: 24px; text-align: center; }
 .error { color: var(--danger); padding: 24px; text-align: center; font-weight: 500; }
 
-/* ============ Status Bar ============ */
-.status-bar {
-    display: flex; align-items: center; gap: 12px;
-    background: rgba(26, 30, 40, 0.8);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 12px 18px; margin-bottom: 16px;
-    font-size: 13px; color: var(--text-2);
-    flex-wrap: wrap;
-    box-shadow: var(--shadow-sm);
-}
-.status-bar .dot {
-    width: 10px; height: 10px; border-radius: 50%;
-    display: inline-block; flex-shrink: 0;
-}
-.status-bar .dot.on { background: var(--accent); box-shadow: 0 0 8px rgba(52, 211, 153, 0.7); }
-.status-bar .dot.off { background: var(--danger); box-shadow: 0 0 8px rgba(248, 113, 113, 0.6); }
-.status-bar .dot.building { background: var(--warning); animation: pulse 1.1s ease-in-out infinite; box-shadow: 0 0 8px rgba(251, 191, 36, 0.6); }
-@keyframes pulse { 50% { opacity: 0.3; transform: scale(0.8); } }
-.status-bar .stat { display: inline-flex; align-items: center; gap: 6px; }
-.status-bar .stat b { color: var(--text); font-weight: 600; }
-
 /* ============ Panels (settings / favorites) ============ */
 .settings-panel {
     display: none;
