@@ -323,50 +323,30 @@ func createMainWindow(app *gtk.Application) {
 	searchBtn := gtk.NewButtonWithLabel("搜索")
 	searchBox.Append(searchBtn)
 
-	// 第二行：结果操作与工具按钮
-	toolBox := gtk.NewBox(gtk.OrientationHorizontal, 8)
+	// 高级区（默认收起）：搜索过滤 + 全局操作（状态/配置/重建/收藏列表/导出）。
+	// 行级操作（打开/打开目录/复制/收藏）统一收进右键菜单。
+	advancedBox := gtk.NewBox(gtk.OrientationHorizontal, 10)
+	advancedBox.SetVisible(false) // 默认收起：主要内容是结果表
 
 	statusBtn := gtk.NewButtonWithLabel("状态")
-	toolBox.Append(statusBtn)
+	advancedBox.Append(statusBtn)
 
 	configBtn := gtk.NewButtonWithLabel("配置")
-	toolBox.Append(configBtn)
+	advancedBox.Append(configBtn)
 
 	rebuildBtn := gtk.NewButtonWithLabel("重建索引")
 	rebuildBtn.SetTooltipText("请求服务端重建索引")
-	toolBox.Append(rebuildBtn)
-
-	openBtn := gtk.NewButtonWithLabel("打开")
-	openBtn.SetTooltipText("打开选中的文件 (双击结果行亦可)")
-	toolBox.Append(openBtn)
-
-	openDirBtn := gtk.NewButtonWithLabel("打开目录")
-	openDirBtn.SetTooltipText("打开选中文件所在的目录")
-	toolBox.Append(openDirBtn)
-
-	copyBtn = gtk.NewButtonWithLabel("复制路径")
-	copyBtn.SetTooltipText("复制选中文件的完整路径")
-	copyBtn.Connect("clicked", copySelectedPath)
-	toolBox.Append(copyBtn)
-
-	favBtn = gtk.NewToggleButtonWithLabel("收藏")
-	favBtn.SetTooltipText("收藏/取消收藏选中的文件")
-	favBtn.Connect("toggled", toggleFavoriteSelected)
-	toolBox.Append(favBtn)
+	advancedBox.Append(rebuildBtn)
 
 	openFavBtn = gtk.NewButtonWithLabel("打开收藏")
 	openFavBtn.SetTooltipText("从收藏中打开")
 	openFavBtn.Connect("clicked", showFavoritesDialog)
-	toolBox.Append(openFavBtn)
+	advancedBox.Append(openFavBtn)
 
 	openRecentBtn = gtk.NewButtonWithLabel("最近打开")
 	openRecentBtn.SetTooltipText("从最近打开中快速打开")
 	openRecentBtn.Connect("clicked", showRecentsDialog)
-	toolBox.Append(openRecentBtn)
-
-	// 第三行：高级搜索选项（默认收起，主区域留给结果表）
-	advancedBox := gtk.NewBox(gtk.OrientationHorizontal, 10)
-	advancedBox.SetVisible(false) // 默认收起：主要内容是结果表
+	advancedBox.Append(openRecentBtn)
 
 	advToggleBtn = gtk.NewToggleButtonWithLabel("高级选项 ▾")
 	advToggleBtn.SetTooltipText("展开/收起高级搜索选项")
@@ -446,14 +426,13 @@ func createMainWindow(app *gtk.Application) {
 	// Export results button (saves current page as CSV)
 	exportBtn = gtk.NewButtonWithLabel("导出 CSV")
 	exportBtn.Connect("clicked", func() { exportResults("csv") })
-	toolBox.Append(exportBtn)
+	advancedBox.Append(exportBtn)
 
 	exportJsonBtn = gtk.NewButtonWithLabel("导出 JSON")
 	exportJsonBtn.Connect("clicked", func() { exportResults("json") })
-	toolBox.Append(exportJsonBtn)
+	advancedBox.Append(exportJsonBtn)
 
 	mainBox.Append(searchBox)
-	mainBox.Append(toolBox)
 	mainBox.Append(advancedBox)
 
 	// Create results info label
@@ -674,22 +653,6 @@ func createMainWindow(app *gtk.Application) {
 		}()
 	})
 
-	// Connect open buttons (selected row based)
-	openBtn.Connect("clicked", func() {
-		if p, ok := selectedResultPath(); ok {
-			openWithSystemApp(p)
-		} else {
-			resultsInfoLabel.SetText("请先选择一个结果")
-		}
-	})
-	openDirBtn.Connect("clicked", func() {
-		if p, ok := selectedResultPath(); ok {
-			openWithSystemApp(filepath.Dir(p))
-		} else {
-			resultsInfoLabel.SetText("请先选择一个结果")
-		}
-	})
-
 	// Double-click a result row opens the file
 	resultsTree.Connect("row-activated", func() {
 		if p, ok := selectedResultPath(); ok {
@@ -758,31 +721,6 @@ func saveFavorites(favs []string) {
 	if err := os.WriteFile(favoritesFile(), []byte(sb.String()), 0600); err != nil {
 		slog.Warn("failed to save favorites", "error", err)
 	}
-}
-
-// toggleFavoriteSelected favorites/unfavorites the selected row.
-func toggleFavoriteSelected() {
-	p, ok := selectedResultPath()
-	if !ok {
-		favBtn.SetActive(false)
-		return
-	}
-	favs := loadFavorites()
-	idx := -1
-	for i, f := range favs {
-		if f == p {
-			idx = i
-			break
-		}
-	}
-	if idx >= 0 {
-		favs = append(favs[:idx], favs[idx+1:]...)
-		resultsInfoLabel.SetText("已取消收藏: " + p)
-	} else {
-		favs = append([]string{p}, favs...)
-		resultsInfoLabel.SetText("已收藏: " + p)
-	}
-	saveFavorites(favs)
 }
 
 // recentsFile returns the path of the persistent recently-opened list.
