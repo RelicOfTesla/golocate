@@ -392,8 +392,10 @@ func createMainWindow(app *gtk.Application) {
 	// Search function
 	doSearch := func() {
 		query := entry.Text()
-		if query == "" {
-			resultsInfoLabel.SetText("请输入搜索关键词")
+		// 对齐 H5 双输入：路径词与内容词至少其一即可（纯内容搜索允许空路径词）。
+		hasContent := contentEntry != nil && strings.TrimSpace(contentEntry.Text()) != ""
+		if query == "" && !hasContent {
+			resultsInfoLabel.SetText("请输入搜索关键词或内容")
 			resultsStore.Clear()
 			return
 		}
