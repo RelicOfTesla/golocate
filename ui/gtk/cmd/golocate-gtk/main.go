@@ -110,6 +110,7 @@ var (
 	favBtn           *gtk.ToggleButton // 收藏/取消收藏选中项
 	openFavBtn       *gtk.Button       // 打开收藏列表
 	openRecentBtn    *gtk.Button       // 打开最近打开列表
+	advToggleBtn     *gtk.ToggleButton // 展开/收起高级选项（默认收起）
 )
 
 // parseSizeValue parses an optional byte-size filter from an entry (empty -> 0).
@@ -360,8 +361,23 @@ func createMainWindow(app *gtk.Application) {
 	openRecentBtn.Connect("clicked", showRecentsDialog)
 	toolBox.Append(openRecentBtn)
 
-	// 第三行：高级搜索选项
+	// 第三行：高级搜索选项（默认收起，主区域留给结果表）
 	advancedBox := gtk.NewBox(gtk.OrientationHorizontal, 10)
+	advancedBox.SetVisible(false) // 默认收起：主要内容是结果表
+
+	advToggleBtn = gtk.NewToggleButtonWithLabel("高级选项 ▾")
+	advToggleBtn.SetTooltipText("展开/收起高级搜索选项")
+	advToggleBtn.SetActive(false)
+	searchBox.Append(advToggleBtn)
+	advToggleBtn.Connect("toggled", func() {
+		visible := advToggleBtn.Active()
+		advancedBox.SetVisible(visible)
+		if visible {
+			advToggleBtn.SetLabel("高级选项 ▴")
+		} else {
+			advToggleBtn.SetLabel("高级选项 ▾")
+		}
+	})
 
 	ignoreCaseBtn = gtk.NewCheckButtonWithLabel("忽略大小写")
 	ignoreCaseBtn.SetActive(false)
