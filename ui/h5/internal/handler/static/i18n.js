@@ -20,7 +20,7 @@
             statusLastBuild: '上次构建', statusUptime: '运行时长', statusPanelTitle: '运行状态', statusProtocol: '协议版本', statusPid: '进程ID', statusSearches: '搜索次数', statusContentSearches: '内容搜索', statusBuilds: '构建次数', statusOpens: '打开次数', metaBuilds: '历史构建', yes: '是', no: '否',
             searching: '搜索中...', noResults: '未找到结果', errPrefix: '错误',
             resultsFound: '找到', resultsTotal: '个结果（共', linePrefix: '行',
-            noDirs: '暂无索引目录', pageInfo: '第', open: '打开', openDir: '打开目录', noDirToOpen: '无目录可打开', openFail: '打开失败', opened: '已打开', copy: '复制', delete: '删除', favorites: '收藏', favorite: '收藏', unfav: '取消收藏', noFavorites: '暂无收藏',
+            noDirs: '暂无索引目录', pageInfo: '第', open: '打开', openDir: '打开目录', noDirToOpen: '无目录可打开', openFail: '打开失败', opened: '已打开', copy: '复制', copyFull: '复制完整路径', copyName: '复制文件名', copiedName: '已复制文件名', copyFail: '复制失败', delete: '删除', favorites: '收藏', favorite: '收藏', unfav: '取消收藏', noFavorites: '暂无收藏',
             btnAdvanced: '高级选项 ▾', btnAdvancedHide: '收起 ▴', grpMatch: '匹配', grpFilter: '过滤', grpResult: '结果', searchTitle: '搜索', btnServer: '🛠️ 服务器', indexOps: '索引操作', indexOpsHint: '重新扫描全部索引目录并热替换索引（后台执行，可在状态栏查看进度）。', recent: '最近打开', noRecent: '暂无最近打开',
         };
         const I18N_EN = {
@@ -44,7 +44,7 @@
             statusLastBuild: 'Last build', statusUptime: 'Uptime', statusPanelTitle: 'Runtime status', statusProtocol: 'Protocol', statusPid: 'PID', statusSearches: 'Searches', statusContentSearches: 'Content searches', statusBuilds: 'Builds', statusOpens: 'Opens', metaBuilds: 'Build history', yes: 'yes', no: 'no',
             searching: 'Searching...', noResults: 'No results', errPrefix: 'Error',
             resultsFound: 'Found', resultsTotal: 'results (of', linePrefix: 'L',
-            noDirs: 'No index directories', pageInfo: 'Page', open: 'Open', openDir: 'Open dir', noDirToOpen: 'No directory to open', openFail: 'Open failed', opened: 'Opened', copy: 'Copy', delete: 'Delete', favorites: 'Favorites', favorite: 'Favorite', unfav: 'Unfavorite', noFavorites: 'No favorites yet',
+            noDirs: 'No index directories', pageInfo: 'Page', open: 'Open', openDir: 'Open dir', noDirToOpen: 'No directory to open', openFail: 'Open failed', opened: 'Opened', copy: 'Copy', copyFull: 'Copy full path', copyName: 'Copy name', copiedName: 'Copied name', copyFail: 'Copy failed', delete: 'Delete', favorites: 'Favorites', favorite: 'Favorite', unfav: 'Unfavorite', noFavorites: 'No favorites yet',
             btnAdvanced: 'Advanced ▾', btnAdvancedHide: 'Hide ▴', grpMatch: 'Match', grpFilter: 'Filter', grpResult: 'Result', searchTitle: 'Search', btnServer: '🛠 Server', indexOps: 'Index operations', indexOpsHint: 'Rescan all indexed directories and hot-swap the index (runs in the background; watch the status bar for progress).', recent: 'Recently opened', noRecent: 'No recent files',
         };
         let currentLang = localStorage.getItem('golocateLang') || 'zh';

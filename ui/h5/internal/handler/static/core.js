@@ -129,7 +129,8 @@
                 items += '<button class="ctx-item" data-act="open">' + t('open') + '</button>';
                 items += '<button class="ctx-item" data-act="opendir">' + t('openDir') + '</button>';
             }
-            items += '<button class="ctx-item" data-act="copy">' + t('copy') + '</button>';
+            items += '<button class="ctx-item" data-act="copyname">' + t('copyName') + '</button>';
+            items += '<button class="ctx-item" data-act="copy">' + t('copyFull') + '</button>';
             const favNow = typeof isFavorite === 'function' && isFavorite(path);
             items += '<button class="ctx-item" data-act="fav">' + (favNow ? '★ ' + t('unfav') : '☆ ' + t('favorite')) + '</button>';
             menu.innerHTML = items;
@@ -159,6 +160,7 @@
                     const idx = parseInt(menu.dataset.index, 10);
                     if (item.dataset.act === 'open') openResult(idx);
                     else if (item.dataset.act === 'opendir') openDirResult(idx);
+                    else if (item.dataset.act === 'copyname') copyNameResult(idx);
                     else if (item.dataset.act === 'copy') copyResult(idx);
                     else if (item.dataset.act === 'fav') toggleFavorite(idx);
                     menu.style.display = 'none';
@@ -674,6 +676,29 @@
                 }
             }
         }
+        // copyNameResult copies the file name (basename) of row i.
+        async function copyNameResult(i) {
+            const path = resultPathAt(i);
+            if (!path) { alert(t('copyFail')); return; }
+            const name = path.split('/').pop() || path;
+            try {
+                await navigator.clipboard.writeText(name);
+            } catch (err) {
+                try {
+                    const ta = document.createElement('textarea');
+                    ta.value = name;
+                    document.body.appendChild(ta);
+                    ta.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(ta);
+                } catch (err2) {
+                    alert(t('copyFail') + ' ' + err2.message);
+                    return;
+                }
+            }
+            alert(t('copiedName') + ' ' + name);
+        }
+
         
 
         // Search History Functions

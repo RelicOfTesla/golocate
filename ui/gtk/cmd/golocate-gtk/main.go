@@ -844,6 +844,20 @@ func toggleFavoritePath(p string) {
 	saveFavorites(favs)
 }
 
+// copyNameToClipboard copies the file name (basename) to the system clipboard.
+func copyNameToClipboard(p string) {
+	disp := gdk.DisplayGetDefault()
+	if disp == nil {
+		return
+	}
+	clip := disp.Clipboard()
+	if clip == nil {
+		return
+	}
+	clip.SetText(filepath.Base(p))
+	resultsInfoLabel.SetText("已复制文件名: " + filepath.Base(p))
+}
+
 // copyPathToClipboard copies a path to the system clipboard.
 func copyPathToClipboard(p string) {
 	disp := gdk.DisplayGetDefault()
@@ -891,7 +905,8 @@ func showRowContextMenu(x, y int) {
 
 	addItem("打开", func() { openWithSystemApp(p) })
 	addItem("打开目录", func() { openWithSystemApp(filepath.Dir(p)) })
-	addItem("复制路径", func() { copyPathToClipboard(p) })
+	addItem("复制文件名", func() { copyNameToClipboard(p) })
+	addItem("复制完整路径", func() { copyPathToClipboard(p) })
 	if isFavoritePath(p) {
 		addItem("取消收藏", func() { toggleFavoritePath(p) })
 	} else {
