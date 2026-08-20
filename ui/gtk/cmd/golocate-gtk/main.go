@@ -501,9 +501,9 @@ func selectedResultPath() (string, bool) {
 	if sel == nil {
 		return "", false
 	}
-	// gotk4 v0.3.1: Selected() returns (iter, model, ok) — keep iter only.
-	iter, _, _ := sel.Selected()
-	if iter == nil {
+	// gotk4 v0.3.1: Selected() returns (model *gtk.TreeModel, iter *gtk.TreeIter, ok bool).
+	_, iter, ok := sel.Selected()
+	if !ok || iter == nil {
 		return "", false
 	}
 	v := resultsStore.Value(iter, 1) // column 1 = path
