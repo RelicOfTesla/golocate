@@ -481,11 +481,10 @@ func (s *Server) handleSearchHandler(ctx context.Context, msg message.Message) (
 		// 候选搜索不截断，否则前面的候选不含关键词时结果会被错误地截成 0。
 		const maxContentScanFiles = 5000
 		if pattern == "" {
-			// 纯内容搜索（无路径过滤）：从全量索引取候选，封顶避免扫描全盘。
-			// 按修改时间降序排序，让"最近修改"的文件先被扫描——关键词最
-			// 可能出现在最新文件中，命中率与直觉都更好。
-			candidates = s.index.GetAllEntries()
-			newestFirst(candidates)
+			// 纯内容搜索（无路径过滤）：取“最近修改”的有界候选（索引侧维护，
+			// 免全量快照+排序，见 docs/PERFORMANCE.md S3）。最新文件先扫描——
+			// 关键词最可能出现在新文件中，命中率与直觉都更好。
+			candidates = s.index.RecentEntries(maxContentScanFiles)
 			// 预建内容索引（content_index: true）：单 token 查询用精确候选。
 			// 无命中时保持全量扫描——子串匹配（如 "hello" 命中 token
 			// "helloworld"）仍可能成立，不能直接判 0。

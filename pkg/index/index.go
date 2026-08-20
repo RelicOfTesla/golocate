@@ -2,6 +2,7 @@
 package index
 
 import (
+	"container/heap"
 	"context"
 	"log/slog"
 	"os"
@@ -57,11 +58,16 @@ type Entry struct {
 	pathLower string
 }
 
+// maxRecentEntries caps the in-memory "most recently modified" candidate set
+// used by content search, avoiding a full index snapshot + sort per query.
+const maxRecentEntries = 4096
+
 // Index is the file index.
 type Index struct {
 	mu      sync.RWMutex
 	entries map[string]*Entry   // path -> Entry
 	byName  map[string][]*Entry // name -> []Entry (for basename search)
+	recent  *recentMinHeap      // cap-limited min-heap by ModTime (top = oldest)
 }
 
 // NewIndex creates a new file index.
@@ -105,6 +111,24 @@ func (idx *Index) addLocked(entry *Entry) {
 
 	// Add to name index
 	idx.byName[entry.Name] = append(idx.byName[entry.Name], entry)
+
+	// Keep the "most recently modified" candidate set (bounded), skipping
+	// entries without a real modtime (e.g. constructed in tests).
+	idx.addRecentLocked(entry)
+}
+
+// addRecentLocked pushes entry onto the bounded min-heap of newest entries.
+func (idx *Index) addRecentLocked(entry *Entry) {
+	if entry.ModTime.IsZero() {
+		return
+	}
+	if idx.recent == nil {
+		idx.recent = &recentMinHeap{}
+	}
+	heap.Push(idx.recent, entry)
+	if idx.recent.Len() > maxRecentEntries {
+		heap.Pop(idx.recent)
+	}
 }
 
 // AddBatch adds multiple entries to the index efficiently.
@@ -730,6 +754,54 @@ func (idx *Index) Len() int {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
 	return len(idx.entries)
+}
+
+// RecentEntries returns up to max entries ordered by modification time,
+// newest first. Entries that were removed, or duplicate paths whose newer
+// version superseded an older one, are filtered out. This is the bounded
+// candidate set for content search (see docs/PERFORMANCE.md S3) — it avoids
+// snapshotting and sorting the whole index on every query.
+func (idx *Index) RecentEntries(max int) []*Entry {
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
+	if idx.recent == nil || idx.recent.Len() == 0 || max <= 0 {
+		return nil
+	}
+	arr := append([]*Entry(nil), (*idx.recent)...)
+	sort.Slice(arr, func(i, j int) bool {
+		return arr[i].ModTime.After(arr[j].ModTime)
+	})
+	out := make([]*Entry, 0, min(max, len(arr)))
+	seen := make(map[string]struct{}, len(arr))
+	for _, e := range arr {
+		if _, exists := idx.entries[e.Path]; !exists {
+			continue // removed since it entered the heap
+		}
+		if _, dup := seen[e.Path]; dup {
+			continue // keep the newest occurrence of a path
+		}
+		seen[e.Path] = struct{}{}
+		out = append(out, e)
+		if len(out) >= max {
+			break
+		}
+	}
+	return out
+}
+
+// recentMinHeap is a min-heap on ModTime; the top is the oldest entry.
+type recentMinHeap []*Entry
+
+func (h recentMinHeap) Len() int           { return len(h) }
+func (h recentMinHeap) Less(i, j int) bool { return h[i].ModTime.Before(h[j].ModTime) }
+func (h recentMinHeap) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
+func (h *recentMinHeap) Push(x any)        { *h = append(*h, x.(*Entry)) }
+func (h *recentMinHeap) Pop() any {
+	old := *h
+	n := len(old)
+	e := old[n-1]
+	*h = old[:n-1]
+	return e
 }
 
 // GetAllEntries returns all entries in the index.
