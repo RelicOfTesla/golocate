@@ -406,6 +406,13 @@ func (s *Server) handleSearchHandler(ctx context.Context, msg message.Message) (
 		return nil, fmt.Errorf("invalid parameter: offset cannot be negative")
 	}
 
+	// 安全上限：无 limit（<=0）或超上限时截断，避免单次响应/内存被裸客户端打爆。
+	// total 仍是全量，客户端可用 offset 续取；truncated 在响应处按“全量是否
+	// 超出上限”真正被截断时才标记（docs/PERFORMANCE.md S5）。
+	if req.Limit <= 0 || req.Limit > maxSafeSearchLimit {
+		req.Limit = maxSafeSearchLimit
+	}
+
 	// 3. 解析搜索选项
 	opts := index.SearchOptions{
 		IgnoreCase:    req.IgnoreCase,
@@ -618,6 +625,9 @@ func (s *Server) handleSearchHandler(ctx context.Context, msg message.Message) (
 	resultMap["paths"] = paths
 	resultMap["count"] = len(results)
 	resultMap["total"] = totalCount
+	if totalCount > maxSafeSearchLimit {
+		resultMap["truncated"] = true
+	}
 
 	return resultMap, nil
 }
@@ -1032,6 +1042,11 @@ func openPath(path string) error {
 // maxSortCacheEntries bounds how large a sorted result list is worth
 // caching (larger lists would cost more memory than the repeated sort).
 const maxSortCacheEntries = 100000
+
+// maxSafeSearchLimit caps how many rows a server response may carry when the
+// client did not pass a limit, preventing an unbounded full-dump (OOM).
+// (docs/PERFORMANCE.md S5)
+const maxSafeSearchLimit = 100000
 
 // cacheKeyFor builds the cache key for a path search: any parameter that can
 // change the filtered+sorted result set must be part of it.

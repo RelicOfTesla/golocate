@@ -312,6 +312,28 @@ func searchIndex(pattern string, args []string) {
 		opts.MtimeBefore = n
 	}
 
+	// --count: fetch only the total (Limit=1) instead of pulling the whole
+	// result set just to count it (docs/PERFORMANCE.md C1).
+	if flagCount && opts.Content == "" && !flagOpen && !flagOpenDir && !flagCopy {
+		o := opts
+		o.Limit = 1
+		res, err := cliclient.Search(o)
+		if err != nil {
+			errpkg.PrintFriendlyError(err)
+			slog.Error("count failed")
+			os.Exit(1)
+		}
+		total := res.Total
+		if total <= 0 {
+			total = res.Count
+		}
+		fmt.Println(total)
+		if total == 0 {
+			os.Exit(1)
+		}
+		return
+	}
+
 	// Large path searches (no --limit) stream page-by-page: print each page
 	// as it arrives instead of buffering every result, so huge result sets
 	// (e.g. `golocate a`) start producing output immediately with bounded
