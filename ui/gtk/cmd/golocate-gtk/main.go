@@ -105,7 +105,9 @@ var (
 	dedupeBtn        *gtk.CheckButton // 硬链接去重
 	modeDropDown     *gtk.DropDown    // 搜索模式（普通/正则/通配符/多词）
 	exportBtn        *gtk.Button
-	copyBtn          *gtk.Button // 复制选中路径（跟随 H5）
+	copyBtn          *gtk.Button       // 复制选中路径（跟随 H5）
+	favBtn           *gtk.ToggleButton // 收藏/取消收藏选中项
+	openFavBtn       *gtk.Button       // 打开收藏列表
 )
 
 // parseSizeValue parses an optional byte-size filter from an entry (empty -> 0).
@@ -336,6 +338,16 @@ func createMainWindow(app *gtk.Application) {
 	copyBtn.SetTooltipText("复制选中文件的完整路径")
 	copyBtn.Connect("clicked", copySelectedPath)
 	toolBox.Append(copyBtn)
+
+	favBtn = gtk.NewToggleButtonWithLabel("收藏")
+	favBtn.SetTooltipText("收藏/取消收藏选中的文件")
+	favBtn.Connect("toggled", toggleFavoriteSelected)
+	toolBox.Append(favBtn)
+
+	openFavBtn = gtk.NewButtonWithLabel("打开收藏")
+	openFavBtn.SetTooltipText("从收藏中打开")
+	openFavBtn.Connect("clicked", showFavoritesDialog)
+	toolBox.Append(openFavBtn)
 
 	// 第三行：高级搜索选项
 	advancedBox := gtk.NewBox(gtk.OrientationHorizontal, 10)
@@ -668,6 +680,99 @@ func selectedResultPath() (string, bool) {
 		return "", false
 	}
 	return p, true
+}
+
+// favoritesFile returns the path of the persistent favorites list.
+func favoritesFile() string {
+	base, err := os.UserCacheDir()
+	if err != nil {
+		base = os.TempDir()
+	}
+	return base + "/golocate/favorites.conf"
+}
+
+// loadFavorites returns favorite paths, most recently added first.
+func loadFavorites() []string {
+	data, err := os.ReadFile(favoritesFile())
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, line := range strings.Split(string(data), "\n") {
+		p := strings.TrimSpace(line)
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// saveFavorites persists the favorites list.
+func saveFavorites(favs []string) {
+	var sb strings.Builder
+	for _, p := range favs {
+		sb.WriteString(p + "\n")
+	}
+	if err := os.WriteFile(favoritesFile(), []byte(sb.String()), 0600); err != nil {
+		slog.Warn("failed to save favorites", "error", err)
+	}
+}
+
+// toggleFavoriteSelected favorites/unfavorites the selected row.
+func toggleFavoriteSelected() {
+	p, ok := selectedResultPath()
+	if !ok {
+		favBtn.SetActive(false)
+		return
+	}
+	favs := loadFavorites()
+	idx := -1
+	for i, f := range favs {
+		if f == p {
+			idx = i
+			break
+		}
+	}
+	if idx >= 0 {
+		favs = append(favs[:idx], favs[idx+1:]...)
+		resultsInfoLabel.SetText("已取消收藏: " + p)
+	} else {
+		favs = append([]string{p}, favs...)
+		resultsInfoLabel.SetText("已收藏: " + p)
+	}
+	saveFavorites(favs)
+}
+
+// showFavoritesDialog lists favorites in a dialog for quick open.
+func showFavoritesDialog() {
+	favs := loadFavorites()
+	if len(favs) == 0 {
+		resultsInfoLabel.SetText("暂无收藏")
+		return
+	}
+	dialog := gtk.NewDialog()
+	dialog.SetTitle("收藏")
+	area := dialog.ContentArea()
+	area.SetSpacing(8)
+
+	drop := gtk.NewDropDownFromStrings(favs)
+	drop.SetSelected(0)
+	area.Append(drop)
+
+	openBtn := gtk.NewButtonWithLabel("打开选中")
+	openBtn.Connect("clicked", func() {
+		idx := int(drop.Selected())
+		if idx >= 0 && idx < len(favs) {
+			openWithSystemApp(favs[idx])
+		}
+		dialog.Close()
+	})
+	area.Append(openBtn)
+	closeBtn := gtk.NewButtonWithLabel("关闭")
+	closeBtn.Connect("clicked", func() { dialog.Close() })
+	area.Append(closeBtn)
+
+	dialog.Show()
 }
 
 // copySelectedPath copies the selected row's path to the system clipboard.
