@@ -94,8 +94,7 @@ var (
 var (
 	ignoreCaseBtn    *gtk.CheckButton
 	basenameBtn      *gtk.CheckButton // 仅文件名（跟随 H5）
-	contentBtn       *gtk.CheckButton
-	contentEntry     *gtk.Entry       // 独立内容关键词（与 searchEntry 路径过滤 AND，跟随 H5）
+	contentEntry     *gtk.Entry       // 内容搜索框（非空即内容搜索，与路径过滤 AND，跟随 H5）
 	typesEntry       *gtk.Entry       // 类型过滤（逗号/空格分隔，可选）
 	scopeEntry       *gtk.Entry       // 目录范围（可选）
 	excludeEntry     *gtk.Entry       // 排除（逗号/空格分隔，可选）
@@ -379,11 +378,7 @@ func createMainWindow(app *gtk.Application) {
 	// 窄点击区/慢 popover，解决“很难弹出、必须精确点文字”问题）。
 	advancedBox.Append(modeDropDown)
 
-	contentBtn = gtk.NewCheckButtonWithLabel("内容搜索")
-	contentBtn.SetActive(false)
-	advancedBox.Append(contentBtn)
-
-	// 内容关键词输入（可选）：与 searchEntry 的路径过滤做 AND
+	// 内容关键词输入（可选）：与 searchEntry 的路径过滤做 AND（为空则普通路径搜索）
 	contentEntry = gtk.NewEntry()
 	contentEntry.SetPlaceholderText("内容(可选)")
 	contentEntry.SetWidthChars(14)
@@ -1029,12 +1024,12 @@ func performSearch(c *client.Client, query string) {
 	// Calculate offset
 	offset := int64((pagination.currentPage - 1) * pagination.pageSize)
 
-	// 内容搜索词：优先取独立内容输入框（与路径词 AND 跟随 H5）；否则兼容旧 contentBtn。
+	// 内容搜索词：内容输入框非空即内容搜索（与路径词 AND 跟随 H5）。
 	contentKeyword := ""
 	if contentEntry != nil {
 		contentKeyword = strings.TrimSpace(contentEntry.Text())
 	}
-	contentMode := (contentBtn != nil && contentBtn.Active()) || contentKeyword != ""
+	contentMode := contentKeyword != ""
 
 	types := parseTypeList("")
 	if typesEntry != nil {
@@ -1062,14 +1057,10 @@ func performSearch(c *client.Client, query string) {
 
 	if contentMode {
 		// Content search：keyword = 内容词；有独立内容输入框时 pattern = 路径过滤（AND），
-		// 只有旧 contentBtn 勾选（无内容词）时保持纯内容搜索（pattern 为空）。
 		kw := contentKeyword
-		pattern := ""
-		if kw == "" {
-			kw = query // 旧 contentBtn 模式：直接用查询词
-		} else {
-			pattern = query
-		}
+		pattern := query // 内容与路径 AND；纯内容即请求空 pattern 的候选检索
+		_ = kw
+		_ = pattern
 		var cres *client.ContentSearchResult
 		cres, err = c.SearchContent(pattern, kw, index.SearchOptions{
 			Limit:       pagination.pageSize,
@@ -1290,7 +1281,7 @@ func exportResults(format string) {
 	if contentEntry != nil {
 		contentKeyword = strings.TrimSpace(contentEntry.Text())
 	}
-	contentMode := (contentBtn != nil && contentBtn.Active()) || contentKeyword != ""
+	contentMode := contentKeyword != ""
 	types := parseTypeList("")
 	if typesEntry != nil {
 		types = parseTypeList(typesEntry.Text())
