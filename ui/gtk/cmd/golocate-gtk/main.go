@@ -108,6 +108,7 @@ var (
 	copyBtn          *gtk.Button       // 复制选中路径（跟随 H5）
 	favBtn           *gtk.ToggleButton // 收藏/取消收藏选中项
 	openFavBtn       *gtk.Button       // 打开收藏列表
+	openRecentBtn    *gtk.Button       // 打开最近打开列表
 )
 
 // parseSizeValue parses an optional byte-size filter from an entry (empty -> 0).
@@ -348,6 +349,11 @@ func createMainWindow(app *gtk.Application) {
 	openFavBtn.SetTooltipText("从收藏中打开")
 	openFavBtn.Connect("clicked", showFavoritesDialog)
 	toolBox.Append(openFavBtn)
+
+	openRecentBtn = gtk.NewButtonWithLabel("最近打开")
+	openRecentBtn.SetTooltipText("从最近打开中快速打开")
+	openRecentBtn.Connect("clicked", showRecentsDialog)
+	toolBox.Append(openRecentBtn)
 
 	// 第三行：高级搜索选项
 	advancedBox := gtk.NewBox(gtk.OrientationHorizontal, 10)
@@ -743,27 +749,80 @@ func toggleFavoriteSelected() {
 	saveFavorites(favs)
 }
 
-// showFavoritesDialog lists favorites in a dialog for quick open.
-func showFavoritesDialog() {
-	favs := loadFavorites()
-	if len(favs) == 0 {
-		resultsInfoLabel.SetText("暂无收藏")
+// recentsFile returns the path of the persistent recently-opened list.
+func recentsFile() string {
+	base, err := os.UserCacheDir()
+	if err != nil {
+		base = os.TempDir()
+	}
+	return base + "/golocate/recents.conf"
+}
+
+// loadRecents returns recently-opened paths, most recent first.
+func loadRecents() []string {
+	data, err := os.ReadFile(recentsFile())
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, line := range strings.Split(string(data), "\n") {
+		p := strings.TrimSpace(line)
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// saveRecents persists the recently-opened list.
+func saveRecents(recs []string) {
+	var sb strings.Builder
+	for _, p := range recs {
+		sb.WriteString(p + "\n")
+	}
+	if err := os.WriteFile(recentsFile(), []byte(sb.String()), 0600); err != nil {
+		slog.Warn("failed to save recents", "error", err)
+	}
+}
+
+const maxRecents = 20
+
+// addRecent records a path as recently opened (dedup, most recent first).
+func addRecent(p string) {
+	recs := loadRecents()
+	rest := make([]string, 0, maxRecents)
+	rest = append(rest, p)
+	for _, r := range recs {
+		if r != p {
+			rest = append(rest, r)
+			if len(rest) >= maxRecents {
+				break
+			}
+		}
+	}
+	saveRecents(rest)
+}
+
+// showPathsDialog lists paths (favorites/recents) for quick open.
+func showPathsDialog(title string, paths []string) {
+	if len(paths) == 0 {
+		resultsInfoLabel.SetText("暂无" + title)
 		return
 	}
 	dialog := gtk.NewDialog()
-	dialog.SetTitle("收藏")
+	dialog.SetTitle(title)
 	area := dialog.ContentArea()
 	area.SetSpacing(8)
 
-	drop := gtk.NewDropDownFromStrings(favs)
+	drop := gtk.NewDropDownFromStrings(paths)
 	drop.SetSelected(0)
 	area.Append(drop)
 
 	openBtn := gtk.NewButtonWithLabel("打开选中")
 	openBtn.Connect("clicked", func() {
 		idx := int(drop.Selected())
-		if idx >= 0 && idx < len(favs) {
-			openWithSystemApp(favs[idx])
+		if idx >= 0 && idx < len(paths) {
+			openWithSystemApp(paths[idx])
 		}
 		dialog.Close()
 	})
@@ -774,6 +833,12 @@ func showFavoritesDialog() {
 
 	dialog.Show()
 }
+
+// showFavoritesDialog lists favorites in a dialog for quick open.
+func showFavoritesDialog() { showPathsDialog("收藏", loadFavorites()) }
+
+// showRecentsDialog lists recently-opened paths for quick open.
+func showRecentsDialog() { showPathsDialog("最近打开", loadRecents()) }
 
 // copySelectedPath copies the selected row's path to the system clipboard.
 func copySelectedPath() {
@@ -808,7 +873,9 @@ func openWithSystemApp(p string) {
 	}
 	if err := cmd.Start(); err != nil {
 		showErrorDialog(fmt.Sprintf("打开失败: %v", err))
+		return
 	}
+	addRecent(p)
 }
 
 func createPaginationControls(mainBox *gtk.Box, entry *gtk.Entry) {
