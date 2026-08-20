@@ -3,6 +3,7 @@ package api
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/RelicOfTesla/golocate/internal/client"
 	errpkg "github.com/RelicOfTesla/golocate/pkg/errors"
@@ -37,12 +38,15 @@ type SearchResponse struct {
 
 // ContentMatch represents a content search match (mirrors internal/client.ContentMatch).
 type ContentMatch struct {
-	Path    string   `json:"Path"`
-	LineNum int      `json:"LineNum"`
-	Line    string   `json:"Line"`
-	Match   string   `json:"Match"`
-	Before  []string `json:"Before"`
-	After   []string `json:"After"`
+	Path    string    `json:"Path"`
+	LineNum int       `json:"LineNum"`
+	Line    string    `json:"Line"`
+	Match   string    `json:"Match"`
+	Before  []string  `json:"Before"`
+	After   []string  `json:"After"`
+	Name    string    `json:"Name"`
+	Size    int64     `json:"Size"`
+	ModTime time.Time `json:"ModTime"`
 }
 
 // StatusResponse represents a status response.
@@ -169,6 +173,9 @@ func (c *Client) Search(p SearchParams) (*SearchResponse, error) {
 				Match:   m.Match,
 				Before:  m.Before,
 				After:   m.After,
+				Name:    m.Name,
+				Size:    m.Size,
+				ModTime: m.ModTime,
 			})
 		}
 		return &SearchResponse{

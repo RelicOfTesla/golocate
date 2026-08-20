@@ -498,8 +498,15 @@
             for (let i = 0; i < count; i++) {
                 const result = currentResults[i] || {};
                 const match = contentMode ? (currentMatches[i] || {}) : null;
-                const modTime = result.ModTime ? formatDate(result.ModTime) : '-';
-                const size = (result.Size !== undefined && result.Size !== null) ? formatSize(result.Size) : '-';
+                // In content mode the row's file columns come from the match
+                // (the server now returns Name/Size/ModTime alongside each
+                // match); fall back to the path/name search result.
+                const row = (contentMode && match && match.Path) ? match : result;
+                const modTime = row.ModTime ? formatDate(row.ModTime) : '-';
+                const size = (row.Size !== undefined && row.Size !== null) ? formatSize(row.Size) : '-';
+                const dispPath = row.Path || '';
+                let dispName = row.Name || result.Name || '';
+                if (!dispName && dispPath.indexOf('/') >= 0) dispName = dispPath.split('/').pop();
                 
                 let matchCell = '-';
                 let matchTitle = '';
@@ -514,8 +521,8 @@
                 }
                 
                 html += '<tr>';
-                html += '<td class="col-name" title="' + escapeHtml(result.Name || '') + '">' + escapeHtml(result.Name || '-') + '</td>';
-                html += '<td class="col-path" title="' + escapeHtml(result.Path || '') + '">' + highlightMatch(result.Path || '-', searchInput.value.trim()) + '</td>';
+                html += '<td class="col-name" title="' + escapeHtml(dispName) + '">' + escapeHtml(dispName || '-') + '</td>';
+                html += '<td class="col-path" title="' + escapeHtml(dispPath) + '">' + highlightMatch(dispPath || '-', searchInput.value.trim()) + '</td>';
                 html += '<td class="col-size">' + size + '</td>';
                 html += '<td class="col-modtime">' + modTime + '</td>';
                 html += '<td class="col-match" title="' + escapeHtml(matchTitle || matchCell) + '">' + matchCell + '</td>';

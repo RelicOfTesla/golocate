@@ -245,6 +245,10 @@ type ContentMatch struct {
 	Match   string   `json:"Match"`
 	Before  []string `json:"Before"` // context lines before the match
 	After   []string `json:"After"`  // context lines after the match
+	// File metadata returned alongside content matches (H5/GTK columns).
+	Name    string    `json:"Name"`
+	Size    int64     `json:"Size"`
+	ModTime time.Time `json:"ModTime"`
 }
 
 // ContentSearchResult contains content search results.

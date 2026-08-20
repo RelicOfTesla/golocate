@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"time"
 	"unicode/utf16"
 	"unicode/utf8"
 
@@ -26,6 +27,11 @@ type SearchResult struct {
 	Match   string
 	Before  []string // context lines before the match (grep -C style, may be empty)
 	After   []string // context lines after the match (may be empty)
+	// File metadata so clients can render name/size/mtime columns for
+	// content matches too (H5/GTK previously showed empty columns).
+	Name    string
+	Size    int64
+	ModTime time.Time
 }
 
 // SearchOptions contains options for content search.
@@ -214,6 +220,9 @@ func (s *Searcher) searchFile(path string) []*SearchResult {
 				LineNum: lineNum,
 				Line:    line,
 				Match:   match,
+				Name:    info.Name(),
+				Size:    info.Size(),
+				ModTime: info.ModTime(),
 			}
 			// Blank lines are legitimate context (grep shows them too), so
 			// always carry the previous line when one exists.

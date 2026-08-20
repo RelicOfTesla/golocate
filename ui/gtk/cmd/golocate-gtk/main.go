@@ -732,9 +732,15 @@ func performSearch(c *client.Client, query string) {
 			total = cres.Total
 			entries = make([]*index.Entry, 0, len(matches))
 			for _, m := range matches {
+				name := m.Name
+				if name == "" {
+					name = filepath.Base(m.Path)
+				}
 				entries = append(entries, &index.Entry{
-					Path: m.Path,
-					Name: filepath.Base(m.Path),
+					Path:    m.Path,
+					Name:    name,
+					Size:    m.Size,
+					ModTime: m.ModTime,
 				})
 			}
 		}
