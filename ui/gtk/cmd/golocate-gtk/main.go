@@ -921,12 +921,21 @@ func copyPathToClipboard(p string) {
 }
 
 // showRowContextMenu shows the right-click menu at (x, y) on the results tree.
+// showRowContextMenu shows the right-click menu at (x, y) on the results tree.
+//
+// A plain bordered-less GtkWindow is used instead of GtkPopover: gotk4 v0.3
+// has no Popover.SetParent, so a Popover.Popup() without a toplevel anchor
+// crashes (SIGSEGV in gtk_popover_popup). A window always has a toplevel.
 func showRowContextMenu(x, y int) {
 	p, ok := selectedResultPath()
 	if !ok {
 		return
 	}
-	pop := gtk.NewPopover()
+	mwin := gtk.NewWindow()
+	mwin.SetTitle("")
+	mwin.SetDecorated(false)
+	mwin.SetResizable(false)
+
 	box := gtk.NewBox(gtk.OrientationVertical, 2)
 	box.SetMarginTop(6)
 	box.SetMarginBottom(6)
@@ -938,7 +947,7 @@ func showRowContextMenu(x, y int) {
 		b.SetHAlign(gtk.AlignStart)
 		b.Connect("clicked", func() {
 			fn()
-			pop.Popdown()
+			mwin.Destroy()
 		})
 		box.Append(b)
 	}
@@ -952,11 +961,9 @@ func showRowContextMenu(x, y int) {
 		addItem("收藏", func() { toggleFavoritePath(p) })
 	}
 
-	pop.SetChild(box)
-	pop.SetPosition(gtk.PosRight)
-	rect := gdk.NewRectangle(x, y, 1, 1)
-	pop.SetPointingTo(&rect)
-	pop.Popup()
+	mwin.SetChild(box)
+	mwin.SetDefaultSize(150, 1)
+	mwin.Present()
 }
 
 // copySelectedPath copies the selected row's path to the system clipboard.
