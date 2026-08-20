@@ -896,12 +896,31 @@ func applySort() {
 	updateSortHeader()
 }
 
-// exportResults writes the current page rows to a CSV file in Downloads.
+// exportResults exports the FULL result set (server-side pagination loop) to
+// a CSV file in Downloads, re-using the current filters and server sort
+// (对齐 H5 全量导出)。
 func exportResults() {
 	if len(currentEntries) == 0 {
 		resultsInfoLabel.SetText("没有可导出的结果")
 		return
 	}
+	c := mainClient
+	if c == nil {
+		resultsInfoLabel.SetText("未连接服务器")
+		return
+	}
+	query := searchEntry.Text()
+	contentKeyword := ""
+	if contentEntry != nil {
+		contentKeyword = strings.TrimSpace(contentEntry.Text())
+	}
+	contentMode := (contentBtn != nil && contentBtn.Active()) || contentKeyword != ""
+	types := parseTypeList("")
+	if typesEntry != nil {
+		types = parseTypeList(typesEntry.Text())
+	}
+	dedupe := dedupeBtn != nil && dedupeBtn.Active()
+
 	dir, err := os.UserHomeDir()
 	if err != nil {
 		dir = os.TempDir()
@@ -910,35 +929,79 @@ func exportResults() {
 	_ = os.MkdirAll(dir, 0755)
 	path := filepath.Join(dir, fmt.Sprintf("golocate_export_%s.csv", time.Now().Format("20060102_150405")))
 
-	var sb strings.Builder
-	if len(currentMatches) > 0 {
-		// Content search export: include line numbers, matching text and context
-		sb.WriteString("文件名,路径,行号,匹配内容,上下文\n")
-		for i, r := range currentEntries {
-			if i >= len(currentMatches) {
+	resultsInfoLabel.SetText("导出中…")
+	go func() {
+		var sb strings.Builder
+		if contentMode {
+			sb.WriteString("文件名,路径,行号,匹配内容,上下文\n")
+		} else {
+			sb.WriteString("文件名,路径,大小,修改时间\n")
+		}
+
+		total := 0
+		const pageSize = 5000
+		for offset := 0; ; offset += pageSize {
+			opts := index.SearchOptions{
+				Limit:       pageSize,
+				Offset:      int64(offset),
+				IgnoreCase:  ignoreCaseBtn.Active(),
+				PatternMode: modeFromUI(),
+				Types:       types,
+				Dedupe:      dedupe,
+				SortField:   sortField,
+				SortOrder:   sortOrder,
+			}
+			if contentMode {
+				kw := contentKeyword
+				pattern := ""
+				if kw == "" {
+					kw = query
+				} else {
+					pattern = query
+				}
+				cres, err := c.SearchContent(pattern, kw, opts)
+				if err != nil {
+					resultsInfoLabel.SetText("导出失败: " + err.Error())
+					return
+				}
+				total = cres.Total
+				for _, m := range cres.Matches {
+					ctx := make([]string, 0, len(m.Before)+len(m.After))
+					ctx = append(ctx, m.Before...)
+					ctx = append(ctx, m.After...)
+					sb.WriteString(fmt.Sprintf("%s,%s,%d,\"%s\",\"%s\"\n",
+						filepath.Base(m.Path), m.Path, m.LineNum,
+						strings.ReplaceAll(m.Line, "\"", "\"\""),
+						strings.ReplaceAll(strings.Join(ctx, " | "), "\"", "\"\"")))
+				}
+				break // 内容搜索为单页（服务端不分页 matches）
+			}
+			res, err := c.SearchFast(query, opts)
+			if err != nil {
+				resultsInfoLabel.SetText("导出失败: " + err.Error())
+				return
+			}
+			if total == 0 {
+				total = res.Total
+			}
+			for _, r := range res.Entries {
+				sb.WriteString(fmt.Sprintf("%s,%s,%s,%s\n",
+					r.Name, r.Path, formatSize(r.Size), formatModTime(r.ModTime)))
+			}
+			if total > 0 && offset+pageSize >= total {
 				break
 			}
-			m := currentMatches[i]
-			ctx := make([]string, 0, len(m.Before)+len(m.After))
-			ctx = append(ctx, m.Before...)
-			ctx = append(ctx, m.After...)
-			sb.WriteString(fmt.Sprintf("%s,%s,%d,\"%s\",\"%s\"\n",
-				r.Name, r.Path, m.LineNum,
-				strings.ReplaceAll(m.Line, "\"", "\"\""),
-				strings.ReplaceAll(strings.Join(ctx, " | "), "\"", "\"\"")))
+			if len(res.Entries) < pageSize {
+				break
+			}
 		}
-	} else {
-		sb.WriteString("文件名,路径,大小,修改时间\n")
-		for _, r := range currentEntries {
-			sb.WriteString(fmt.Sprintf("%s,%s,%s,%s\n",
-				r.Name, r.Path, formatSize(r.Size), formatModTime(r.ModTime)))
+
+		if err := os.WriteFile(path, []byte(sb.String()), 0644); err != nil {
+			resultsInfoLabel.SetText("导出失败: " + err.Error())
+			return
 		}
-	}
-	if err := os.WriteFile(path, []byte(sb.String()), 0644); err != nil {
-		resultsInfoLabel.SetText(fmt.Sprintf("导出失败: %v", err))
-		return
-	}
-	resultsInfoLabel.SetText(fmt.Sprintf("已导出 %d 条到 %s", len(currentEntries), path))
+		resultsInfoLabel.SetText(fmt.Sprintf("已导出 %d 条到 %s", total, path))
+	}()
 }
 
 // updateSortHeader shows the current sort direction in the column titles.
