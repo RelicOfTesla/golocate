@@ -1043,7 +1043,9 @@ func openPath(path string) error {
 
 // maxSortCacheEntries bounds how large a sorted result list is worth
 // caching (larger lists would cost more memory than the repeated sort).
-const maxSortCacheEntries = 100000
+// Raised well above typical big-index result sets so streaming pagers hit the
+// cache instead of re-sorting the full list on every page.
+const maxSortCacheEntries = 1000000
 
 // maxSafeSearchLimit caps how many rows a server response may carry when the
 // client did not pass a limit, preventing an unbounded full-dump (OOM).

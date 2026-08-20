@@ -444,33 +444,54 @@ func searchIndex(pattern string, args []string) {
 }
 
 // jsonStream prints path search results as a JSON array, streaming page-by-page
-// (bounded memory, server-side sort preserved).
+// with a prefetch goroutine so output does not pause between batches.
 func jsonStream(opts cliclient.SearchOptions) {
 	const batch = 5000
 	if opts.Sort == "" {
 		opts.Sort = "path:asc" // stable order so paging is seamless
 	}
+
+	type pageResult struct {
+		res    *cliclient.SearchResult
+		err    error
+		offset int
+	}
+	pages := make(chan pageResult, 2)
+	stop := make(chan struct{})
+	defer close(stop)
+
+	go func() {
+		defer close(pages)
+		for offset := 0; ; offset += batch {
+			page := opts
+			page.Limit = batch
+			page.Offset = int64(offset)
+			res, err := cliclient.Search(page)
+			select {
+			case pages <- pageResult{res: res, err: err, offset: offset}:
+			case <-stop:
+				return
+			}
+		}
+	}()
+
 	w := bufio.NewWriter(os.Stdout)
 	defer w.Flush()
 	fmt.Fprintln(w, "[")
 	wrote := false
 	total, hasTotal := 0, false
 
-	for offset := 0; ; offset += batch {
-		page := opts
-		page.Limit = batch
-		page.Offset = int64(offset)
-		res, err := cliclient.Search(page)
-		if err != nil {
-			errpkg.PrintFriendlyError(err)
-			slog.Error("json search failed", "offset", offset)
+	for pr := range pages {
+		if pr.err != nil {
+			errpkg.PrintFriendlyError(pr.err)
+			slog.Error("json search failed", "offset", pr.offset)
 			fmt.Fprintln(w, "]")
-			exitError(1)
+			os.Exit(1)
 		}
 		if !hasTotal {
-			total, hasTotal = res.Total, true
+			total, hasTotal = pr.res.Total, true
 		}
-		for _, e := range res.Entries {
+		for _, e := range pr.res.Entries {
 			if wrote {
 				fmt.Fprint(w, ",\n")
 			}
@@ -483,10 +504,10 @@ func jsonStream(opts cliclient.SearchOptions) {
 			fmt.Fprintf(w, "  %s", b)
 			wrote = true
 		}
-		if hasTotal && total > 0 && offset+batch >= total {
+		if hasTotal && total > 0 && pr.offset+batch >= total {
 			break
 		}
-		if res.Count < batch && !hasTotal {
+		if pr.res.Count < batch && !hasTotal {
 			break
 		}
 	}
@@ -495,7 +516,7 @@ func jsonStream(opts cliclient.SearchOptions) {
 	}
 	fmt.Fprintln(w, "]")
 	if !wrote {
-		exitError(1)
+		os.Exit(1)
 	}
 }
 
@@ -536,47 +557,62 @@ func fmtModTime(t time.Time) string {
 	return t.Format(time.RFC3339)
 }
 
-// streamSearch fetches a path search page-by-page (streamBatch per page) and
-// prints each page as soon as it arrives. Returns true when at least one row
-// was printed (used for the locate-compatible exit code).
+// streamSearch fetches a path search page-by-page and prints as batches
+// arrive. A prefetch goroutine requests the next page while the previous one
+// is being printed, so UI/pipe output does not pause between batches.
 func streamSearch(opts cliclient.SearchOptions) bool {
 	const streamBatch = 5000
-	var found, total int
-	hasTotal := false
 
-	// Streaming paging needs a stable server-side order so consecutive
-	// pages don't overlap or skip rows (the unsorted order is map-random).
-	// Default to a deterministic path sort when the user didn't pick one.
-	if pageSort := opts.Sort; pageSort == "" {
+	// Streaming paging needs a stable server-side order so consecutive pages
+	// don't overlap or skip rows (the unsorted order is map-random).
+	if opts.Sort == "" {
 		opts.Sort = "path:asc"
-		_ = pageSort
 	}
 
-	for offset := 0; ; offset += streamBatch {
-		page := opts
-		page.Limit = streamBatch
-		page.Offset = int64(offset)
+	type pageResult struct {
+		res    *cliclient.SearchResult
+		err    error
+		offset int
+	}
+	pages := make(chan pageResult, 2) // keep ~1 batch prefetched
+	stop := make(chan struct{})
+	defer close(stop)
 
-		res, err := cliclient.Search(page)
-		if err != nil {
-			errpkg.PrintFriendlyError(err)
-			slog.Error("streamed search failed", "offset", offset)
-			return false
+	go func() {
+		defer close(pages)
+		for offset := 0; ; offset += streamBatch {
+			page := opts
+			page.Limit = streamBatch
+			page.Offset = int64(offset)
+			res, err := cliclient.Search(page)
+			select {
+			case pages <- pageResult{res: res, err: err, offset: offset}:
+			case <-stop:
+				return
+			}
+		}
+	}()
+
+	var found, total int
+	hasTotal := false
+	for pr := range pages {
+		if pr.err != nil {
+			errpkg.PrintFriendlyError(pr.err)
+			slog.Error("streamed search failed", "offset", pr.offset)
+			return found > 0
 		}
 		if !hasTotal {
-			total = res.Total
+			total = pr.res.Total
 			hasTotal = true
 		}
-		found += res.Count
-		cliclient.PrintResults(res, false, flagNull, flagLong)
+		found += pr.res.Count
+		cliclient.PrintResults(pr.res, false, flagNull, flagLong)
 
-		if hasTotal && total > 0 && offset+streamBatch >= total {
+		if hasTotal && total > 0 && pr.offset+streamBatch >= total {
 			break // consumed the whole result set
 		}
-		if !hasTotal || total <= 0 {
-			if res.Count < streamBatch {
-				break // server returned no more (total unavailable)
-			}
+		if (pr.res.Count < streamBatch) && (!hasTotal || total <= 0) {
+			break // server returned no more (total unavailable)
 		}
 	}
 	return found > 0
