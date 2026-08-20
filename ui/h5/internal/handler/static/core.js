@@ -173,7 +173,7 @@
                 const el = document.getElementById(pid);
                 if (el && el !== panel) el.style.display = 'none';
             });
-            document.querySelectorAll('#panelTabs .tab').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.header-buttons .tab').forEach(b => b.classList.remove('active'));
             if (alreadyOpen) {
                 panel.style.display = 'none';
                 activePanel = null;
@@ -181,7 +181,7 @@
             }
             panel.style.display = 'block';
             activePanel = id;
-            const tb = document.querySelector('#panelTabs .tab[data-target="' + id + '"]');
+            const tb = document.querySelector('.header-buttons .tab[data-target="' + id + '"]');
             if (tb) tb.classList.add('active');
             if (id === 'favPanel') { renderFavorites(); renderRecents(); }
         }

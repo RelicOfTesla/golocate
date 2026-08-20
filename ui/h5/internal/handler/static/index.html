@@ -14,16 +14,14 @@
             <div class="header-buttons">
                 <button class="secondary" onclick="toggleLang()" id="langBtn">🌐 EN</button>
                 <button class="secondary" onclick="refreshStatus()" data-i18n="btnStatus">📊 状态</button>
+            <button class="tab secondary" data-target="favPanel" onclick="switchPanel('favPanel')" data-i18n="favorites">⭐ 收藏</button>
+            <button class="tab secondary" data-target="settingsPanel" onclick="switchPanel('settingsPanel')" data-i18n="btnSettings">⚙️ 设置</button>
+            <button class="tab secondary" data-target="serverPanel" onclick="switchPanel('serverPanel')" data-i18n="btnServer">🛠️ 服务器</button>
             </div>
         </div>
 
         
         <!-- Top tabs: single-page switching between the panels -->
-        <div class="panel-tabs" id="panelTabs">
-            <button class="tab secondary" data-target="favPanel" onclick="switchPanel('favPanel')" data-i18n="favorites">⭐ 收藏</button>
-            <button class="tab secondary" data-target="settingsPanel" onclick="switchPanel('settingsPanel')" data-i18n="btnSettings">⚙️ 设置</button>
-            <button class="tab secondary" data-target="serverPanel" onclick="switchPanel('serverPanel')" data-i18n="btnServer">🛠️ 服务器</button>
-        </div>
         
         <!-- Server Status -->
         <div class="status-bar" id="statusBar" style="display: none;">
@@ -86,14 +84,11 @@
         
         <!-- Search Card: box + advanced options + history -->
         <div class="search-card">
-        <div class="search-card-header">
-            <span class="search-card-title">🔍 <span data-i18n="searchTitle">搜索</span></span>
-            <button class="secondary small" onclick="toggleAdvanced()" id="advToggleBtn" data-i18n="btnAdvanced">高级选项</button>
-        </div>
         <div class="search-box">
             <input type="text" id="searchInput" placeholder="搜索文件名/路径" autofocus data-i18n-placeholder="searchPlaceholder">
             <input type="text" id="contentInput" placeholder="搜索内容(可选)" data-i18n-placeholder="contentPlaceholder" style="max-width:260px;">
             <button onclick="search()" data-i18n="btnSearch">搜索</button>
+            <button class="secondary small" onclick="toggleAdvanced()" id="advToggleBtn" data-i18n="btnAdvanced">高级选项</button>
         </div>
         
         <!-- Advanced Options (collapsed; toggle with the header button) -->
